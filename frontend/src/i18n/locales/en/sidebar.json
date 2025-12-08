@@ -1,0 +1,15 @@
+{
+  "dashboard": "Dashboard",
+  "profile": "Profile",
+  "logout": "Logout",
+  "staff_management": "Staff Management",
+  "customer_management": "Customer Management",
+  "product_management": "Product Management",
+  "sale_management": "Sale",
+  "expense_management": "Expenses",
+  "cash_handover_management": "Cash Handover",
+  "activity_log": "Activity Log",
+  "statistics": "Statistics",
+  "settings": "Settings"
+}
+

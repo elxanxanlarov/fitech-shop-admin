@@ -1,0 +1,289 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Role {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  isCore    Boolean  @default(false)
+  staff     Staff[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Staff {
+  id          String   @id @default(uuid())
+  name        String
+  surName     String?
+  phone       String?
+  email       String   @unique
+  password    String?
+  isActive    Boolean  @default(true)
+  roleId      String?
+  role        Role?    @relation(fields: [roleId], references: [id])
+
+  activities  ActivityLog[]
+  expenses    Expense[]
+  cashHandoversReceived CashHandover[] @relation("HandedOverTo")
+  cashHandoversGiven    CashHandover[] @relation("HandedOverBy")
+  stockMovements         StockMovement[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+
+model Category {
+  id            String        @id @default(uuid())
+  name          String        @unique
+  description   String?
+  isActive      Boolean       @default(true)
+  
+  subCategories SubCategory[]
+  products      Product[]
+  
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model SubCategory {
+  id          String     @id @default(uuid())
+  name        String
+  description String?
+  categoryId  String
+  category    Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  isActive    Boolean    @default(true)
+  
+  products    Product[]
+  
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  
+  @@unique([name, categoryId]) // Eyni category daxilində unikal ad
+}
+
+model Product {
+  id              String   @id @default(uuid())
+  name            String
+  description     String?
+  imageUrl        String?       // Məhsul şəkli
+  purchasePrice   Decimal @db.Decimal(10,2) // Alış qiyməti
+  salePrice       Decimal @db.Decimal(10,2) // Satış qiyməti
+
+  hasDiscount     Boolean  @default(false)   // Endirim var?
+  discountPrice   Decimal? @db.Decimal(10,2) // Endirim qiyməti
+  discountPercent Int?                       // Endirim faizi
+
+  barcode         String?   @unique
+  stock           Int       @default(0)
+  isActive        Boolean   @default(true)
+  isOfficial      Boolean   @default(false) // Rəsmi və ya qeyri-rəsmi
+
+  categoryId      String?
+  category        Category? @relation(fields: [categoryId], references: [id])
+  subCategoryId   String?
+  subCategory     SubCategory? @relation(fields: [subCategoryId], references: [id])
+
+  saleItems       SaleItem[]
+  returnItems     SaleReturnItem[]
+  stockMovements  StockMovement[]
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+
+
+model Sale {
+  id              String   @id @default(uuid())
+
+  customerName    String?
+  customerSurname String?
+  customerPhone   String?
+
+  totalAmount     Decimal  @db.Decimal(10,2)
+  paidAmount      Decimal  @db.Decimal(10,2)
+  profitAmount    Decimal? @db.Decimal(10,2)
+
+  paymentType     String?  // "cash" (nagd) və ya "card" (kart)
+  isRefunded      Boolean  @default(false)
+  refundedAt      DateTime?
+  note            String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  items           SaleItem[]
+  returns         SaleReturn[]
+  receipt         Receipt?
+}
+
+model SaleItem {
+  id             String   @id @default(uuid())
+
+  saleId         String
+  sale           Sale     @relation(fields: [saleId], references: [id])
+
+  productId      String
+  product        Product  @relation(fields: [productId], references: [id])
+
+  quantity       Int
+
+  pricePerItem   Decimal  @db.Decimal(10,2)
+  totalPrice     Decimal  @db.Decimal(10,2)
+
+  purchasePrice  Decimal  @db.Decimal(10,2)
+  profit         Decimal  @db.Decimal(10,2)
+
+  returnItems   SaleReturnItem[]
+}
+
+model SaleReturn {
+  id              String   @id @default(uuid())
+
+  saleId          String
+  sale            Sale     @relation(fields: [saleId], references: [id])
+
+  customerName    String?
+  customerSurname String?
+  customerPhone   String?
+
+  totalAmount     Decimal  @db.Decimal(10,2)
+  returnedAmount  Decimal  @db.Decimal(10,2)
+
+  reason          String?
+  note            String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  items           SaleReturnItem[]
+}
+
+model SaleReturnItem {
+  id             String   @id @default(uuid())
+
+  returnId       String
+  return         SaleReturn @relation(fields: [returnId], references: [id])
+
+  saleItemId     String
+  saleItem       SaleItem @relation(fields: [saleItemId], references: [id])
+
+  productId      String
+  product        Product  @relation(fields: [productId], references: [id])
+
+  quantity       Int
+
+  pricePerItem   Decimal  @db.Decimal(10,2)
+  totalPrice     Decimal  @db.Decimal(10,2)
+
+  purchasePrice  Decimal  @db.Decimal(10,2)
+  loss           Decimal  @db.Decimal(10,2)
+}
+
+
+enum ActivityAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  SALE
+  RETURN
+}
+
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  staffId   String?
+  staff     Staff?   @relation(fields: [staffId], references: [id])
+  entityType String           // "Product", "Sale", "SaleReturn" və s.
+  entityId   String           // həmin obyektin id-si
+  action    ActivityAction
+  description String?
+  changes   Json?
+  createdAt DateTime @default(now())
+}
+
+model Receipt {
+  id              String   @id @default(uuid())
+  saleId          String   @unique
+  sale            Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  
+  receiptNumber   String   @unique // Qəbz nömrəsi
+  customerName    String?
+  customerSurname String?
+  customerPhone   String?
+  
+  totalAmount     Decimal  @db.Decimal(10,2)
+  paidAmount      Decimal  @db.Decimal(10,2)
+  profitAmount    Decimal? @db.Decimal(10,2)
+  
+  paymentType     String?  // "cash" (nagd) və ya "card" (kart)
+  note            String?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Expense {
+  id          String   @id @default(uuid())
+  title       String   // Xərc başlığı (məsələn "Yemək", "Nəqliyyat")
+  description String?  // Təsvir
+  amount      Decimal  @db.Decimal(10,2) // Məbləğ
+  category    String?  // Xərc kateqoriyası (məsələn "Yemək", "Nəqliyyat", "Digər")
+  date        DateTime @default(now()) // Xərc tarixi
+  note        String?  // Qeyd
+  
+  staffId     String?  // Kim əlavə edib
+  staff       Staff?   @relation(fields: [staffId], references: [id])
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model CashHandover {
+  id              String   @id @default(uuid())
+  date            DateTime @default(now()) // Hansı gün üçün təslim edildi
+  amount          Decimal  @db.Decimal(10,2) // Təslim edilən məbləğ
+  note            String?  // Qeyd
+  
+  handedOverToId  String   // Kimə təslim edildi
+  handedOverTo    Staff    @relation("HandedOverTo", fields: [handedOverToId], references: [id])
+  
+  handedOverById  String   // Kim təslim etdi
+  handedOverBy    Staff    @relation("HandedOverBy", fields: [handedOverById], references: [id])
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+enum StockMovementType {
+  IN          // Stok girişi
+  OUT         // Stok çıxışı
+  ADJUSTMENT  // Stok düzəlişi
+}
+
+model StockMovement {
+  id          String   @id @default(uuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  type        StockMovementType // IN, OUT, ADJUSTMENT
+  quantity    Int               // Miqdar (müsbət və ya mənfi)
+  previousStock Int             // Əvvəlki stok
+  newStock    Int               // Yeni stok
+  
+  note        String?            // Qeyd
+  staffId     String?            // Kim etdi
+  staff       Staff?             @relation(fields: [staffId], references: [id])
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+

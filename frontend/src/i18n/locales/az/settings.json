@@ -1,0 +1,11 @@
+{
+  "title": "Tənzimləmələr",
+  "subtitle": "Sistem parametrlərini idarə edin",
+  "roles_management": "Rollar İdarəetməsi",
+  "roles_management_desc": "İstifadəçi rollarını və icazələrini idarə edin",
+  "category_management": "Kateqoriya İdarəetməsi",
+  "category_management_desc": "Məhsul kateqoriyalarını idarə edin",
+  "no_settings": "Tənzimləmələr mövcud deyil",
+  "no_settings_desc": "Hal-hazırda heç bir tənzimləmə əlavə edilməyib."
+}
+

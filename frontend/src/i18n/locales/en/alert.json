@@ -1,0 +1,19 @@
+{
+  "delete_confirm": "Delete?",
+  "delete_confirm_text": "Are you sure you want to delete this staff member",
+  "delete_success": "Success!",
+  "delete_success_text": "Staff member deleted successfully",
+  "bulk_delete_confirm": "Bulk Delete",
+  "bulk_delete_confirm_text": "Are you sure you want to delete selected staff members",
+  "bulk_delete_success": "Success!",
+  "bulk_delete_success_text": "Selected staff members deleted successfully",
+  "add_success": "Success!",
+  "add_success_text": "Staff member added successfully",
+  "update_success": "Success!",
+  "update_success_text": "Staff information updated successfully",
+  "error": "Error!",
+  "error_text": "An error occurred during the operation",
+  "yes": "Yes",
+  "no": "No"
+}
+

@@ -1,0 +1,15 @@
+{
+  "dashboard": "İdarə Paneli",
+  "profile": "Profil",
+  "logout": "Çıxış",
+  "staff_management": "İşçi İdarəetməsi",
+  "customer_management": "Müştəri İdarəetməsi",
+  "product_management": "Məhsul İdarəetməsi",
+  "sale_management": "Satış",
+  "expense_management": "Xərclər",
+  "cash_handover_management": "Məbləğ Təslimi",
+  "activity_log": "Son Əməliyyatlar",
+  "statistics": "Statistikalar",
+  "settings": "Tənzimləmələr"
+}
+

@@ -1,0 +1,19 @@
+{
+  "delete_confirm": "Silinsinmi?",
+  "delete_confirm_text": "Bu işçini silmək istədiyinizdən əminsiniz",
+  "delete_success": "Uğurlu!",
+  "delete_success_text": "İşçi uğurla silindi",
+  "bulk_delete_confirm": "Toplu silmə",
+  "bulk_delete_confirm_text": "Seçilmiş işçiləri silmək istədiyinizdən əminsiniz",
+  "bulk_delete_success": "Uğurlu!",
+  "bulk_delete_success_text": "Seçilmiş işçilər uğurla silindi",
+  "add_success": "Uğurlu!",
+  "add_success_text": "İşçi uğurla əlavə edildi",
+  "update_success": "Uğurlu!",
+  "update_success_text": "İşçi məlumatları uğurla yeniləndi",
+  "error": "Xəta!",
+  "error_text": "Əməliyyat zamanı xəta baş verdi",
+  "yes": "Bəli",
+  "no": "Xeyr"
+}
+

@@ -1,0 +1,11 @@
+{
+  "title": "Settings",
+  "subtitle": "Manage system parameters",
+  "roles_management": "Roles Management",
+  "roles_management_desc": "Manage user roles and permissions",
+  "category_management": "Category Management",
+  "category_management_desc": "Manage product categories",
+  "no_settings": "No settings available",
+  "no_settings_desc": "No settings have been added yet."
+}
+
