@@ -747,7 +747,7 @@ export default function TableTamplate({
                       const isSuperadmin = roleName.toLowerCase() === 'superadmin';
                       const isCoreRole = item.isCore === true || item.role?.isCore === true; // Əsas rol yoxlaması
                       
-                      if (isSuperadmin || isCoreRole) {
+                      if (isSuperadmin ) {
                         return (
                           <span className="text-gray-400 text-xs">{t('restricted') || 'Məhdudiyyətli'}</span>
                         );

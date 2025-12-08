@@ -72,7 +72,7 @@ export const createSale = async (req, res) => {
         const saleItems = [];
 
         for (const item of items) {
-            const { productId, quantity } = item;
+            const { productId, quantity, pricePerItem: customPricePerItem } = item;
             
             if (!productId || !quantity || quantity <= 0) {
                 return res.status(400).json({ success: false, message: "Məhsul ID və miqdar tələb olunur" });
@@ -94,10 +94,23 @@ export const createSale = async (req, res) => {
                 return res.status(400).json({ success: false, message: `Kifayət qədər stok yoxdur: ${product.name}. Mövcud stok: ${product.stock}` });
             }
 
-            // Qiyməti müəyyən et (endirim varsa endirim qiyməti, yoxdursa satış qiyməti)
-            const pricePerItem = product.hasDiscount && product.discountPrice 
-                ? product.discountPrice 
-                : product.salePrice;
+            // Qiyməti müəyyən et
+            // Əgər frontend-dən custom price göndərilibsə, onu istifadə et
+            // Əks halda endirim varsa endirim qiyməti, yoxdursa satış qiyməti
+            let pricePerItem;
+            if (customPricePerItem !== undefined && customPricePerItem !== null && !isNaN(parseFloat(customPricePerItem))) {
+                // Custom price verilib, onu istifadə et
+                pricePerItem = new Prisma.Decimal(parseFloat(customPricePerItem));
+                // Custom price mənfi ola bilməz
+                if (pricePerItem.lt(0)) {
+                    return res.status(400).json({ success: false, message: `Qiymət mənfi ola bilməz: ${product.name}` });
+                }
+            } else {
+                // Standart qiyməti istifadə et
+                pricePerItem = product.hasDiscount && product.discountPrice 
+                    ? product.discountPrice 
+                    : product.salePrice;
+            }
 
             const totalPrice = pricePerItem.mul(quantity);
             const purchasePriceTotal = product.purchasePrice.mul(quantity);

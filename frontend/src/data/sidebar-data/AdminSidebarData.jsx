@@ -41,5 +41,4 @@ export const AdminSidebarData = [
     icon: <MdSettings />,
   },
   
-  
 ]

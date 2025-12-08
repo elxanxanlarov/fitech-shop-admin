@@ -41,7 +41,7 @@
   "product_required": "Product must be selected",
   "quantity_required": "Quantity must be greater than 0",
   "quantity_cannot_be_zero": "Quantity cannot be 0",
-  "quantity_exceeds_stock": "Quantity cannot exceed stock",
+  "quantity_exceeds_stock": "Quantity cannot exceed stock. Available stock: {{stock}}",
   "items_selected": "items selected",
   "loading": "Loading...",
   "error_fetching": "Error!",
@@ -75,7 +75,7 @@
   "return_note": "Return Note",
   "return_note_placeholder": "Enter note (optional)",
   "return_items_required": "At least one product must be selected",
-  "return_quantity_exceeds": "Return quantity is too large",
+  "return_quantity_exceeds": "Return quantity is too large. Available to return: {{available}}",
   "return_success": "Success!",
   "return_success_text": "Return created successfully",
   "return_error": "An error occurred while creating return",
@@ -90,6 +90,14 @@
   "card": "Card",
   "status": "Status",
   "refunded": "Refunded",
-  "active": "Active"
+  "active": "Active",
+  "sale_price": "Sale Price",
+  "default_price": "Default",
+  "discount_amount": "Discount Amount",
+  "max_discount": "Maximum discount",
+  "new_price": "New price",
+  "price_cannot_be_negative": "Price cannot be negative",
+  "discount_cannot_be_negative": "Discount cannot be negative",
+  "discount_exceeds_max": "Maximum discount amount: {{max}} ₼"
 }
 

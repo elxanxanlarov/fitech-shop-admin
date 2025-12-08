@@ -5,12 +5,30 @@ import { useTranslation } from "react-i18next"
 import { authApi } from "../../api"
 import { useNavigate } from "react-router-dom"
 import Alert from "../ui/Alert"
+import { useState, useEffect } from "react"
 
 const Sidebar = ({ sidebarData, onItemClick, collapsed, onToggleCollapse, isMobileOpen, onMobileClose, profilePath }) => {
   const sidebarRef = useClickOutside(isMobileOpen, onMobileClose);
   const { t } = useTranslation('sidebar');
   const { t: tAuth } = useTranslation('auth');
   const navigate = useNavigate();
+  const [currentUser, setCurrentUser] = useState(null);
+
+  // Fetch current user
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const response = await authApi.me();
+        if (response.success && response.data) {
+          setCurrentUser(response.data);
+        }
+      } catch (error) {
+        console.error('Error fetching user:', error);
+      }
+    };
+
+    fetchUser();
+  }, []);
   const handleLogout = async () => {
     const result = await Alert.confirm(tAuth('logout_confirm'), tAuth('logout_confirm_text'), {
       confirmText: tAuth('yes'),
@@ -92,13 +110,24 @@ const Sidebar = ({ sidebarData, onItemClick, collapsed, onToggleCollapse, isMobi
             } py-3 w-full rounded-lg text-blue-600 hover:bg-blue-50 hover:text-blue-700 transition-all duration-200`}
           >
             <div className={`w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center ${collapsed ? '' : 'mr-3'}`}>
-              <span className="text-white font-bold text-sm">EX</span>
+              <span className="text-white font-bold text-sm">
+                {currentUser 
+                  ? `${(currentUser.name || '').charAt(0).toUpperCase()}${(currentUser.surName || '').charAt(0).toUpperCase()}`.trim() || 'U'
+                  : 'U'
+                }
+              </span>
             </div>
-            <span className={`font-medium transition-opacity duration-200 ${
+            <div className={`flex flex-col transition-opacity duration-200 ${
               collapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'
             }`}>
-              {t('profile')}
-            </span>
+              <span className="font-medium">
+                {currentUser 
+                  ? `${currentUser.name || ''} ${currentUser.surName || ''}`.trim() || t('profile')
+                  : t('profile')
+                }
+              </span>
+              <span className="text-xs text-gray-500">{t('profile')}</span>
+            </div>
           </Link>
 
           <button

@@ -61,7 +61,7 @@ export default function Staff({ isReception = false }) {
         const roleName = staff.role?.name || staff.role || '';
         const isCoreRole = staff.role?.isCore === true;
         
-        if (roleName.toLowerCase() === 'superadmin' || isCoreRole) {
+        if (roleName.toLowerCase() === 'superadmin') {
             Alert.error(
                 t('error_edit_core_role') || 'Xəta',
                 t('error_edit_core_role_text') || 'Əsas rollara aid işçilər redaktə edilə bilməz'
@@ -81,7 +81,7 @@ export default function Staff({ isReception = false }) {
         const roleName = staff.role?.name || staff.role || '';
         const isCoreRole = staff.role?.isCore === true;
         
-        if (roleName.toLowerCase() === 'superadmin' || isCoreRole) {
+        if (roleName.toLowerCase() === 'superadmin') {
             Alert.error(
                 t('error_delete_core_role') || 'Xəta',
                 t('error_delete_core_role_text') || 'Əsas rollara aid işçilər silinə bilməz'

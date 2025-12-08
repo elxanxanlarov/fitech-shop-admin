@@ -63,6 +63,11 @@
   "cancel": "Cancel",
   "updating": "Updating...",
   "adding": "Adding...",
-  "update": "Update"
+  "update": "Update",
+  "profile": "Profile",
+  "profile_description": "Manage your profile information",
+  "edit": "Edit",
+  "save": "Save",
+  "password_change_superadmin": "As a superadmin, you can change this staff member's password"
 }
 

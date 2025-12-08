@@ -87,7 +87,7 @@ export default function Login() {
                     if (roleName === 'superadmin' || roleName === 'admin') {
                         navigate('/admin/staff');
                     } else if (roleName === 'reception') {
-                        navigate('/reception/staff');
+                        navigate('/reception/sales');
                     } else {
                         navigate('/');
                     }
