@@ -415,8 +415,8 @@ export default function ProductForm() {
             return;
         }
 
-        if (file.size > 5 * 1024 * 1024) {
-            Alert.error(t('error') || 'Xəta!', t('image_too_large') || 'Şəkil ölçüsü 5MB-dan böyük ola bilməz');
+        if (file.size > 500 * 1024 * 1024) {
+            Alert.error(t('error') || 'Xəta!', t('image_too_large') || 'Şəkil ölçüsü 500MB-dan böyük ola bilməz');
             e.target.value = '';
             return;
         }
@@ -743,6 +743,7 @@ export default function ProductForm() {
                                 className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                                     errors.categoryId ? 'border-red-500' : 'border-gray-300'
                                 }`}
+                                required
                             >
                                 <option value="">{t('select_category') || 'Kateqoriya seçin'}</option>
                                 {categories.map(category => (

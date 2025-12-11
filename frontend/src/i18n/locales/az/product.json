@@ -14,7 +14,7 @@
   "image_will_upload": "Şəkil form göndərildikdə yüklənəcək",
   "upload_error": "Şəkil yüklənərkən xəta baş verdi",
   "invalid_image_type": "Yalnız şəkil faylları (jpeg, jpg, png, gif, webp) yüklənə bilər",
-  "image_too_large": "Şəkil ölçüsü 5MB-dan böyük ola bilməz",
+  "image_too_large": "Şəkil ölçüsü 500MB-dan böyük ola bilməz",
   "image_required": "Şəkil URL-i və ya şəkil faylı tələb olunur",
   "or": "və ya",
   "barcode": "Barcode",

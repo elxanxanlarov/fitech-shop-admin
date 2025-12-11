@@ -266,6 +266,7 @@ export const updateSale = async (req, res) => {
 export const deleteSale = async (req, res) => {
     try {
         const { id } = req.params;
+        console.log(`deleteSale request, id: ${id}`);
         const existingSale = await prisma.sale.findUnique({ 
             where: { id },
             include: { items: true }
@@ -287,7 +288,42 @@ export const deleteSale = async (req, res) => {
             });
         }
 
-        await prisma.sale.delete({ where: { id } });
+        // Remove related records that reference Sale to avoid foreign key constraint errors
+        try {
+            const saleItemIds = existingSale.items.map(i => i.id);
+
+            // 1) Delete SaleReturnItem entries that reference these sale items
+            if (saleItemIds.length > 0) {
+                console.log(`Deleting SaleReturnItem by saleItemId count: ${saleItemIds.length}`);
+                await prisma.saleReturnItem.deleteMany({ where: { saleItemId: { in: saleItemIds } } });
+            }
+
+            // 2) Find SaleReturn records for this sale and delete their items
+            const saleReturns = await prisma.saleReturn.findMany({ where: { saleId: id } });
+            const returnIds = saleReturns.map(r => r.id);
+            if (returnIds.length > 0) {
+                console.log(`Deleting SaleReturnItem by returnId count: ${returnIds.length}`);
+                await prisma.saleReturnItem.deleteMany({ where: { returnId: { in: returnIds } } });
+                console.log(`Deleting SaleReturn records count: ${returnIds.length}`);
+                await prisma.saleReturn.deleteMany({ where: { id: { in: returnIds } } });
+            }
+
+            // 3) Delete SaleItem records for this sale
+            if (saleItemIds.length > 0) {
+                console.log(`Deleting SaleItem records count: ${saleItemIds.length}`);
+                await prisma.saleItem.deleteMany({ where: { id: { in: saleItemIds } } });
+            }
+
+            // 4) Delete any receipts linked to this sale (should cascade, but be explicit)
+            console.log(`Deleting Receipt(s) for sale id: ${id}`);
+            await prisma.receipt.deleteMany({ where: { saleId: id } });
+
+            // Finally, delete the sale
+            await prisma.sale.delete({ where: { id } });
+        } catch (deleteError) {
+            console.error('Error while deleting related sale records', deleteError);
+            throw deleteError; // will be caught by outer catch
+        }
 
         // Activity log yarat
         try {
@@ -311,7 +347,8 @@ export const deleteSale = async (req, res) => {
         return res.json({ success: true, message: "Satış silindi", date: existingSale });
     } catch (error) {
         console.error("deleteSale error", error);
-        return res.status(500).json({ success: false, message: "Satış silinərkən xəta baş verdi" });
+        // Return error message for debugging (can be removed in production)
+        return res.status(500).json({ success: false, message: "Satış silinərkən xəta baş verdi", error: error.message });
     }
 };
 
