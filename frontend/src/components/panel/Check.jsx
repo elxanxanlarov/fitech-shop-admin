@@ -10,7 +10,6 @@ export default function Check() {
     const navigate = useNavigate();
     const saleId = searchParams.get('id');
     const { t } = useTranslation('sale');
-    const { t: tAlert } = useTranslation('alert');
 
     const [sale, setSale] = useState(null);
     const [receipt, setReceipt] = useState(null);
@@ -38,25 +37,25 @@ export default function Check() {
                         } else {
                             // Qəbz varsa amma sale include olmayıbsa, sale-i ayrıca gətir
                             const saleResponse = await saleApi.getById(saleId);
-                            if (saleResponse.success && saleResponse.date) {
-                                setSale(saleResponse.date);
+                            if (saleResponse.success && saleResponse.data) {
+                                setSale(saleResponse.data);
                             }
                         }
                     } else {
                         // Qəbz yoxdursa, satış məlumatlarını gətir
                         const saleResponse = await saleApi.getById(saleId);
-                        if (saleResponse.success && saleResponse.date) {
-                            setSale(saleResponse.date);
+                        if (saleResponse.success && saleResponse.data) {
+                            setSale(saleResponse.data);
                         } else {
                             Alert.error(t('error') || 'Xəta!', t('sale_not_found') || 'Satış tapılmadı');
                             navigate('/admin/sales');
                         }
                     }
-                } catch (receiptError) {
+                } catch {
                     // Qəbz xətası halında, satış məlumatlarını gətir
                     const saleResponse = await saleApi.getById(saleId);
-                    if (saleResponse.success && saleResponse.date) {
-                        setSale(saleResponse.date);
+                    if (saleResponse.success && saleResponse.data) {
+                        setSale(saleResponse.data);
                     } else {
                         Alert.error(t('error') || 'Xəta!', t('sale_not_found') || 'Satış tapılmadı');
                         navigate('/admin/sales');
@@ -73,6 +72,14 @@ export default function Check() {
 
         fetchData();
     }, [saleId, navigate, t]);
+
+    useEffect(() => {
+        const prevTitle = document.title;
+        document.title = '';
+        return () => {
+            document.title = prevTitle;
+        };
+    }, []);
 
     const handlePrint = () => {
         window.print();
@@ -218,14 +225,6 @@ export default function Check() {
                             </span>
                         </div>
                     )}
-                    {displaySale.profitAmount && (
-                        <div className="flex justify-between text-lg border-t border-gray-300 pt-2 mt-2">
-                            <span className="font-semibold text-gray-700">{t('profit') || 'Qazanc'}:</span>
-                            <span className="font-semibold text-blue-600">
-                                {parseFloat(displaySale.profitAmount || 0).toFixed(2)} ₼
-                            </span>
-                        </div>
-                    )}
                 </div>
 
                 {/* Note */}
@@ -253,6 +252,10 @@ export default function Check() {
                     .print\\:border-0 {
                         visibility: visible;
                     }
+                    .print\\:shadow-none *,
+                    .print\\:border-0 * {
+                        visibility: visible;
+                    }
                     .print\\:hidden {
                         display: none !important;
                     }
@@ -264,7 +267,7 @@ export default function Check() {
                         page-break-after: avoid;
                     }
                     @page {
-                        margin: 15mm;
+                        margin: 0;
                         size: A4;
                     }
                     @media print {

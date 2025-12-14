@@ -19,6 +19,7 @@ import Expenses from "../components/panel/Expenses.jsx"
 import ExpenseForm from "../components/forms/ExpenseForm.jsx"
 import CashHandover from "../components/panel/CashHandover.jsx"
 import CashHandoverForm from "../components/forms/CashHandoverForm.jsx"
+import Profile from "../components/panel/Profile.jsx"
 
 
 export default function AdminPanel() {
@@ -49,6 +50,7 @@ export default function AdminPanel() {
             {slug === "category-management" && <CategoryManagement />}
             {slug === "expenses" && <Expenses />}
             {slug === "cash-handover" && <CashHandover />}
+            {slug === "profile" && <Profile />}
         </div>
     )
 }

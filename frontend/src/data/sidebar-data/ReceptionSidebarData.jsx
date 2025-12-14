@@ -1,14 +1,19 @@
-import { MdPeople, MdPersonAdd, MdBarChart } from 'react-icons/md'
+import { MdPeople, MdPersonAdd, MdBarChart , MdShoppingCart, MdAttachMoney, MdAccountBalanceWallet} from 'react-icons/md'
 export const ReceptionSidebarData = [
   {
-    title: 'staff',
-    path: '/reception/staff',
-    icon: <MdPeople />,
+    title: 'sale_management',
+    path: '/reception/sales',
+    icon: <MdShoppingCart />,
   },
   {
-    title: 'pending_customers',
-    path: '/reception/pending-customers',
-    icon: <MdPersonAdd />,
+    title: 'expense_management',
+    path: '/reception/expenses',
+    icon: <MdAttachMoney />,
+  },
+  {
+    title: 'cash_handover_management',
+    path: '/reception/cash-handover',
+    icon: <MdAccountBalanceWallet />,
   },
   {
     title: 'statistics',

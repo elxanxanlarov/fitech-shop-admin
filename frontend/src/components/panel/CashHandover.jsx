@@ -94,7 +94,7 @@ export default function CashHandover() {
     const handleEdit = async (cashHandover) => {
         const isAdmin = location.pathname.includes('/admin');
         if (!isAdmin) return;
-        const editPath = `/admin/cash-handover-form?id=${cashHandover.id.toString()}`;
+        const editPath = `/${isAdmin ? 'admin' : 'reception'}/cash-handover-form?id=${cashHandover.id.toString()}`;
         navigate(editPath);
     };
 
@@ -179,7 +179,9 @@ export default function CashHandover() {
     };
 
     const handleAddCashHandover = () => {
-        navigate('/admin/cash-handover-form');
+        const isAdmin = location.pathname.includes('/admin');
+        const addCashHandoverPath = isAdmin ? '/admin/cash-handover-form' : '/reception/cash-handover-form';
+        navigate(addCashHandoverPath);
     };
 
     return (

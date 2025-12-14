@@ -36,6 +36,10 @@ export const getProductById = async (req, res) => {
         const { id } = req.params;
         const product = await prisma.product.findUnique({
             where: { id },
+            include: {
+                category: true,
+                subCategory: true
+            }
         });
 
         if (!product) {
@@ -60,21 +64,22 @@ export const getProductById = async (req, res) => {
 
 export const createProduct = async (req, res) => {
     try {
-        const { 
-            name, 
-            description, 
-            imageUrl, 
-            purchasePrice, 
-            salePrice, 
-            hasDiscount, 
-            discountPrice, 
-            discountPercent, 
-            barcode, 
-            stock, 
+        const {
+            name,
+            description,
+            imageUrl,
+            purchasePrice,
+            salePrice,
+            hasDiscount,
+            discountPrice,
+            discountPercent,
+            barcode,
+            stock,
             isActive,
-            isOfficial
+            isOfficial,
+            categoryId,
+            subCategoryId,
         } = req.body;
-
         if (!name || !purchasePrice || !salePrice) {
             return res.status(400).json({
                 success: false,
@@ -127,6 +132,8 @@ export const createProduct = async (req, res) => {
                 stock: stock !== undefined ? parseInt(stock) : 0,
                 isActive: typeof isActive === "boolean" ? isActive : true,
                 isOfficial: typeof isOfficial === "boolean" ? isOfficial : false,
+                categoryId: categoryId || null,
+                subCategoryId: subCategoryId || null,
             }
         });
 
@@ -150,15 +157,15 @@ export const createProduct = async (req, res) => {
             console.error("Activity log yaradılarkən xəta:", logError);
         }
 
-        return res.status(201).json({
+        return res.status(200).json({
             success: true,
-            message: "Məhsul yaradıldı",
-            date: newProduct,
+            message: "Məhsul yeniləndi",
             data: newProduct,
+            date:newProduct
         });
     } catch (error) {
         console.error("createProduct error", error);
-        
+
         // Unique constraint error (barcode)
         if (error.code === 'P2002') {
             return res.status(400).json({
@@ -177,17 +184,17 @@ export const createProduct = async (req, res) => {
 export const updateProduct = async (req, res) => {
     try {
         const { id } = req.params;
-        const { 
-            name, 
-            description, 
-            imageUrl, 
-            purchasePrice, 
-            salePrice, 
-            hasDiscount, 
-            discountPrice, 
-            discountPercent, 
-            barcode, 
-            stock, 
+        const {
+            name,
+            description,
+            imageUrl,
+            purchasePrice,
+            salePrice,
+            hasDiscount,
+            discountPrice,
+            discountPercent,
+            barcode,
+            stock,
             isActive,
             isOfficial,
             categoryId,
@@ -249,22 +256,40 @@ export const updateProduct = async (req, res) => {
         const updated = await prisma.product.update({
             where: { id },
             data: {
-                name: name !== undefined ? (name?.trim() || null) : existingProduct.name,
-                description: description !== undefined ? (description?.trim() || null) : existingProduct.description,
-                imageUrl: imageUrl !== undefined ? (imageUrl?.trim() || null) : existingProduct.imageUrl,
+                name: name !== undefined ? (name?.trim() || null) : undefined,
+                description: description !== undefined ? (description?.trim() || null) : undefined,
+                imageUrl: imageUrl !== undefined ? (imageUrl?.trim() || null) : undefined,
+
                 purchasePrice: purchasePriceDecimal,
                 salePrice: salePriceDecimal,
+
                 hasDiscount: finalHasDiscount,
                 discountPrice: finalDiscountPrice,
                 discountPercent: finalDiscountPercent,
-                barcode: barcode !== undefined ? (barcode?.trim() || null) : existingProduct.barcode,
-                stock: stock !== undefined ? parseInt(stock) : existingProduct.stock,
-                isActive: typeof isActive === "boolean" ? isActive : existingProduct.isActive,
-                isOfficial: typeof isOfficial === "boolean" ? isOfficial : existingProduct.isOfficial,
-                categoryId: categoryId !== undefined ? (categoryId || null) : existingProduct.categoryId,
-                subCategoryId: subCategoryId !== undefined ? (subCategoryId || null) : existingProduct.subCategoryId,
+
+                barcode: barcode !== undefined ? (barcode?.trim() || null) : undefined,
+                stock: stock !== undefined ? parseInt(stock) : undefined,
+                isActive: typeof isActive === "boolean" ? isActive : undefined,
+                isOfficial: typeof isOfficial === "boolean" ? isOfficial : undefined,
+
+                category: categoryId
+                    ? { connect: { id: categoryId } }
+                    : categoryId === null
+                        ? { disconnect: true }
+                        : undefined,
+
+                subCategory: subCategoryId
+                    ? { connect: { id: subCategoryId } }
+                    : subCategoryId === null
+                        ? { disconnect: true }
+                        : undefined,
+            },
+            include: {
+                category: true,
+                subCategory: true
             }
         });
+
 
         // Activity log yarat
         try {
@@ -290,16 +315,15 @@ export const updateProduct = async (req, res) => {
         } catch (logError) {
             console.error("Activity log yaradılarkən xəta:", logError);
         }
-
         return res.status(200).json({
             success: true,
             message: "Məhsul yeniləndi",
-            date: updated,
             data: updated,
+            date: updated
         });
     } catch (error) {
         console.error("updateProduct error", error);
-        
+
         // Unique constraint error (barcode)
         if (error.code === 'P2002') {
             return res.status(400).json({
@@ -380,7 +404,7 @@ export const importProductsFromExcel = async (req, res) => {
         const workbook = XLSX.readFile(filePath);
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        
+
         // Get raw data to see actual column names
         const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
         if (rawData.length === 0) {
@@ -390,29 +414,29 @@ export const importProductsFromExcel = async (req, res) => {
                 message: "Excel faylı boşdur və ya məlumat yoxdur",
             });
         }
-        
+
         // Get header row (first row)
         const headerRow = rawData[0];
-        
+
         // Create column mapping - normalize Azerbaijani and English column names
         const columnMap = {};
         headerRow.forEach((header, index) => {
             if (!header) return;
             const normalized = String(header).toLowerCase().trim();
-            
+
             // Map to standard column names - check for Azerbaijani first
             // Name
             if ((normalized === 'ad' || normalized.startsWith('ad')) && !normalized.includes('qiymət') && !normalized.includes('qiymat')) {
                 if (!columnMap['name']) columnMap['name'] = index;
-            } 
+            }
             // Purchase Price - check if contains "alış" and "qiymət"
             else if (normalized.includes('alış') && (normalized.includes('qiymət') || normalized.includes('qiymat'))) {
                 if (!columnMap['purchase_price']) columnMap['purchase_price'] = index;
-            } 
+            }
             // Sale Price - check if contains "satış" and "qiymət"
             else if (normalized.includes('satış') && (normalized.includes('qiymət') || normalized.includes('qiymat'))) {
                 if (!columnMap['sale_price']) columnMap['sale_price'] = index;
-            } 
+            }
             // If header contains both "alış" and "satış", it might be a combined column
             // In that case, we need to check the next column or split
             else if (normalized.includes('alış') && normalized.includes('satış')) {
@@ -430,31 +454,31 @@ export const importProductsFromExcel = async (req, res) => {
             // Stock
             else if (normalized === 'stok' || (normalized.includes('stok') && !normalized.includes('qiymət'))) {
                 if (!columnMap['stock']) columnMap['stock'] = index;
-            } 
+            }
             // Barcode
             else if (normalized === 'barcode' || normalized === 'barkod') {
                 if (!columnMap['barcode']) columnMap['barcode'] = index;
-            } 
+            }
             // Description
             else if (normalized === 'təsvir' || normalized === 'tesvir' || normalized === 'description') {
                 if (!columnMap['description']) columnMap['description'] = index;
-            } 
+            }
             // Category
             else if ((normalized === 'kateqoriya' || normalized === 'kategoriya' || normalized === 'category') && !normalized.includes('alt')) {
                 if (!columnMap['category']) columnMap['category'] = index;
-            } 
+            }
             // Subcategory
             else if (normalized.includes('alt') && (normalized.includes('kateqoriya') || normalized.includes('kategoriya'))) {
                 if (!columnMap['subcategory']) columnMap['subcategory'] = index;
-            } 
+            }
             // Active
             else if (normalized === 'aktiv' || normalized === 'is_active' || normalized === 'isactive') {
                 if (!columnMap['is_active']) columnMap['is_active'] = index;
-            } 
+            }
             // Official
             else if (normalized.includes('rəsmi') || normalized.includes('resmi') || normalized.includes('official')) {
                 if (!columnMap['is_official']) columnMap['is_official'] = index;
-            } 
+            }
             // English column names
             else if (normalized === 'name') {
                 if (!columnMap['name']) columnMap['name'] = index;
@@ -466,13 +490,13 @@ export const importProductsFromExcel = async (req, res) => {
                 if (!columnMap['stock']) columnMap['stock'] = index;
             }
         });
-        
+
         // Convert to JSON with normalized column names
         const data = [];
         for (let i = 1; i < rawData.length; i++) {
             const row = rawData[i];
             if (!row || row.length === 0) continue;
-            
+
             const normalizedRow = {};
             Object.keys(columnMap).forEach(key => {
                 const colIndex = columnMap[key];
@@ -498,7 +522,7 @@ export const importProductsFromExcel = async (req, res) => {
         // Fetch all categories and subcategories for mapping
         const categories = await prisma.category.findMany();
         const subCategories = await prisma.subCategory.findMany();
-        
+
         const categoryMap = new Map(categories.map(cat => [cat.name.toLowerCase().trim(), cat.id]));
         const subCategoryMap = new Map(subCategories.map(sub => [sub.name.toLowerCase().trim(), sub.id]));
 
@@ -512,7 +536,7 @@ export const importProductsFromExcel = async (req, res) => {
                 const purchasePriceStr = row.purchase_price !== null && row.purchase_price !== undefined && row.purchase_price !== '' ? String(row.purchase_price) : '';
                 const salePriceStr = row.sale_price !== null && row.sale_price !== undefined && row.sale_price !== '' ? String(row.sale_price) : '';
                 const stockStr = row.stock !== null && row.stock !== undefined && row.stock !== '' ? String(row.stock) : '';
-                
+
                 // Validate required fields
                 if (!name || !purchasePriceStr || !salePriceStr || !stockStr) {
                     errors.push({
@@ -529,7 +553,7 @@ export const importProductsFromExcel = async (req, res) => {
                 const stock = parseInt(stockStr);
                 const barcode = row.barcode ? String(row.barcode).trim() : null;
                 const description = row.description ? String(row.description).trim() : null;
-                
+
                 // Category mapping
                 let categoryId = null;
                 if (row.category) {
@@ -663,7 +687,7 @@ export const importProductsFromExcel = async (req, res) => {
 
     } catch (error) {
         console.error("importProductsFromExcel error", error);
-        
+
         // Clean up file if exists
         if (req.file && req.file.path) {
             try {

@@ -3,6 +3,7 @@ import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Input from '../ui/Input';
 import Alert from '../ui/Alert';
+import SearchDropdown from '../ui/SearchDropdown';
 import { MdPerson, MdShoppingCart, MdAdd, MdDelete, MdAttachMoney, MdNote, MdUndo, MdCreditCard, MdMoney } from 'react-icons/md';
 import { saleApi, productApi, returnApi } from '../../api';
 import { validateNumberInput } from '../../utils/validation';
@@ -29,7 +30,7 @@ export default function SaleForm() {
     });
 
     const [selectedProducts, setSelectedProducts] = useState([
-        { productId: '', quantity: '' }
+        { productId: '', quantity: '', salePrice: '', discountAmount: '' }
     ]);
 
     const [products, setProducts] = useState([]);
@@ -89,7 +90,9 @@ export default function SaleForm() {
                         if (sale.items && sale.items.length > 0) {
                             setSelectedProducts(sale.items.map(item => ({
                                 productId: item.productId,
-                                quantity: item.quantity
+                                quantity: item.quantity,
+                                salePrice: item.pricePerItem ? parseFloat(item.pricePerItem).toFixed(2) : '',
+                                discountAmount: ''
                             })));
                             // Sale items-ı saxla (qaytarma üçün)
                             setSaleItems(sale.items);
@@ -136,7 +139,7 @@ export default function SaleForm() {
                 // Stok yoxla
                 const product = products.find(p => p.id === item.productId);
                 if (product && parseInt(item.quantity) > product.stock) {
-                    newErrors[`quantity_${index}`] = t('quantity_exceeds_stock') || `Mövcud stok: ${product.stock}`;
+                    newErrors[`quantity_${index}`] = t('quantity_exceeds_stock', { stock: product.stock }) || `Mövcud stok: ${product.stock}`;
                 }
             }
         });
@@ -162,6 +165,21 @@ export default function SaleForm() {
     const handleProductChange = (index, productId) => {
         const newProducts = [...selectedProducts];
         newProducts[index].productId = productId;
+        
+        // Məhsul seçildikdə standart satış qiymətini təyin et
+        if (productId) {
+            const product = products.find(p => p.id === productId);
+            if (product) {
+                // Həmişə məhsulun salePrice-ını default olaraq təyin et
+                const defaultSalePrice = parseFloat(product.salePrice);
+                newProducts[index].salePrice = defaultSalePrice.toFixed(2);
+                newProducts[index].discountAmount = ''; // Endirim məbləğini sıfırla
+            }
+        } else {
+            newProducts[index].salePrice = '';
+            newProducts[index].discountAmount = '';
+        }
+        
         setSelectedProducts(newProducts);
 
         // Error-u sil
@@ -228,8 +246,126 @@ export default function SaleForm() {
         }
     };
 
+    const handleSalePriceChange = (index, salePrice) => {
+        const validation = validateNumberInput('price', salePrice, ['price'], t);
+        if (!validation.isValid) {
+            setErrors(prev => ({
+                ...prev,
+                [`salePrice_${index}`]: validation.error
+            }));
+            return;
+        }
+        
+        const newProducts = [...selectedProducts];
+        
+        if (salePrice === '' || salePrice === null || salePrice === undefined) {
+            newProducts[index].salePrice = '';
+        } else {
+            const priceNum = parseFloat(salePrice) || 0;
+            if (priceNum < 0) {
+                setErrors(prev => ({
+                    ...prev,
+                    [`salePrice_${index}`]: t('price_cannot_be_negative') || 'Qiymət mənfi ola bilməz'
+                }));
+                return;
+            }
+            newProducts[index].salePrice = priceNum.toFixed(2);
+        }
+        
+        setSelectedProducts(newProducts);
+
+        if (errors[`salePrice_${index}`]) {
+            setErrors(prev => {
+                const newErrors = { ...prev };
+                delete newErrors[`salePrice_${index}`];
+                return newErrors;
+            });
+        }
+    };
+
+    const handleDiscountAmountChange = (index, discountAmount) => {
+        const newProducts = [...selectedProducts];
+        const product = products.find(p => p.id === newProducts[index].productId);
+        
+        if (!product) {
+            return;
+        }
+        
+        // Həmişə məhsulun salePrice-ını default olaraq istifadə et
+        const defaultSalePrice = parseFloat(product.salePrice);
+        
+        // Maksimum endirim məbləğini hesabla: salePrice - discountPrice (əgər discountPrice varsa)
+        let maxDiscountAmount = defaultSalePrice; // Default olaraq satış qiyməti qədər
+        if (product.hasDiscount && product.discountPrice) {
+            const discountPrice = parseFloat(product.discountPrice);
+            maxDiscountAmount = defaultSalePrice - discountPrice;
+        }
+        
+        // Boş ola bilər
+        if (discountAmount === '' || discountAmount === null || discountAmount === undefined) {
+            newProducts[index].discountAmount = '';
+            newProducts[index].salePrice = defaultSalePrice.toFixed(2);
+            setSelectedProducts(newProducts);
+            
+            // Error-u sil
+            if (errors[`discount_${index}`]) {
+                setErrors(prev => {
+                    const newErrors = { ...prev };
+                    delete newErrors[`discount_${index}`];
+                    return newErrors;
+                });
+            }
+            return;
+        }
+        
+        // Rəqəm olub-olmadığını yoxla (onluq nöqtə və rəqəmlərə icazə ver)
+        const isValidNumber = /^-?\d*\.?\d*$/.test(discountAmount);
+        if (!isValidNumber) {
+            return; // Yalnız rəqəm və onluq nöqtəyə icazə ver
+        }
+        
+        const discountNum = parseFloat(discountAmount);
+        
+        // NaN və ya mənfi yoxla
+        if (isNaN(discountNum) || discountNum < 0) {
+            setErrors(prev => ({
+                ...prev,
+                [`discount_${index}`]: t('discount_cannot_be_negative') || 'Endirim mənfi ola bilməz'
+            }));
+            return;
+        }
+        
+        // Maksimum endirim məbləğini yoxla
+        if (discountNum > maxDiscountAmount) {
+            setErrors(prev => ({
+                ...prev,
+                [`discount_${index}`]: t('discount_exceeds_max', { max: maxDiscountAmount.toFixed(2) }) || `Maksimum endirim məbləği: ${maxDiscountAmount.toFixed(2)} ₼`
+            }));
+            // Yenə də dəyəri saxla, amma xəta göstər
+            newProducts[index].discountAmount = discountAmount; // Formatlanmış deyil, orijinal
+            setSelectedProducts(newProducts);
+            return;
+        }
+        
+        // Endirim məbləğini çıx və satış qiymətini yenilə
+        const newSalePrice = Math.max(0, defaultSalePrice - discountNum);
+        newProducts[index].discountAmount = discountAmount; // Formatlanmamış dəyəri saxla
+        newProducts[index].salePrice = newSalePrice.toFixed(2);
+        
+        setSelectedProducts(newProducts);
+
+        // Error-u sil
+        if (errors[`discount_${index}`]) {
+            setErrors(prev => {
+                const newErrors = { ...prev };
+                delete newErrors[`discount_${index}`];
+                return newErrors;
+            });
+        }
+    };
+
     const addProductRow = () => {
-        setSelectedProducts([...selectedProducts, { productId: '', quantity: '' }]);
+        setSelectedProducts([...selectedProducts, { productId: '', quantity: '', salePrice: '', discountAmount: '' }]);
     };
 
     const removeProductRow = (index) => {
@@ -247,18 +383,21 @@ export default function SaleForm() {
         }
     };
 
-    const getProductPrice = (productId) => {
+    const getProductPrice = (productId, customSalePrice) => {
+        // Əgər custom sale price varsa, onu istifadə et
+        if (customSalePrice && customSalePrice !== '' && !isNaN(parseFloat(customSalePrice))) {
+            return parseFloat(customSalePrice);
+        }
+        // Əks halda məhsulun salePrice-ını istifadə et (həmişə salePrice)
         const product = products.find(p => p.id === productId);
         if (!product) return 0;
-        return product.hasDiscount && product.discountPrice 
-            ? parseFloat(product.discountPrice) 
-            : parseFloat(product.salePrice);
+        return parseFloat(product.salePrice);
     };
 
     const calculateTotal = () => {
         return selectedProducts.reduce((total, item) => {
             if (item.productId && item.quantity && item.quantity !== '') {
-                const price = getProductPrice(item.productId);
+                const price = getProductPrice(item.productId, item.salePrice);
                 const qty = parseInt(item.quantity) || 0;
                 return total + (price * qty);
             }
@@ -360,7 +499,7 @@ export default function SaleForm() {
             if (saleItem) {
                 const available = getAvailableReturnQuantity(saleItem);
                 if (item.quantity > available) {
-                    newErrors[item.saleItemId] = t('return_quantity_exceeds') || `Mövcud qaytarıla bilən: ${available}`;
+                    newErrors[item.saleItemId] = t('return_quantity_exceeds', { available }) || `Mövcud qaytarıla bilən: ${available}`;
                 }
             }
         });
@@ -444,10 +583,17 @@ export default function SaleForm() {
             if (!isEditMode) {
                 const items = selectedProducts
                     .filter(item => item.productId && item.quantity && item.quantity !== '' && parseInt(item.quantity) > 0)
-                    .map(item => ({
-                        productId: item.productId,
-                        quantity: parseInt(item.quantity)
-                    }));
+                    .map(item => {
+                        const itemData = {
+                            productId: item.productId,
+                            quantity: parseInt(item.quantity)
+                        };
+                        // Əgər custom sale price varsa, onu göndər
+                        if (item.salePrice && item.salePrice !== '' && !isNaN(parseFloat(item.salePrice))) {
+                            itemData.pricePerItem = parseFloat(item.salePrice);
+                        }
+                        return itemData;
+                    });
                 payload.items = items;
                 // Paid amount və payment type əlavə et
                 payload.paidAmount = formData.paidAmount ? parseFloat(formData.paidAmount) : calculateTotal();
@@ -472,7 +618,7 @@ export default function SaleForm() {
                     Alert.success(t('add_success') || 'Uğurlu!', t('add_success_text') || 'Satış uğurla əlavə edildi');
                     // Yeni satış yaradılanda check səhifəsinə yönləndir
                     setTimeout(() => {
-                        const checkPath = isAdmin ? `/admin/check?id=${response.date.id}` : `/reception/check?id=${response.date.id}`;
+                        const checkPath = isAdmin ? `/admin/check?id=${response.date.id}` : `/reception/sale-form?id=${response.date.id}`;
                         navigate(checkPath);
                     }, 1500);
                 } else {
@@ -611,35 +757,41 @@ export default function SaleForm() {
                         {selectedProducts.map((item, index) => {
                             const selectedProduct = products.find(p => p.id === item.productId);
                             const qty = item.quantity && item.quantity !== '' ? parseInt(item.quantity) : 0;
-                            const itemTotal = selectedProduct ? getProductPrice(item.productId) * qty : 0;
+                            const itemTotal = selectedProduct ? getProductPrice(item.productId, item.salePrice) * qty : 0;
+                            const defaultPrice = selectedProduct ? getProductPrice(selectedProduct.id) : 0;
 
                             return (
                                 <div key={index} className="border border-gray-200 rounded-lg p-4">
                                     <div className="flex items-start gap-4">
-                                        <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    {t('product') || 'Məhsul'} {index + 1}
-                                                </label>
-                                                <select
+                                        <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                            <div className="lg:col-span-2">
+                                                <SearchDropdown
+                                                    options={products}
                                                     value={item.productId}
-                                                    onChange={(e) => handleProductChange(index, e.target.value)}
-                                                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                                                        errors[`product_${index}`] ? 'border-red-500' : 'border-gray-300'
-                                                    } ${isEditMode ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                                    onChange={(productId) => handleProductChange(index, productId)}
+                                                    placeholder={t('select_product') || 'Məhsul seçin'}
                                                     disabled={isLoading || loadingProducts || isEditMode}
-                                                >
-                                                    <option value="">{t('select_product') || 'Məhsul seçin'}</option>
-                                                    {products.map(product => (
-                                                        <option key={product.id} value={product.id}>
-                                                            {product.name} - {parseFloat(product.salePrice).toFixed(2)} ₼ 
-                                                            {product.hasDiscount && product.discountPrice && (
-                                                                ` (Endirim: ${parseFloat(product.discountPrice).toFixed(2)} ₼)`
-                                                            )}
-                                                            {` (Stok: ${product.stock})`}
-                                                        </option>
-                                                    ))}
-                                                </select>
+                                                    error={!!errors[`product_${index}`]}
+                                                    label={`${t('product') || 'Məhsul'} ${index + 1}`}
+                                                    getOptionLabel={(product) => `${product.name} - ${parseFloat(product.salePrice).toFixed(2)} ₼${product.hasDiscount && product.discountPrice ? ` (${parseFloat(product.discountPrice).toFixed(2)} ₼)` : ''} (Stok: ${product.stock})`}
+                                                    getOptionValue={(product) => product.id}
+                                                    searchFields={['name', 'barcode']}
+                                                    renderOption={(product) => (
+                                                        <div>
+                                                            <div className="font-medium text-base">{product.name}</div>
+                                                            <div className="text-sm text-gray-500">
+                                                                {parseFloat(product.salePrice).toFixed(2)} ₼
+                                                                {product.hasDiscount && product.discountPrice && (
+                                                                    <span className="text-green-600 ml-1">
+                                                                        ({parseFloat(product.discountPrice).toFixed(2)} ₼)
+                                                                    </span>
+                                                                )}
+                                                                <span className="ml-2">Stok: {product.stock}</span>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                    className="text-base"
+                                                />
                                                 {errors[`product_${index}`] && (
                                                     <p className="mt-1 text-sm text-red-600">{errors[`product_${index}`]}</p>
                                                 )}
@@ -664,6 +816,65 @@ export default function SaleForm() {
                                                 {selectedProduct && (
                                                     <p className="mt-1 text-xs text-gray-500">
                                                         {t('available_stock') || 'Mövcud stok'}: {selectedProduct.stock}
+                                                    </p>
+                                                )}
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                    {t('sale_price') || 'Satış Qiyməti'} (₼)
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={item.salePrice || ''}
+                                                    readOnly
+                                                    className={`w-full px-4 py-2 border rounded-lg bg-gray-100 cursor-not-allowed ${
+                                                        errors[`salePrice_${index}`] ? 'border-red-500' : 'border-gray-300'
+                                                    }`}
+                                                    disabled={true}
+                                                    placeholder={defaultPrice.toFixed(2)}
+                                                />
+                                                {errors[`salePrice_${index}`] && (
+                                                    <p className="mt-1 text-sm text-red-600">{errors[`salePrice_${index}`]}</p>
+                                                )}
+                                                {selectedProduct && (
+                                                    <p className="mt-1 text-xs text-gray-500">
+                                                        {t('default_price') || 'Standart'}: {defaultPrice.toFixed(2)} ₼
+                                                    </p>
+                                                )}
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                    {t('discount_amount') || 'Endirim Məbləği'} (₼)
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={item.discountAmount || ''}
+                                                    onChange={(e) => handleDiscountAmountChange(index, e.target.value)}
+                                                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                                                        errors[`discount_${index}`] ? 'border-red-500' : 'border-gray-300'
+                                                    } ${isEditMode ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                                    disabled={isLoading || !item.productId || isEditMode}
+                                                    placeholder="0.00"
+                                                />
+                                                {errors[`discount_${index}`] && (
+                                                    <p className="mt-1 text-sm text-red-600">{errors[`discount_${index}`]}</p>
+                                                )}
+                                                {selectedProduct && (() => {
+                                                    const defaultSalePrice = parseFloat(selectedProduct.salePrice);
+                                                    const maxDiscount = selectedProduct.hasDiscount && selectedProduct.discountPrice
+                                                        ? (defaultSalePrice - parseFloat(selectedProduct.discountPrice))
+                                                        : defaultSalePrice;
+                                                    return (
+                                                        <p className="mt-1 text-xs text-gray-500">
+                                                            {t('max_discount') || 'Maksimum endirim'}: {maxDiscount.toFixed(2)} ₼
+                                                        </p>
+                                                    );
+                                                })()}
+                                                {selectedProduct && item.discountAmount && parseFloat(item.discountAmount) > 0 && (
+                                                    <p className="mt-1 text-xs text-green-600">
+                                                        {t('new_price') || 'Yeni qiymət'}: {item.salePrice} ₼
                                                     </p>
                                                 )}
                                             </div>

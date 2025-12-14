@@ -81,12 +81,14 @@ export default function StaffForm() {
                     if (response.success && response.date) {
                         const staff = response.date;
                         
-                        // Superadmin-i edit etməyə icazə vermə
+                        // Superadmin-i edit etməyə icazə vermə (yalnız superadmin üçün)
                         const roleName = staff.role?.name || '';
                         if (roleName.toLowerCase() === 'superadmin') {
-                            Alert.error(t('error_edit_superadmin'), t('error_edit_superadmin_text'));
-                            navigate(staffPagePath);
-                            return;
+                            if (!currentUser || currentUser.role?.name?.toLowerCase() !== 'superadmin') {
+                                Alert.error(t('error_edit_superadmin'), t('error_edit_superadmin_text'));
+                                navigate(staffPagePath);
+                                return;
+                            }
                         }
                         
                         setFormData({
@@ -366,8 +368,8 @@ export default function StaffForm() {
                     </div>
                 </div>
 
-                {/* Password Information - Only for create or if password is being changed */}
-                {(!isEditMode || formData.password) && (
+                {/* Password Information - Only for create, if password is being changed, or for superadmin in edit mode */}
+                {(!isEditMode || formData.password || (currentUser && currentUser.role?.name?.toLowerCase() === 'superadmin')) && (
                     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                         <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3 mb-4">
                             <MdSecurity className="inline w-5 h-5 mr-2" />
@@ -399,7 +401,9 @@ export default function StaffForm() {
                         </div>
                         {isEditMode && (
                             <p className="mt-2 text-xs text-gray-500">
-                                {t('password_optional') || 'Parol dəyişdirmək istəmirsinizsə, bu sahələri boş buraxın'}
+                                {currentUser && currentUser.role?.name?.toLowerCase() === 'superadmin'
+                                    ? (t('password_change_superadmin') || 'Superadmin olaraq bu işçinin parolunu dəyişdirə bilərsiniz')
+                                    : (t('password_optional') || 'Parol dəyişdirmək istəmirsinizsə, bu sahələri boş buraxın')}
                             </p>
                         )}
                     </div>

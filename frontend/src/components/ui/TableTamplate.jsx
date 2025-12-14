@@ -133,7 +133,7 @@ export default function TableTamplate({
         } else if (key === 'categoryName') {
           filtered = filtered.filter(item => {
             const categoryName = item.category?.name || '';
-            return categoryName.toLowerCase().includes(value.toLowerCase());
+            return categoryName.toLowerCase().trim() === value.toLowerCase().trim();
           });
         } else if (key === 'isActive') {
           const isActiveValue = value.toLowerCase().trim();
@@ -211,10 +211,10 @@ export default function TableTamplate({
   }, [sortedData, currentPage, itemsPerPage, serverSidePagination]);
 
   // Total pages: use server pagination if available, otherwise calculate from local data
-  const totalPages = serverSidePagination && pagination 
-    ? pagination.totalPages 
+  const totalPages = serverSidePagination && pagination
+    ? pagination.totalPages
     : Math.ceil(sortedData.length / itemsPerPage);
-  
+
   // Current page: use server pagination if available
   const effectivePage = serverSidePagination && pagination ? pagination.page : currentPage;
   const effectiveLimit = serverSidePagination && pagination ? pagination.limit : itemsPerPage;
@@ -273,11 +273,11 @@ export default function TableTamplate({
   }
 
   // Check if there are active filters/search
-  const hasActiveFilters = (serverSidePagination && searchValue) || 
-                          (!serverSidePagination && searchTerm) || 
-                          (dateRange.start && dateRange.end && datePreset !== 'all') ||
-                          Object.keys(filters).some(key => filters[key]);
-  
+  const hasActiveFilters = (serverSidePagination && searchValue) ||
+    (!serverSidePagination && searchTerm) ||
+    (dateRange.start && dateRange.end && datePreset !== 'all') ||
+    Object.keys(filters).some(key => filters[key]);
+
   // Show simple empty state only when there's no data at all and no active filters
   if (!loading && data.length === 0 && !hasActiveFilters) {
     return (
@@ -331,7 +331,7 @@ export default function TableTamplate({
   const handleDatePresetChange = (preset) => {
     setDatePreset(preset);
     if (!serverSidePagination || !onDatePresetChange) return;
-    
+
     const today = new Date();
     let startDate, endDate;
 
@@ -495,19 +495,18 @@ export default function TableTamplate({
             <button
               onClick={clearFilters}
               disabled={
-                !((serverSidePagination && ((dateRange.start && dateRange.start !== getTodayDate()) || 
+                !((serverSidePagination && ((dateRange.start && dateRange.start !== getTodayDate()) ||
                   (dateRange.end && dateRange.end !== getTodayDate()) || searchValue)) ||
-                (!serverSidePagination && (searchTerm || (dateRange.start && dateRange.end) ||
-                  Object.keys(filters).some(key => filters[key]))))
+                  (!serverSidePagination && (searchTerm || (dateRange.start && dateRange.end) ||
+                    Object.keys(filters).some(key => filters[key]))))
               }
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors whitespace-nowrap ${
-                ((serverSidePagination && ((dateRange.start && dateRange.start !== getTodayDate()) || 
-                  (dateRange.end && dateRange.end !== getTodayDate()) || searchValue)) ||
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors whitespace-nowrap ${((serverSidePagination && ((dateRange.start && dateRange.start !== getTodayDate()) ||
+                (dateRange.end && dateRange.end !== getTodayDate()) || searchValue)) ||
                 (!serverSidePagination && (searchTerm || (dateRange.start && dateRange.end) ||
                   Object.keys(filters).some(key => filters[key]))))
-                  ? 'text-gray-700 bg-gray-100 hover:bg-gray-200 cursor-pointer'
-                  : 'text-gray-400 bg-gray-50 cursor-not-allowed opacity-60'
-              }`}
+                ? 'text-gray-700 bg-gray-100 hover:bg-gray-200 cursor-pointer'
+                : 'text-gray-400 bg-gray-50 cursor-not-allowed opacity-60'
+                }`}
             >
               {t('clear_all') || 'Təmizlə'}
             </button>
@@ -581,7 +580,7 @@ export default function TableTamplate({
                               value={filters[key] || ''}
                               onChange={(e) => setFilters(prev => ({ ...prev, [key]: e.target.value }))}
                               className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-sm text-gray-900 transition-colors appearance-none cursor-pointer"
-                              style={{ 
+                              style={{
                                 minHeight: '42px',
                                 backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
                                 backgroundPosition: 'right 0.5rem center',
@@ -592,9 +591,9 @@ export default function TableTamplate({
                             >
                               <option value="" className="text-gray-500">{t('all') || 'Hamısı'}</option>
                               {options.map((option, index) => (
-                                <option 
-                                  key={`${option}-${index}`} 
-                                  value={option} 
+                                <option
+                                  key={`${option}-${index}`}
+                                  value={option}
                                   className="text-gray-900 py-1"
                                 >
                                   {option}
@@ -717,7 +716,7 @@ export default function TableTamplate({
                       const roleName = item.role?.name || item.role || '';
                       const isSuperadmin = roleName.toLowerCase() === 'superadmin';
                       const isCoreRole = item.isCore === true; // Əsas rol yoxlaması
-                      
+
                       return (
                         <input
                           type="checkbox"
@@ -746,13 +745,13 @@ export default function TableTamplate({
                       const roleName = item.role?.name || item.role || '';
                       const isSuperadmin = roleName.toLowerCase() === 'superadmin';
                       const isCoreRole = item.isCore === true || item.role?.isCore === true; // Əsas rol yoxlaması
-                      
+
                       if (isSuperadmin || isCoreRole) {
                         return (
                           <span className="text-gray-400 text-xs">{t('restricted') || 'Məhdudiyyətli'}</span>
                         );
                       }
-                      
+
                       return (
                         <>
                           {onView && (
@@ -902,11 +901,10 @@ export default function TableTamplate({
                           setCurrentPage(pageNum);
                         }
                       }}
-                      className={`px-3 py-1 border rounded-md text-sm ${
-                        effectivePage === pageNum
-                          ? 'bg-blue-600 text-white border-blue-600'
-                          : 'border-gray-300 hover:bg-gray-50'
-                      }`}
+                      className={`px-3 py-1 border rounded-md text-sm ${effectivePage === pageNum
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'border-gray-300 hover:bg-gray-50'
+                        }`}
                     >
                       {pageNum}
                     </button>

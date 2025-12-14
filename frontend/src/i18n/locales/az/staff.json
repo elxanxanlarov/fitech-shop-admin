@@ -63,6 +63,11 @@
   "cancel": "Ləğv et",
   "updating": "Yenilənir...",
   "adding": "Əlavə edilir...",
-  "update": "Yenilə"
+  "update": "Yenilə",
+  "profile": "Profil",
+  "profile_description": "Profil məlumatlarınızı idarə edin",
+  "edit": "Redaktə Et",
+  "save": "Saxla",
+  "password_change_superadmin": "Superadmin olaraq bu işçinin parolunu dəyişdirə bilərsiniz"
 }
 

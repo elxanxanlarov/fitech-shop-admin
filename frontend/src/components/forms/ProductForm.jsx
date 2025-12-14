@@ -20,7 +20,7 @@ export default function ProductForm() {
     const isAdmin = location.pathname.includes('/admin');
     const productPagePath = isAdmin ? '/admin/products' : '/reception/products';
     const isEditMode = !!id;
-    
+
     const [formData, setFormData] = useState({
         name: '',
         description: '',
@@ -37,7 +37,7 @@ export default function ProductForm() {
         categoryId: '',
         subCategoryId: ''
     });
-    
+
     const [errors, setErrors] = useState({});
     const [isLoading, setIsLoading] = useState(false);
     const [selectedImageFile, setSelectedImageFile] = useState(null);
@@ -63,7 +63,7 @@ export default function ProductForm() {
                     const response = await productApi.getById(id);
                     if (response.success && response.date) {
                         const product = response.date;
-                        
+
                         const imageUrl = product.imageUrl || '';
                         const initialData = {
                             name: product.name || '',
@@ -83,17 +83,17 @@ export default function ProductForm() {
                         };
                         setFormData(initialData);
                         setInitialFormData(initialData);
-                        
+
                         // Fetch subcategories if categoryId exists
                         if (product.categoryId) {
                             fetchSubCategories(product.categoryId);
                         }
-                        
+
                         // Fetch stock movements if in edit mode
                         if (isEditMode && product.id) {
                             fetchStockMovements(product.id);
                         }
-                        
+
                         // Set preview if image exists
                         if (imageUrl) {
                             const url = String(imageUrl).trim();
@@ -112,10 +112,10 @@ export default function ProductForm() {
                             // Əgər şəkil yoxdursa, preview-i təmizlə
                             setImagePreview(null);
                         }
-                        
+
                         // Edit modunda selectedImageFile-i təmizlə (mövcud şəkil üçün)
                         setSelectedImageFile(null);
-                        
+
                         // Fetch subcategories if categoryId exists
                         if (product.categoryId) {
                             const fetchSubCategories = async (categoryId) => {
@@ -213,8 +213,18 @@ export default function ProductForm() {
 
     // Handle category change
     const handleCategoryChange = (categoryId) => {
-        handleInputChange('categoryId', categoryId);
-        handleInputChange('subCategoryId', ''); // Reset subcategory when category changes
+        setFormData(prev => ({
+            ...prev,
+            categoryId,
+            subCategoryId: ''
+        }));
+
+        setErrors(prev => ({
+            ...prev,
+            categoryId: undefined,
+            subCategoryId: undefined
+        }));
+
         fetchSubCategories(categoryId);
     };
 
@@ -283,54 +293,54 @@ export default function ProductForm() {
 
     const validateForm = () => {
         const newErrors = {};
-    
+
         // Ad
         if (!formData.name.trim()) {
             newErrors.name = t('name_required') || 'Ad tələb olunur';
         }
-    
+
         // Qiymətlər (string -> number)
         const purchasePriceNum = parseFloat(formData.purchasePrice || '0');
         const salePriceNum = parseFloat(formData.salePrice || '0');
-    
+
         // Alış qiyməti
         if (!formData.purchasePrice || purchasePriceNum <= 0) {
             newErrors.purchasePrice =
                 t('purchase_price_required') ||
                 'Alış qiyməti tələb olunur və 0-dan böyük olmalıdır';
         }
-    
+
         // Satış qiyməti
         if (!formData.salePrice || salePriceNum <= 0) {
             newErrors.salePrice =
                 t('sale_price_required') ||
                 'Satış qiyməti tələb olunur və 0-dan böyük olmalıdır';
         }
-    
+
         // Satış qiyməti maya dəyərindən kiçik ola bilməz
         if (purchasePriceNum > 0 && salePriceNum > 0 && salePriceNum < purchasePriceNum) {
             newErrors.salePrice =
                 t('sale_price_less_than_cost') ||
                 'Satış qiyməti maya dəyərindən kiçik ola bilməz';
         }
-    
+
         // ENDİRİM MƏNTİQİ
         if (formData.hasDiscount) {
             const hasDiscountPrice =
                 formData.discountPrice !== '' && formData.discountPrice !== null;
             const hasDiscountPercent =
                 formData.discountPercent !== '' && formData.discountPercent !== null;
-    
+
             const discountPriceNum = parseFloat(formData.discountPrice || '0');
             const discountPercentNum = parseFloat(formData.discountPercent || '0');
-    
+
             // Heç biri doldurulmayıbsa
             if (!hasDiscountPrice && !hasDiscountPercent) {
                 newErrors.discount =
                     t('discount_required') ||
                     'Endirim aktivdirsə, endirim qiyməti və ya faizi tələb olunur';
             }
-    
+
             // 💸 Endirim qiyməti (endirimdən SONRA satış qiyməti)
             if (hasDiscountPrice) {
                 // 0-dan böyük olsun
@@ -339,14 +349,14 @@ export default function ProductForm() {
                         t('discount_price_invalid') ||
                         'Endirim qiyməti 0-dan böyük olmalıdır';
                 }
-    
+
                 // Satış qiymətindən böyük və ya bərabər ola bilməz
                 if (salePriceNum > 0 && discountPriceNum >= salePriceNum) {
                     newErrors.discountPrice =
                         t('discount_price_must_be_less_than_sale') ||
                         'Endirim qiyməti satış qiymətindən kiçik olmalıdır';
                 }
-    
+
                 // Maya dəyərindən aşağı düşməsin (zərərə satma)
                 if (purchasePriceNum > 0 && discountPriceNum < purchasePriceNum) {
                     newErrors.discountPrice =
@@ -354,7 +364,7 @@ export default function ProductForm() {
                         'Endirim qiyməti maya dəyərindən kiçik ola bilməz';
                 }
             }
-    
+
             // 📉 Endirim faizi
             if (hasDiscountPercent) {
                 if (discountPercentNum <= 0) {
@@ -362,13 +372,13 @@ export default function ProductForm() {
                         t('discount_percent_invalid') ||
                         'Endirim faizi 0-dan böyük olmalıdır';
                 }
-    
+
                 if (discountPercentNum >= 100) {
                     newErrors.discountPercent =
                         t('discount_percent_too_high') ||
                         'Endirim faizi 100%-dən kiçik olmalıdır';
                 }
-    
+
                 // Endirim faizi qazanc üzərindən hesablanır
                 // Maksimum endirim faizi = 100% (bütün qazancı endirim edə bilərik)
                 // Amma endirim qiyməti maya dəyərindən az ola bilməz
@@ -376,7 +386,7 @@ export default function ProductForm() {
                     const profit = salePriceNum - purchasePriceNum; // Qazanc
                     const discountAmount = profit * (discountPercentNum / 100); // Endirim məbləği
                     const calculatedDiscountPrice = salePriceNum - discountAmount; // Hesablanmış endirim qiyməti
-                    
+
                     // Əgər hesablanmış endirim qiyməti maya dəyərindən azdırsa, xəta göstər
                     if (calculatedDiscountPrice < purchasePriceNum) {
                         newErrors.discountPercent =
@@ -386,22 +396,18 @@ export default function ProductForm() {
                 }
             }
         }
-    
+
         // Stok
         if (formData.stock !== undefined && formData.stock < 0) {
             newErrors.stock = t('stock_invalid') || 'Stok mənfi ola bilməz';
         }
-    
+
         // Edit modunda şəkil yoxdursa, fayl tələb olunur
-        if (isEditMode && !formData.imageUrl?.trim() && !selectedImageFile) {
-            newErrors.imageUrl =
-                t('image_required') || 'Şəkil faylı tələb olunur';
-        }
-    
+
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
-    
+
 
     const handleImageSelect = (e) => {
         const file = e.target.files[0];
@@ -444,7 +450,7 @@ export default function ProductForm() {
 
     // Number field-lar üçün validation
     const numberFields = ['purchasePrice', 'salePrice', 'discountPrice', 'discountPercent', 'stock'];
-    
+
     // Custom handler for discount calculations
     const customDiscountHandler = (field, value) => {
         // Auto-calculate discount (qazanc üzərindən)
@@ -452,35 +458,35 @@ export default function ProductForm() {
         // Endirim məbləği = Qazanc * (discountPercent / 100)
         // discountPrice = salePrice - Endirim məbləği
         // discountPrice >= purchasePrice olmalıdır
-        
+
         const calculateDiscount = (purchasePrice, salePrice, discountPercent) => {
             if (!purchasePrice || !salePrice || purchasePrice <= 0 || salePrice <= 0) return null;
             if (salePrice <= purchasePrice) return null; // Qazanc yoxdursa endirim ola bilməz
-            
+
             const profit = salePrice - purchasePrice; // Qazanc
             const discountAmount = profit * (discountPercent / 100); // Endirim məbləği
             let discountPrice = salePrice - discountAmount; // Endirim qiyməti
-            
+
             // Endirim qiyməti maya dəyərindən az ola bilməz
             if (discountPrice < purchasePrice) {
                 discountPrice = purchasePrice;
             }
-            
+
             return discountPrice.toFixed(2);
         };
-        
+
         const calculateDiscountPercent = (purchasePrice, salePrice, discountPrice) => {
             if (!purchasePrice || !salePrice || !discountPrice || purchasePrice <= 0 || salePrice <= 0 || discountPrice <= 0) return null;
             if (salePrice <= purchasePrice) return null; // Qazanc yoxdursa endirim ola bilməz
             if (discountPrice < purchasePrice) return null; // Endirim qiyməti maya dəyərindən az ola bilməz
-            
+
             const profit = salePrice - purchasePrice; // Qazanc
             const discountAmount = salePrice - discountPrice; // Endirim məbləği
             const discountPercent = (discountAmount / profit) * 100; // Endirim faizi
-            
+
             return discountPercent.toFixed(2);
         };
-        
+
         if (field === 'hasDiscount' && value) {
             // Endirim aktiv edildikdə
         } else if (field === 'discountPercent' && formData.purchasePrice && formData.salePrice) {
@@ -488,7 +494,7 @@ export default function ProductForm() {
             const purchasePrice = parseFloat(formData.purchasePrice) || 0;
             const salePrice = parseFloat(formData.salePrice) || 0;
             const discountPercent = parseFloat(value) || 0;
-            
+
             if (discountPercent > 0 && discountPercent <= 100 && purchasePrice > 0 && salePrice > purchasePrice) {
                 const calculatedDiscountPrice = calculateDiscount(purchasePrice, salePrice, discountPercent);
                 if (calculatedDiscountPrice) {
@@ -503,7 +509,7 @@ export default function ProductForm() {
             const purchasePrice = parseFloat(formData.purchasePrice) || 0;
             const salePrice = parseFloat(formData.salePrice) || 0;
             const discountPrice = parseFloat(value) || 0;
-            
+
             if (discountPrice >= purchasePrice && salePrice > purchasePrice) {
                 const calculatedDiscountPercent = calculateDiscountPercent(purchasePrice, salePrice, discountPrice);
                 if (calculatedDiscountPercent) {
@@ -518,7 +524,7 @@ export default function ProductForm() {
             const purchasePrice = parseFloat(value) || 0;
             const salePrice = parseFloat(formData.salePrice) || 0;
             const discountPercent = parseFloat(formData.discountPercent) || 0;
-            
+
             if (discountPercent > 0 && purchasePrice > 0 && salePrice > purchasePrice) {
                 const calculatedDiscountPrice = calculateDiscount(purchasePrice, salePrice, discountPercent);
                 if (calculatedDiscountPrice) {
@@ -533,7 +539,7 @@ export default function ProductForm() {
             const purchasePrice = parseFloat(formData.purchasePrice) || 0;
             const salePrice = parseFloat(value) || 0;
             const discountPercent = parseFloat(formData.discountPercent) || 0;
-            
+
             if (discountPercent > 0 && purchasePrice > 0 && salePrice > purchasePrice) {
                 const calculatedDiscountPrice = calculateDiscount(purchasePrice, salePrice, discountPercent);
                 if (calculatedDiscountPrice) {
@@ -545,7 +551,7 @@ export default function ProductForm() {
             }
         }
     };
-    
+
     const handleInputChange = createInputChangeHandler(
         setFormData,
         setErrors,
@@ -558,7 +564,7 @@ export default function ProductForm() {
     // Check if form has changed (only in edit mode)
     const hasFormChanged = () => {
         if (!isEditMode || !initialFormData) return true; // Always allow submit in create mode
-        
+
         // Compare form data with initial data
         const currentData = {
             name: formData.name.trim(),
@@ -573,10 +579,10 @@ export default function ProductForm() {
             stock: formData.stock || 0,
             isActive: formData.isActive !== undefined ? formData.isActive : true,
             isOfficial: formData.isOfficial !== undefined ? formData.isOfficial : false,
-            categoryId: formData.categoryId || null,
-            subCategoryId: formData.subCategoryId || null
+            categoryId: formData.categoryId || '',
+            subCategoryId: formData.subCategoryId || ''
         };
-        
+
         const initial = {
             name: initialFormData.name.trim(),
             description: initialFormData.description?.trim() || '',
@@ -593,7 +599,7 @@ export default function ProductForm() {
             categoryId: initialFormData.categoryId || '',
             subCategoryId: initialFormData.subCategoryId || ''
         };
-        
+
         // Check if any field has changed
         const hasChanged = JSON.stringify(currentData) !== JSON.stringify(initial) || selectedImageFile !== null;
         return hasChanged;
@@ -601,19 +607,19 @@ export default function ProductForm() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        
+
         if (!validateForm()) {
             return;
         }
-        
+
         // In edit mode, check if form has changed
         if (isEditMode && !hasFormChanged()) {
             Alert.info(t('no_changes') || 'Xəbərdarlıq', t('no_changes_text') || 'Formda heç bir dəyişiklik edilməyib');
             return;
         }
-        
+
         setIsLoading(true);
-        
+
         try {
             let imageUrlValue = formData.imageUrl?.trim() || null;
 
@@ -635,11 +641,6 @@ export default function ProductForm() {
             }
 
             // If no image file in edit mode, show error
-            if (!imageUrlValue && isEditMode && !selectedImageFile) {
-                Alert.error(t('error') || 'Xəta!', t('image_required') || 'Şəkil faylı tələb olunur');
-                setIsLoading(false);
-                return;
-            }
 
             const payload = {
                 name: formData.name.trim(),
@@ -654,8 +655,14 @@ export default function ProductForm() {
                 stock: parseInt(formData.stock) || 0,
                 isActive: formData.isActive,
                 isOfficial: formData.isOfficial,
-                categoryId: formData.categoryId || null,
-                subCategoryId: formData.subCategoryId || null
+                categoryId:
+                    formData.categoryId && formData.categoryId.trim() !== ''
+                        ? formData.categoryId
+                        : null,
+                subCategoryId:
+                    formData.subCategoryId && formData.subCategoryId.trim() !== ''
+                        ? formData.subCategoryId
+                        : null
             };
 
             if (isEditMode) {
@@ -665,11 +672,11 @@ export default function ProductForm() {
                 await productApi.create(payload);
                 Alert.success(t('add_success') || 'Uğurlu!', t('add_success_text') || 'Məhsul uğurla əlavə edildi');
             }
-            
+
             setTimeout(() => {
                 navigate(productPagePath);
             }, 1500);
-            
+
         } catch (error) {
             console.error('Product operation error:', error);
             const errorMessage = error.response?.data?.message || (tAlert('error_text') || 'Xəta baş verdi. Zəhmət olmasa yenidən cəhd edin.');
@@ -697,7 +704,7 @@ export default function ProductForm() {
                         <MdInventory className="inline w-5 h-5 mr-2" />
                         {t('basic_info') || 'Əsas Məlumatlar'}
                     </h3>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <Input
                             label={t('name')}
@@ -709,7 +716,7 @@ export default function ProductForm() {
                             icon={<MdInventory />}
                             required
                         />
-                        
+
                         <Input
                             label={t('barcode')}
                             type="text"
@@ -719,7 +726,7 @@ export default function ProductForm() {
                             placeholder={t('barcode_placeholder') || 'Barcode daxil edin'}
                             icon={<MdQrCode />}
                         />
-                        
+
                         <div className="md:col-span-2">
                             <Input
                                 label={t('description')}
@@ -740,9 +747,8 @@ export default function ProductForm() {
                                 value={formData.categoryId}
                                 onChange={(e) => handleCategoryChange(e.target.value)}
                                 disabled={isLoading || loadingCategories}
-                                className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                                    errors.categoryId ? 'border-red-500' : 'border-gray-300'
-                                }`}
+                                className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.categoryId ? 'border-red-500' : 'border-gray-300'
+                                    }`}
                             >
                                 <option value="">{t('select_category') || 'Kateqoriya seçin'}</option>
                                 {categories.map(category => (
@@ -764,9 +770,8 @@ export default function ProductForm() {
                                 value={formData.subCategoryId}
                                 onChange={(e) => handleInputChange('subCategoryId', e.target.value)}
                                 disabled={isLoading || !formData.categoryId || loadingCategories}
-                                className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                                    errors.subCategoryId ? 'border-red-500' : 'border-gray-300'
-                                } ${!formData.categoryId ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.subCategoryId ? 'border-red-500' : 'border-gray-300'
+                                    } ${!formData.categoryId ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                             >
                                 <option value="">{t('select_subcategory') || 'Alt kateqoriya seçin'}</option>
                                 {subCategories.map(subCategory => (
@@ -779,17 +784,17 @@ export default function ProductForm() {
                                 <p className="mt-1 text-sm text-red-600">{errors.subCategoryId}</p>
                             )}
                         </div>
-                        
+
                         <div className="md:col-span-2">
                             <label className="block text-sm font-medium text-gray-700 mb-2">
                                 {t('image') || 'Şəkil'}
                             </label>
-                            
+
                             {/* Image Preview */}
                             {(imagePreview || formData.imageUrl) && (
                                 <div className="mb-3">
                                     <div className="relative inline-block">
-                                        <img 
+                                        <img
                                             src={imagePreview || (() => {
                                                 const url = String(formData.imageUrl || '').trim();
                                                 if (!url) return '';
@@ -800,8 +805,8 @@ export default function ProductForm() {
                                                 const apiUrl = import.meta.env.VITE_API_URL || '';
                                                 const baseUrl = apiUrl.replace('/api', ''); // http://localhost:5000
                                                 return `${baseUrl}${url.startsWith('/') ? url : '/' + url}`;
-                                            })()} 
-                                            alt={formData.name || 'Product image'} 
+                                            })()}
+                                            alt={formData.name || 'Product image'}
                                             className="h-48 w-48 object-cover rounded-lg border border-gray-300 shadow-sm"
                                             style={{ display: 'block' }}
                                             onError={(e) => {
@@ -815,7 +820,7 @@ export default function ProductForm() {
                                     </div>
                                 </div>
                             )}
-                            
+
                             {/* File Upload */}
                             <div>
                                 <label className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed w-fit">
@@ -842,7 +847,7 @@ export default function ProductForm() {
                                     </p>
                                 )}
                             </div>
-                            
+
                             {errors.imageUrl && (
                                 <p className="mt-1 text-sm text-red-600">{errors.imageUrl}</p>
                             )}
@@ -856,7 +861,7 @@ export default function ProductForm() {
                         <MdAttachMoney className="inline w-5 h-5 mr-2" />
                         {t('price_info') || 'Qiymət Məlumatları'}
                     </h3>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <Input
                             label={t('purchase_price')}
@@ -868,7 +873,7 @@ export default function ProductForm() {
                             icon={<MdAttachMoney />}
                             required
                         />
-                        
+
                         <Input
                             label={t('sale_price')}
                             type="text"
@@ -888,7 +893,7 @@ export default function ProductForm() {
                         <MdLocalOffer className="inline w-5 h-5 mr-2" />
                         {t('discount_info') || 'Endirim Məlumatları'}
                     </h3>
-                    
+
                     <div className="mb-4">
                         <label className="flex items-center gap-3 cursor-pointer">
                             <input
@@ -914,7 +919,7 @@ export default function ProductForm() {
                                 placeholder="0.00"
                                 icon={<MdAttachMoney />}
                             />
-                            
+
                             <Input
                                 label={t('discount_percent')}
                                 type="text"
@@ -945,7 +950,7 @@ export default function ProductForm() {
                             </button>
                         )}
                     </div>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                         <div>
                             <Input
@@ -981,7 +986,7 @@ export default function ProductForm() {
                                 {t('product_active_description') || 'Deaktiv məhsullar satışda görünməz'}
                             </p>
                         </div>
-                        
+
                         <div>
                             <label className="flex items-center gap-3 cursor-pointer">
                                 <input
@@ -1006,7 +1011,7 @@ export default function ProductForm() {
                             <h4 className="text-md font-semibold text-gray-900 mb-4">
                                 {t('stock_management') || 'Stok İdarəetməsi'}
                             </h4>
-                            
+
                             {/* Stock Movement Form */}
                             <div className="bg-gray-50 rounded-lg p-4 mb-4">
                                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -1107,14 +1112,13 @@ export default function ProductForm() {
                                                             {new Date(movement.createdAt).toLocaleString('az-AZ')}
                                                         </td>
                                                         <td className="border border-gray-300 px-3 py-2">
-                                                            <span className={`px-2 py-1 text-xs rounded-full ${
-                                                                movement.type === 'IN' ? 'bg-green-100 text-green-800' :
+                                                            <span className={`px-2 py-1 text-xs rounded-full ${movement.type === 'IN' ? 'bg-green-100 text-green-800' :
                                                                 movement.type === 'OUT' ? 'bg-red-100 text-red-800' :
-                                                                'bg-blue-100 text-blue-800'
-                                                            }`}>
+                                                                    'bg-blue-100 text-blue-800'
+                                                                }`}>
                                                                 {movement.type === 'IN' ? (t('stock_in') || 'Giriş') :
-                                                                 movement.type === 'OUT' ? (t('stock_out') || 'Çıxış') :
-                                                                 (t('stock_adjustment') || 'Düzəliş')}
+                                                                    movement.type === 'OUT' ? (t('stock_out') || 'Çıxış') :
+                                                                        (t('stock_adjustment') || 'Düzəliş')}
                                                             </span>
                                                         </td>
                                                         <td className="border border-gray-300 px-3 py-2">
@@ -1153,7 +1157,7 @@ export default function ProductForm() {
                     </button>
                     <button
                         type="submit"
-                        disabled={isLoading || (isEditMode && !hasFormChanged())}
+                        disabled={isLoading}
                         className="px-6 py-3 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center"
                     >
                         {isLoading ? (

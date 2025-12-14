@@ -41,7 +41,7 @@
   "product_required": "Məhsul seçilməlidir",
   "quantity_required": "Miqdar tələb olunur",
   "quantity_cannot_be_zero": "Miqdar 0 ola bilməz",
-  "quantity_exceeds_stock": "Miqdar stokdan çox ola bilməz",
+  "quantity_exceeds_stock": "Miqdar stokdan çox ola bilməz. Mövcud stok: {{stock}}",
   "items_selected": "element seçilib",
   "loading": "Yüklənir...",
   "error_fetching": "Xəta!",
@@ -75,7 +75,7 @@
   "return_note": "Qaytarma qeydi",
   "return_note_placeholder": "Qeyd daxil edin (istəyə bağlı)",
   "return_items_required": "Ən azı bir məhsul seçilməlidir",
-  "return_quantity_exceeds": "Qaytarma miqdarı çox böyükdür",
+  "return_quantity_exceeds": "Qaytarma miqdarı çox böyükdür. Mövcud qaytarıla bilən: {{available}}",
   "return_success": "Uğurlu!",
   "return_success_text": "Qaytarma uğurla yaradıldı",
   "return_error": "Qaytarma yaradılarkən xəta baş verdi",
@@ -90,6 +90,14 @@
   "return": "Qaytarma",
   "reason": "Səbəb",
   "returned_items": "Qaytarılan məhsullar",
-  "returned_amount": "Qaytarılan məbləğ"
+  "returned_amount": "Qaytarılan məbləğ",
+  "sale_price": "Satış Qiyməti",
+  "default_price": "Standart",
+  "discount_amount": "Endirim Məbləği",
+  "max_discount": "Maksimum endirim",
+  "new_price": "Yeni qiymət",
+  "price_cannot_be_negative": "Qiymət mənfi ola bilməz",
+  "discount_cannot_be_negative": "Endirim mənfi ola bilməz",
+  "discount_exceeds_max": "Maksimum endirim məbləği: {{max}} ₼"
 }
 

@@ -31,7 +31,7 @@ model Staff {
   expenses    Expense[]
   cashHandoversReceived CashHandover[] @relation("HandedOverTo")
   cashHandoversGiven    CashHandover[] @relation("HandedOverBy")
-  stockMovements         StockMovement[]
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
@@ -286,4 +286,23 @@ model StockMovement {
   updatedAt   DateTime @updatedAt
 }
 
+model Staff {
+  id          String   @id @default(uuid())
+  name        String
+  surName     String?
+  phone       String?
+  email       String   @unique
+  password    String?
+  isActive    Boolean  @default(true)
+  roleId      String?
+  role        Role?    @relation(fields: [roleId], references: [id])
 
+  activities  ActivityLog[]
+  expenses    Expense[]
+  cashHandoversReceived CashHandover[] @relation("HandedOverTo")
+  cashHandoversGiven    CashHandover[] @relation("HandedOverBy")
+  stockMovements         StockMovement[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

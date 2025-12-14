@@ -93,7 +93,7 @@ export default function Expenses() {
     const handleEdit = async (expense) => {
         const isAdmin = location.pathname.includes('/admin');
         if (!isAdmin) return;
-        const editPath = `/admin/expense-form?id=${expense.id.toString()}`;
+        const editPath = `/${isAdmin ? 'admin' : 'reception'}/expense-form?id=${expense.id.toString()}`;
         navigate(editPath);
     };
 
@@ -175,7 +175,9 @@ export default function Expenses() {
     };
 
     const handleAddExpense = () => {
-        navigate('/admin/expense-form');
+        const isAdmin = location.pathname.includes('/admin');
+        const addExpensePath = isAdmin ? '/admin/expense-form' : '/reception/expense-form';
+        navigate(addExpensePath);
     };
 
     return (
