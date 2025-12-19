@@ -44,6 +44,9 @@ export const getProductColumns = (t, language = 'az') => [
                     </div>
                     <div>
                         <div className="text-sm font-medium text-gray-900">{value || '-'}</div>
+                        {(item.categoryName || item.category?.name) && (
+                            <div className="text-xs text-gray-500">{item.categoryName || item.category?.name}</div>
+                        )}
                         {item.description && (
                             <div className="text-xs text-gray-500 line-clamp-1">{item.description}</div>
                         )}

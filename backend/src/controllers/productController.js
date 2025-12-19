@@ -6,21 +6,126 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
+// In productController.js
 export const getAllProducts = async (req, res) => {
     try {
+        const { 
+            categoryId,
+            categoryName,
+            minStock,
+            maxStock,
+            stockStatus,
+            hasImage,
+            isActive,
+            isOfficial,
+            search
+        } = req.query;
+
+        const where = {};
+
+        // Category filter by ID (takes precedence over categoryName)
+        if (categoryId) {
+            where.categoryId = categoryId;
+        } else if (categoryName) {
+            // Category filter by name (only if categoryId is not provided)
+            // First find the category by name (exact match)
+            // Note: MySQL default collation is case-insensitive for most setups
+            const category = await prisma.category.findFirst({
+                where: {
+                    name: categoryName
+                },
+                select: { id: true }
+            });
+            
+            if (category) {
+                where.categoryId = category.id;
+            } else {
+                // If category not found, return empty result
+                where.categoryId = 'non-existent-id';
+            }
+        }
+
+        // Stock status filter (in stock, low stock, out of stock)
+        // Note: stockStatus takes precedence over minStock/maxStock
+        if (stockStatus) {
+            const stockStatusLower = stockStatus.toLowerCase().trim();
+            if (stockStatusLower === 'stokda var' || stockStatusLower === 'in stock') {
+                where.stock = { gt: 10 };
+            } else if (stockStatusLower === 'az stok' || stockStatusLower === 'low stock') {
+                where.stock = { gte: 1, lte: 10 };
+            } else if (stockStatusLower === 'stokda yoxdur' || stockStatusLower === 'out of stock') {
+                where.stock = 0;
+            }
+        } else {
+            // Stock range filter (only if stockStatus is not set)
+            if (minStock !== undefined || maxStock !== undefined) {
+                where.stock = {};
+                if (minStock !== undefined) where.stock.gte = parseInt(minStock);
+                if (maxStock !== undefined) where.stock.lte = parseInt(maxStock);
+            }
+        }
+
+        // Has image filter
+        if (hasImage === 'true') where.imageUrl = { not: null };
+        else if (hasImage === 'false') where.imageUrl = null;
+
+        // Status filter
+        if (isActive !== undefined) {
+            where.isActive = isActive === 'true' || isActive === true;
+        }
+
+        // Official status filter
+        if (isOfficial !== undefined) {
+            const isOfficialValue = isOfficial.toLowerCase().trim();
+            if (isOfficialValue === 'rəsmi' || isOfficialValue === 'official' || isOfficialValue === 'true') {
+                where.isOfficial = true;
+            } else if (isOfficialValue === 'qeyri-rəsmi' || isOfficialValue === 'unofficial' || isOfficialValue === 'false') {
+                where.isOfficial = false;
+            }
+        }
+
+        // Search
+        // Note: MySQL default collation is case-insensitive, so mode is not needed
+        if (search) {
+            where.OR = [
+                { name: { contains: search } },
+                { barcode: { contains: search } },
+                { description: { contains: search } }
+            ];
+        }
+
         const products = await prisma.product.findMany({
+            where,
             include: {
-                category: true,
-                subCategory: true
+                category: {
+                    select: {
+                        id: true,
+                        name: true
+                    }
+                },
+                subCategory: {
+                    select: {
+                        id: true,
+                        name: true
+                    }
+                }
             },
             orderBy: {
                 createdAt: 'desc',
             }
         });
 
+        // Format the response to include category name in the product title
+        const formattedProducts = products.map(product => ({
+            ...product,
+            titleWithCategory: product.name,
+            categoryName: product.category?.name || '',
+            subCategoryName: product.subCategory?.name || ''
+        }));
+
         return res.status(200).json({
             success: true,
-            date: products,
+            date: formattedProducts,
         });
     } catch (error) {
         console.error("getAllProducts error", error);

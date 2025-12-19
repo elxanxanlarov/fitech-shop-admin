@@ -19,3 +19,5 @@ router.delete("/:id", deleteStockMovement);
 
 export default router;
 
+
+

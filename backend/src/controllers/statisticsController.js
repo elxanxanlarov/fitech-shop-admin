@@ -123,6 +123,37 @@ export const getOverallStatistics = async (req, res) => {
             _count: true
         });
 
+        // Kredit statistikası
+        const creditSalesFilter = {
+            isCredit: true,
+            isRefunded: false,
+            ...dateFilter
+        };
+
+        const totalCreditSales = await prisma.sale.count({
+            where: creditSalesFilter
+        });
+
+        const creditSalesAggregation = await prisma.sale.aggregate({
+            where: creditSalesFilter,
+            _sum: {
+                creditTotalAmount: true,
+                creditRemainingAmount: true
+            }
+        });
+
+        // Aktiv kreditlər (tam ödənilməyən)
+        const activeCredits = await prisma.sale.count({
+            where: {
+                isCredit: true,
+                isRefunded: false,
+                isCreditPaid: false
+            }
+        });
+
+        // Ödənilən kredit məbləği (ümumi - qalan)
+        const totalCreditPaid = (creditSalesAggregation._sum.creditTotalAmount || 0) - (creditSalesAggregation._sum.creditRemainingAmount || 0);
+
         // Bu günkü satışlar (yalnız date filter yoxdursa)
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -135,6 +166,8 @@ export const getOverallStatistics = async (req, res) => {
         let todayReturnsAggregation = { _sum: { totalAmount: 0, returnedAmount: 0 } };
         let todayExpensesAggregation = { _sum: { amount: 0 } };
         let todayCashHandoverAggregation = { _sum: { amount: 0 }, _count: 0 };
+        let todayCreditSales = 0;
+        let todayCreditSalesAggregation = { _sum: { creditTotalAmount: 0, creditRemainingAmount: 0 } };
 
         if (!startDate || !endDate) {
             todaySales = await prisma.sale.count({
@@ -210,6 +243,33 @@ export const getOverallStatistics = async (req, res) => {
                 },
                 _count: true
             });
+
+            // Bu günkü kredit satışları
+            todayCreditSales = await prisma.sale.count({
+                where: {
+                    isCredit: true,
+                    isRefunded: false,
+                    createdAt: {
+                        gte: today,
+                        lt: tomorrow
+                    }
+                }
+            });
+
+            todayCreditSalesAggregation = await prisma.sale.aggregate({
+                where: {
+                    isCredit: true,
+                    isRefunded: false,
+                    createdAt: {
+                        gte: today,
+                        lt: tomorrow
+                    }
+                },
+                _sum: {
+                    creditTotalAmount: true,
+                    creditRemainingAmount: true
+                }
+            });
         }
 
         res.json({
@@ -256,6 +316,19 @@ export const getOverallStatistics = async (req, res) => {
                     today: {
                         count: todayCashHandoverAggregation._count || 0,
                         amount: todayCashHandoverAggregation._sum.amount || 0
+                    }
+                },
+                credits: {
+                    total: totalCreditSales,
+                    totalAmount: creditSalesAggregation._sum.creditTotalAmount || 0,
+                    paidAmount: totalCreditPaid,
+                    remainingAmount: creditSalesAggregation._sum.creditRemainingAmount || 0,
+                    active: activeCredits,
+                    today: {
+                        count: todayCreditSales,
+                        amount: todayCreditSalesAggregation._sum.creditTotalAmount || 0,
+                        paidAmount: (todayCreditSalesAggregation._sum.creditTotalAmount || 0) - (todayCreditSalesAggregation._sum.creditRemainingAmount || 0),
+                        remainingAmount: todayCreditSalesAggregation._sum.creditRemainingAmount || 0
                     }
                 }
             }

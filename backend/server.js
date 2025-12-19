@@ -17,13 +17,17 @@ import subCategoryRoutes from "./src/routes/subCategoryRoutes.js";
 import expenseRoutes from "./src/routes/expenseRoutes.js";
 import cashHandoverRoutes from "./src/routes/cashHandoverRoutes.js";
 import stockRoutes from "./src/routes/stockRoutes.js";
+import creditTermRoutes from "./src/routes/creditTermRoutes.js";
+import creditPaymentRoutes from "./src/routes/creditPaymentRoutes.js";
+import notificationRoutes from "./src/routes/notificationRoutes.js";
 import { seedData } from "./src/seed/seedData.js";
+import { checkCreditPaymentDue } from "./src/controllers/notificationController.js";
 import path from "path";
 import { fileURLToPath } from "url";
 dotenv.config();
-
-// Seed data işə sal
 seedData();
+
+
 
 const app = express();
 const PORT = process.env.PORT;
@@ -68,6 +72,9 @@ app.use("/api/subcategory", subCategoryRoutes);
 app.use("/api/expense", expenseRoutes);
 app.use("/api/cash-handover", cashHandoverRoutes);
 app.use("/api/stock", stockRoutes);
+app.use("/api/credit-term", creditTermRoutes);
+app.use("/api/credit-payment", creditPaymentRoutes);
+app.use("/api/notification", notificationRoutes);
 
 app.get("/api/health", (req, res) => {
   res.json({
@@ -76,6 +83,33 @@ app.get("/api/health", (req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+// Kredit ödəniş bildirişləri üçün scheduler (hər gün səhər 9:00-da)
+const scheduleCreditNotifications = () => {
+  const now = new Date();
+  const nextCheck = new Date();
+  nextCheck.setHours(9, 0, 0, 0); // Səhər 9:00
+  
+  // Əgər 9:00 keçibsə, növbəti günə təyin et
+  if (now > nextCheck) {
+    nextCheck.setDate(nextCheck.getDate() + 1);
+  }
+  
+  const msUntilNextCheck = nextCheck.getTime() - now.getTime();
+  
+  setTimeout(() => {
+    checkCreditPaymentDue();
+    // Hər gün təkrarla
+    setInterval(() => {
+      checkCreditPaymentDue();
+    }, 24 * 60 * 60 * 1000); // 24 saat
+  }, msUntilNextCheck);
+  
+  console.log(`📅 Kredit bildiriş scheduler aktivləşdirildi. Növbəti yoxlama: ${nextCheck.toLocaleString('az-AZ')}`);
+};
+
+// Scheduler-ı başlat
+scheduleCreditNotifications();
+
 app.listen(PORT, () => {
   console.log(`✅ Server is running on http://localhost:${PORT}`);
 });

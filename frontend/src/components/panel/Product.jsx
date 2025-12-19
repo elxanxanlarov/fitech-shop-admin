@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useLocation } from 'react-router-dom';
 import TableTemplate from '../ui/TableTamplate';
@@ -17,6 +17,9 @@ export default function Product() {
     const [loading, setLoading] = useState(true);
     const [categories, setCategories] = useState([]);
     const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
+    const [filters, setFilters] = useState({});
+    const [searchValue, setSearchValue] = useState(''); // Input value
+    const [searchQuery, setSearchQuery] = useState(''); // Actual search query used for API
 
     const columns = useMemo(() => getProductColumns(t, i18n.language), [t, i18n.language]);
 
@@ -35,29 +38,63 @@ export default function Product() {
         fetchCategories();
     }, []);
 
-    // Fetch product data
-    useEffect(() => {
-        const fetchProducts = async () => {
-            setLoading(true);
-            try {
-                const response = await productApi.getAll();
-                
-                if (response.success && response.date) {
-                    setProductData(response.date);
-                } else {
-                    setProductData([]);
-                }
-            } catch (error) {
-                console.error('Error fetching products:', error);
-                Alert.error(t('error_fetching'), t('error_fetching_text'));
-                setProductData([]);
-            } finally {
-                setLoading(false);
+    // Build query string from filters
+    const buildQueryString = useCallback((filters, searchQuery) => {
+        const params = new URLSearchParams();
+        
+        if (searchQuery && searchQuery.trim()) {
+            params.append('search', searchQuery.trim());
+        }
+        
+        if (filters.categoryName) {
+            params.append('categoryName', filters.categoryName);
+        }
+        
+        if (filters.stockStatus) {
+            params.append('stockStatus', filters.stockStatus);
+        }
+        
+        if (filters.isActive) {
+            const isActiveValue = filters.isActive.toLowerCase().trim();
+            if (isActiveValue === 'aktiv' || isActiveValue === 'active') {
+                params.append('isActive', 'true');
+            } else if (isActiveValue === 'qeyri-aktiv' || isActiveValue === 'inactive') {
+                params.append('isActive', 'false');
             }
-        };
+        }
+        
+        if (filters.isOfficial) {
+            params.append('isOfficial', filters.isOfficial);
+        }
+        
+        const queryString = params.toString();
+        return queryString ? `?${queryString}` : '';
+    }, []);
 
+    // Fetch product data
+    const fetchProducts = useCallback(async () => {
+        setLoading(true);
+        try {
+            const queryString = buildQueryString(filters, searchQuery);
+            const response = await productApi.getAll(queryString);
+            
+            if (response.success && response.date) {
+                setProductData(response.date);
+            } else {
+                setProductData([]);
+            }
+        } catch (error) {
+            console.error('Error fetching products:', error);
+            Alert.error(t('error_fetching'), t('error_fetching_text'));
+            setProductData([]);
+        } finally {
+            setLoading(false);
+        }
+    }, [buildQueryString, filters, searchQuery, t]);
+
+    useEffect(() => {
         fetchProducts();
-    }, [t, i18n.language]);
+    }, [fetchProducts, i18n.language]);
 
     const handleEdit = async (product) => {
         const isAdmin = location.pathname.includes('/admin');
@@ -163,11 +200,8 @@ export default function Product() {
                     result.message || `${result.data?.imported || 0} ${t('products_imported') || 'məhsul uğurla idxal edildi'}`
                 );
                 
-                // Refresh product list
-                const productsResponse = await productApi.getAll();
-                if (productsResponse.success && productsResponse.date) {
-                    setProductData(productsResponse.date);
-                }
+                // Refresh product list with current filters
+                await fetchProducts();
                 
                 setIsExcelModalOpen(false);
             } else {
@@ -185,6 +219,29 @@ export default function Product() {
             );
         }
     };
+
+    const handleFilterChange = useCallback((newFilters) => {
+        setFilters(newFilters);
+    }, []);
+
+    const handleSearchChange = useCallback((search) => {
+        // Only update input value, don't search yet
+        setSearchValue(search);
+    }, []);
+
+    const handleSearchSubmit = useCallback((value = null) => {
+        // Set the actual search query which triggers the API call
+        // If value is provided, use it; otherwise use current searchValue
+        // If empty, set empty string to get all data
+        const queryValue = value !== null ? value : searchValue;
+        setSearchQuery(queryValue || '');
+    }, [searchValue]);
+
+    const handleClearFilters = useCallback(() => {
+        setFilters({});
+        setSearchValue('');
+        setSearchQuery('');
+    }, []);
 
     return (
         <div className="p-6">
@@ -253,6 +310,14 @@ export default function Product() {
                     onAction: handleAddProduct,
                     showAction: true
                 }}
+                // Server-side filtering props
+                serverSidePagination={false}
+                onSearchChange={handleSearchChange}
+                onSearchSubmit={handleSearchSubmit}
+                searchValue={searchValue}
+                searchQuery={searchQuery}
+                onFilterChange={handleFilterChange}
+                onClearFilters={handleClearFilters}
             />
 
             {/* Excel Import Modal */}

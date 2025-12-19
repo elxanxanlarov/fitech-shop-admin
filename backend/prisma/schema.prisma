@@ -16,25 +16,6 @@ model Role {
   updatedAt DateTime @updatedAt
 }
 
-model Staff {
-  id          String   @id @default(uuid())
-  name        String
-  surName     String?
-  phone       String?
-  email       String   @unique
-  password    String?
-  isActive    Boolean  @default(true)
-  roleId      String?
-  role        Role?    @relation(fields: [roleId], references: [id])
-
-  activities  ActivityLog[]
-  expenses    Expense[]
-  cashHandoversReceived CashHandover[] @relation("HandedOverTo")
-  cashHandoversGiven    CashHandover[] @relation("HandedOverBy")
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
 
 
 model Category {
@@ -110,6 +91,17 @@ model Sale {
   profitAmount    Decimal? @db.Decimal(10,2)
 
   paymentType     String?  // "cash" (nagd) və ya "card" (kart)
+  isCredit        Boolean  @default(false) // Kredit satışı?
+  creditTermId    String?  // Kredit müddəti
+  creditTerm      CreditTerm? @relation(fields: [creditTermId], references: [id])
+  creditInterestPercent Decimal? @db.Decimal(5,2) // Kredit faizi (məsələn 4.3%)
+  creditTotalAmount Decimal? @db.Decimal(10,2) // Kredit üzrə ümumi məbləğ (faizlə birlikdə)
+  creditRemainingAmount Decimal? @db.Decimal(10,2) // Qalan məbləğ
+  creditMonthlyPayment Decimal? @db.Decimal(10,2) // Aylıq ödəniş məbləği
+  creditStartDate DateTime? // Kredit başlama tarixi
+  creditEndDate   DateTime? // Kredit bitmə tarixi
+  isCreditPaid    Boolean  @default(false) // Kredit tam ödənilib?
+  
   isRefunded      Boolean  @default(false)
   refundedAt      DateTime?
   note            String?
@@ -120,6 +112,8 @@ model Sale {
   items           SaleItem[]
   returns         SaleReturn[]
   receipt         Receipt?
+  creditPayments  CreditPayment[] // Kredit ödənişləri
+  notifications   Notification[] // Bildirişlər
 }
 
 model SaleItem {
@@ -286,6 +280,56 @@ model StockMovement {
   updatedAt   DateTime @updatedAt
 }
 
+// Kredit müddətləri və faizlər
+model CreditTerm {
+  id              String   @id @default(uuid())
+  months          Int      @unique // Müddət (ay) - 2, 3, 6, 9, 12
+  interestRate    Decimal  @db.Decimal(5,2) // Faiz (məsələn 4.3, 5.3, 9.3, 12.3, 15.3)
+  description     String?  // Təsvir (məsələn "2 ay üçün - 4,3%")
+  isActive        Boolean  @default(true)
+  
+  sales           Sale[]   // Bu müddətə aid satışlar
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// Kredit ödənişləri
+model CreditPayment {
+  id              String   @id @default(uuid())
+  saleId          String
+  sale            Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  
+  amount          Decimal  @db.Decimal(10,2) // Ödənilən məbləğ
+  paymentDate     DateTime @default(now()) // Ödəniş tarixi
+  paymentType     String?  // "cash" (nagd) və ya "card" (kart)
+  note            String?  // Qeyd
+  
+  staffId         String?  // Kim qəbul etdi
+  staff           Staff?   @relation(fields: [staffId], references: [id])
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// Bildirişlər (Notifications)
+model Notification {
+  id              String   @id @default(uuid())
+  type            String   // "credit_payment_due", "credit_payment_overdue" və s.
+  title           String   // Başlıq
+  message         String   // Mesaj
+  saleId          String?  // Hansı satışa aid
+  sale            Sale?    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  
+  isRead          Boolean  @default(false) // Oxunub?
+  readAt          DateTime? // Oxunma tarixi
+  
+  dueDate         DateTime? // Ödəniş tarixi (bildiriş üçün)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
 model Staff {
   id          String   @id @default(uuid())
   name        String
@@ -302,6 +346,7 @@ model Staff {
   cashHandoversReceived CashHandover[] @relation("HandedOverTo")
   cashHandoversGiven    CashHandover[] @relation("HandedOverBy")
   stockMovements         StockMovement[]
+  creditPayments         CreditPayment[] // Kredit ödənişləri
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useLocation } from 'react-router-dom';
 import TableTemplate from '../ui/TableTamplate';
 import Alert from '../ui/Alert';
-import { Edit, Trash2, Eye, Plus } from 'lucide-react';
+import { Edit, Trash2, Eye, Plus, CreditCard } from 'lucide-react';
 import { getSaleColumns } from '../../data/table-columns/SaleColumns';
 import { saleApi, receiptApi } from '../../api';
 
@@ -13,7 +13,9 @@ export default function Sales() {
     const navigate = useNavigate();
     const location = useLocation();
     const [saleData, setSaleData] = useState([]);
+    const [filteredData, setFilteredData] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [paymentFilter, setPaymentFilter] = useState('all'); // 'all', 'cash', 'card', 'credit'
 
     const columns = useMemo(() => getSaleColumns(t, i18n.language), [t, i18n.language]);
 
@@ -24,8 +26,10 @@ export default function Sales() {
                 const response = await saleApi.getAll();
                 if (response.success && response.date) {
                     setSaleData(response.date);
+                    setFilteredData(response.date);
                 } else {
                     setSaleData([]);
+                    setFilteredData([]);
                 }
             } catch (error) {
                 console.error('Error fetching sales:', error);
@@ -129,6 +133,17 @@ export default function Sales() {
         navigate(addSalePath);
     };
 
+    // Filter sales by payment type
+    useEffect(() => {
+        if (paymentFilter === 'all') {
+            setFilteredData(saleData);
+        } else if (paymentFilter === 'credit') {
+            setFilteredData(saleData.filter(sale => sale.isCredit === true));
+        } else {
+            setFilteredData(saleData.filter(sale => sale.paymentType === paymentFilter && !sale.isCredit));
+        }
+    }, [paymentFilter, saleData]);
+
     return (
         <div className="p-6">
             <div className="mb-6 flex justify-between items-center">
@@ -144,8 +159,52 @@ export default function Sales() {
                     {t('add_sale') || 'Yeni Satış Əlavə Et'}
                 </button>
             </div>
+            {/* Payment Type Filter */}
+            <div className="mb-4 flex gap-2 flex-wrap">
+                <button
+                    onClick={() => setPaymentFilter('all')}
+                    className={`px-4 py-2 rounded-lg transition-colors ${
+                        paymentFilter === 'all'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                >
+                    {t('all') || 'Hamısı'}
+                </button>
+                <button
+                    onClick={() => setPaymentFilter('cash')}
+                    className={`px-4 py-2 rounded-lg transition-colors ${
+                        paymentFilter === 'cash'
+                            ? 'bg-green-600 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                >
+                    {t('cash') || 'Nağd'}
+                </button>
+                <button
+                    onClick={() => setPaymentFilter('card')}
+                    className={`px-4 py-2 rounded-lg transition-colors ${
+                        paymentFilter === 'card'
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                >
+                    {t('card') || 'Kart'}
+                </button>
+                <button
+                    onClick={() => setPaymentFilter('credit')}
+                    className={`px-4 py-2 rounded-lg transition-colors ${
+                        paymentFilter === 'credit'
+                            ? 'bg-purple-600 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                >
+                    {t('credit') || 'Kredit'}
+                </button>
+            </div>
+
             <TableTemplate
-                data={saleData}
+                data={filteredData}
                 columns={columns}
                 title={t('sales') || 'Satışlar'}
                 searchFields={['customerName', 'customerSurname', 'customerPhone']}

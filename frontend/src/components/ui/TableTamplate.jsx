@@ -46,12 +46,15 @@ export default function TableTamplate({
   onLimitChange = null,
   // Server-side filter and search callbacks
   onSearchChange = null,
+  onSearchSubmit = null,
   searchValue = '',
+  searchQuery = null, // Actual search query that was submitted
   onDateRangeChange = null,
   dateRangeValue = { start: '', end: '' },
   onDatePresetChange = null,
   datePresetValue = 'today',
   onClearFilters = null,
+  onFilterChange = null,
   searchPlaceholder = ''
 }) {
   const { t } = useTranslation('admin-panel');
@@ -89,17 +92,23 @@ export default function TableTamplate({
   useEffect(() => {
     if (serverSidePagination) {
       if (dateRangeValue && (dateRangeValue.start || dateRangeValue.end)) {
-        setDateRange(dateRangeValue);
+        // Only update if values actually changed to avoid unnecessary renders
+        setDateRange(prev => {
+          if (prev.start !== dateRangeValue.start || prev.end !== dateRangeValue.end) {
+            return dateRangeValue;
+          }
+          return prev;
+        });
       }
       if (datePresetValue) {
-        setDatePreset(datePresetValue);
+        setDatePreset(prev => prev !== datePresetValue ? datePresetValue : prev);
       }
     }
   }, [serverSidePagination, dateRangeValue, datePresetValue]);
 
   const filteredData = useMemo(() => {
-    // If server-side pagination, skip client-side filtering
-    if (serverSidePagination) {
+    // If server-side pagination or server-side filtering, skip client-side filtering
+    if (serverSidePagination || onFilterChange) {
       return data;
     }
 
@@ -178,7 +187,7 @@ export default function TableTamplate({
     }
 
     return filtered;
-  }, [data, searchTerm, filters, dateRange, searchFields, serverSidePagination]);
+  }, [data, searchTerm, filters, dateRange, searchFields, serverSidePagination, onFilterChange]);
 
   const sortedData = useMemo(() => {
     // If server-side pagination, skip client-side sorting (server handles it)
@@ -272,23 +281,8 @@ export default function TableTamplate({
     );
   }
 
-  // Check if there are active filters/search
-  const hasActiveFilters = (serverSidePagination && searchValue) ||
-    (!serverSidePagination && searchTerm) ||
-    (dateRange.start && dateRange.end && datePreset !== 'all') ||
-    Object.keys(filters).some(key => filters[key]);
-
-  // Show simple empty state only when there's no data at all and no active filters
-  if (!loading && data.length === 0 && !hasActiveFilters) {
-    return (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-visible">
-        <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-          <h2 className="text-xl font-semibold text-gray-900">{title}</h2>
-        </div>
-        <EmptyState {...emptyState} />
-      </div>
-    );
-  }
+  // Always show search and filters, even when there's no data
+  // Empty state will be shown below the search/filter section
 
   const handleSort = (key) => {
     setSortConfig(prev => ({
@@ -303,6 +297,35 @@ export default function TableTamplate({
         ? prev.filter(rowId => rowId !== id)
         : [...prev, id]
     );
+  };
+
+  const handleRowClick = (item, e) => {
+    // Əgər checkbox-a klik edilibsə, yalnız seçim et
+    if (e.target.type === 'checkbox' || e.target.closest('input[type="checkbox"]')) {
+      return;
+    }
+    
+    // Əgər action button-lara klik edilibsə, heç nə etmə
+    if (e.target.closest('button') || e.target.closest('svg') || e.target.closest('.action-buttons')) {
+      return;
+    }
+    
+    // Əvvəlcə edit yoxla
+    if (onEdit) {
+      onEdit(item);
+      return;
+    }
+    
+    // Sonra view yoxla
+    if (onView) {
+      onView(item);
+      return;
+    }
+    
+    // Əgər heç biri yoxdursa və bulk actions aktivdirsə, seçim et
+    if (showBulkActions) {
+      handleSelectRow(item.id);
+    }
   };
 
   const handleSelectAll = () => {
@@ -406,12 +429,16 @@ export default function TableTamplate({
 
   // Clear filters
   const clearFilters = () => {
-    if (serverSidePagination && onClearFilters) {
+    if ((serverSidePagination || onFilterChange) && onClearFilters) {
       onClearFilters();
-    } else {
-      setSearchTerm('');
-      setFilters({});
-      setDateRange({ start: '', end: '' });
+    }
+    // Always clear local state
+    setSearchTerm('');
+    setFilters({});
+    setDateRange({ start: '', end: '' });
+    // If onFilterChange is provided, notify parent of empty filters
+    if (onFilterChange) {
+      onFilterChange({});
     }
   };
 
@@ -425,24 +452,76 @@ export default function TableTamplate({
           {/* Search and Filters - Right side */}
           <div className="flex flex-col lg:flex-row gap-3 items-start lg:items-center">
             {/* Search Input */}
-            {showSearch && (
-              <div className="relative w-full lg:w-auto lg:min-w-[280px]">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <input
-                  type="text"
-                  placeholder={serverSidePagination && searchPlaceholder ? searchPlaceholder : "Axtar..."}
-                  value={serverSidePagination && searchValue !== undefined ? searchValue : searchTerm}
-                  onChange={(e) => {
-                    if (serverSidePagination && onSearchChange) {
-                      onSearchChange(e.target.value);
-                    } else {
-                      setSearchTerm(e.target.value);
-                    }
-                  }}
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg bg-white  transition-colors"
-                />
-              </div>
-            )}
+            {showSearch && (() => {
+              const currentSearchValue = onSearchChange && searchValue !== undefined && searchValue !== null ? searchValue : (searchTerm || '');
+              const hasValue = currentSearchValue.trim().length > 0;
+              
+              const handleClear = () => {
+                if (onSearchChange) {
+                  onSearchChange('');
+                  // If search submit handler exists, also clear the search query
+                  // Call onSearchSubmit with empty string directly to trigger API call with no search
+                  if (onSearchSubmit) {
+                    // Call onSearchSubmit with empty string to immediately clear search
+                    onSearchSubmit('');
+                  }
+                } else {
+                  setSearchTerm('');
+                }
+              };
+              
+              return (
+                <div className="flex gap-2 w-full lg:w-auto lg:min-w-[280px]">
+                  <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" />
+                    <input
+                      type="text"
+                      placeholder={searchPlaceholder || "Axtar..."}
+                      value={currentSearchValue}
+                      onChange={(e) => {
+                        const newValue = e.target.value;
+                        if (onSearchChange) {
+                          onSearchChange(newValue);
+                        } else {
+                          setSearchTerm(newValue);
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && onSearchSubmit) {
+                          onSearchSubmit();
+                        }
+                      }}
+                      className={`w-full ${hasValue ? 'pl-10 pr-10' : 'pl-10 pr-4'} py-2.5 border border-gray-300 rounded-lg bg-white transition-colors`}
+                    />
+                    {hasValue && (
+                      <button
+                        onClick={handleClear}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                        type="button"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+            {showSearch && onSearchSubmit && (() => {
+              const currentSearchValue = onSearchChange && searchValue !== undefined && searchValue !== null ? searchValue : (searchTerm || '');
+              return (
+                <button
+                  onClick={onSearchSubmit}
+                  disabled={!currentSearchValue.trim()}
+                  className={`px-4 py-2.5 rounded-lg font-medium transition-colors whitespace-nowrap ${
+                    currentSearchValue.trim()
+                      ? 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'
+                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  }`}
+                >
+                  Axtar
+                </button>
+              );
+            })()}
 
             {/* Date Filter - Server-side pagination */}
             {serverSidePagination && showDateFilter && (
@@ -492,24 +571,33 @@ export default function TableTamplate({
             )}
 
             {/* Clear Filters Button - Left side, after filters - Always visible, disabled when no filters */}
-            <button
-              onClick={clearFilters}
-              disabled={
-                !((serverSidePagination && ((dateRange.start && dateRange.start !== getTodayDate()) ||
-                  (dateRange.end && dateRange.end !== getTodayDate()) || searchValue)) ||
-                  (!serverSidePagination && (searchTerm || (dateRange.start && dateRange.end) ||
-                    Object.keys(filters).some(key => filters[key]))))
-              }
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors whitespace-nowrap ${((serverSidePagination && ((dateRange.start && dateRange.start !== getTodayDate()) ||
-                (dateRange.end && dateRange.end !== getTodayDate()) || searchValue)) ||
-                (!serverSidePagination && (searchTerm || (dateRange.start && dateRange.end) ||
-                  Object.keys(filters).some(key => filters[key]))))
-                ? 'text-gray-700 bg-gray-100 hover:bg-gray-200 cursor-pointer'
-                : 'text-gray-400 bg-gray-50 cursor-not-allowed opacity-60'
-                }`}
-            >
-              {t('clear_all') || 'Təmizlə'}
-            </button>
+            {(() => {
+              // Check if there are any active filters or search
+              // If searchQuery is provided and not empty, it means search was submitted (even if no results)
+              const hasSearchQuery = searchQuery !== null && searchQuery !== undefined && 
+                                     typeof searchQuery === 'string' && searchQuery.trim().length > 0;
+              const hasSearchValue = (onSearchChange && searchValue !== undefined && searchValue !== null && 
+                                     typeof searchValue === 'string' && searchValue.trim()) || 
+                                    (!onSearchChange && searchTerm && typeof searchTerm === 'string' && searchTerm.trim());
+              const hasDateFilter = dateRange.start && dateRange.end && datePreset !== 'all';
+              const hasFilters = Object.keys(filters).some(key => filters[key]);
+              // Button should be active if there's a search query (even if no results) OR search value OR filters
+              const hasActiveFilters = hasSearchQuery || hasSearchValue || hasDateFilter || hasFilters;
+              
+              return (
+                <button
+                  onClick={clearFilters}
+                  disabled={!hasActiveFilters}
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors whitespace-nowrap ${
+                    hasActiveFilters
+                      ? 'text-gray-700 bg-gray-100 hover:bg-gray-200 cursor-pointer'
+                      : 'text-gray-400 bg-gray-50 cursor-not-allowed opacity-60'
+                  }`}
+                >
+                  {t('clear_all') || 'Təmizlə'}
+                </button>
+              );
+            })()}
 
             {/* Default Filters Dropdown */}
             {!serverSidePagination && showFilters && (
@@ -578,7 +666,13 @@ export default function TableTamplate({
                             </label>
                             <select
                               value={filters[key] || ''}
-                              onChange={(e) => setFilters(prev => ({ ...prev, [key]: e.target.value }))}
+                              onChange={(e) => {
+                                const newFilters = { ...filters, [key]: e.target.value };
+                                setFilters(newFilters);
+                                if (onFilterChange) {
+                                  onFilterChange(newFilters);
+                                }
+                              }}
                               className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-sm text-gray-900 transition-colors appearance-none cursor-pointer"
                               style={{
                                 minHeight: '42px',
@@ -706,8 +800,8 @@ export default function TableTamplate({
             {paginatedData.map((item) => (
               <tr
                 key={item.id}
-                className={`hover:bg-gray-50 cursor-pointer ${selectedRows.includes(item.id) ? 'bg-blue-50' : ''}`}
-                onClick={() => showBulkActions && handleSelectRow(item.id)}
+                className={`hover:bg-gray-50 ${onEdit || onView || showBulkActions ? 'cursor-pointer' : ''} ${selectedRows.includes(item.id) ? 'bg-blue-50' : ''}`}
+                onClick={(e) => handleRowClick(item, e)}
               >
                 {showBulkActions && (
                   <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
@@ -739,7 +833,7 @@ export default function TableTamplate({
                   </td>
                 ))}
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium" onClick={(e) => e.stopPropagation()}>
-                  <div className="flex items-center justify-end gap-2">
+                  <div className="flex items-center justify-end gap-2 action-buttons">
                     {/* Check if item is Superadmin or Core Role - hide all actions */}
                     {(() => {
                       const roleName = item.role?.name || item.role || '';
@@ -789,7 +883,7 @@ export default function TableTamplate({
               </tr>
             ))}
             {/* No results found row - Show when filtered/search has no results */}
-            {paginatedData.length === 0 && hasActiveFilters && (
+            {paginatedData.length === 0 && (
               <tr>
                 <td
                   colSpan={columns.length + (showBulkActions ? 2 : 1)}

@@ -13,5 +13,8 @@ export { subCategoryApi } from './subCategory.js';
 export { expenseApi } from './expense.js';
 export { cashHandoverApi } from './cashHandover.js';
 export { stockApi } from './stock.js';
+export { creditTermApi } from './creditTerm.js';
+export { creditPaymentApi } from './creditPayment.js';
+export { notificationApi } from './notification.js';
 export { default as api } from './axios.js';
 

@@ -45,6 +45,10 @@
   "total_expenses": "Ümumi Xərclər",
   "net_profit": "Xalis Qazanc",
   "reset_to_today": "Bu günə qayıt",
-  "cash_handover": "Məbləğ Təslimi"
+  "cash_handover": "Məbləğ Təslimi",
+  "credits": "Kreditlər",
+  "paid_amount": "Ödənilən məbləğ",
+  "remaining_amount": "Qalan məbləğ",
+  "total_amount": "Ümumi məbləğ"
 }
 

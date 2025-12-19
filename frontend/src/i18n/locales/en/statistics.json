@@ -45,6 +45,10 @@
   "total_expenses": "Total Expenses",
   "net_profit": "Net Profit",
   "reset_to_today": "Reset to Today",
-  "cash_handover": "Cash Handover"
+  "cash_handover": "Cash Handover",
+  "credits": "Credits",
+  "paid_amount": "Paid Amount",
+  "remaining_amount": "Remaining Amount",
+  "total_amount": "Total Amount"
 }
 

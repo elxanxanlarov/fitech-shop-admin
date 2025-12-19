@@ -266,3 +266,5 @@ export const deleteStockMovement = async (req, res) => {
     }
 };
 
+
+

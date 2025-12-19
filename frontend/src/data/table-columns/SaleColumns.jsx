@@ -94,18 +94,35 @@ export const getSaleColumns = (t, language = 'az') => [
         render: (value, item) => {
             const paymentType = value || item.paymentType || 'cash';
             const isCash = paymentType === 'cash';
+            const isCredit = item.isCredit || false;
             return (
                 <div className="flex items-center space-x-2">
-                    {isCash ? (
-                        <Wallet className="w-4 h-4 text-green-600" />
+                    {isCredit ? (
+                        <>
+                            <CreditCard className="w-4 h-4 text-purple-600" />
+                            <span className="text-sm font-semibold text-purple-600">
+                                {t('credit') || 'Kredit'}
+                            </span>
+                            {!item.isCreditPaid && (
+                                <span className="text-xs text-red-600 ml-1">
+                                    ({parseFloat(item.creditRemainingAmount || 0).toFixed(2)} ₼ {t('remaining') || 'qalan'})
+                                </span>
+                            )}
+                        </>
                     ) : (
-                        <CreditCard className="w-4 h-4 text-blue-600" />
+                        <>
+                            {isCash ? (
+                                <Wallet className="w-4 h-4 text-green-600" />
+                            ) : (
+                                <CreditCard className="w-4 h-4 text-blue-600" />
+                            )}
+                            <span className={`text-sm font-semibold ${
+                                isCash ? 'text-green-600' : 'text-blue-600'
+                            }`}>
+                                {isCash ? (t('cash') || 'Nağd') : (t('card') || 'Kart')}
+                            </span>
+                        </>
                     )}
-                    <span className={`text-sm font-semibold ${
-                        isCash ? 'text-green-600' : 'text-blue-600'
-                    }`}>
-                        {isCash ? (t('cash') || 'Nağd') : (t('card') || 'Kart')}
-                    </span>
                 </div>
             );
         }

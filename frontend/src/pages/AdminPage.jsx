@@ -20,6 +20,8 @@ import ExpenseForm from "../components/forms/ExpenseForm.jsx"
 import CashHandover from "../components/panel/CashHandover.jsx"
 import CashHandoverForm from "../components/forms/CashHandoverForm.jsx"
 import Profile from "../components/panel/Profile.jsx"
+import CreditPayments from "../components/panel/CreditPayments.jsx"
+import CreditTermManagement from "../components/panel/CreditTermManagement.jsx"
 
 
 export default function AdminPanel() {
@@ -48,8 +50,10 @@ export default function AdminPanel() {
             {slug === "settings" && <Settings />}
             {slug === "roles-management" && <RolesManagement />}
             {slug === "category-management" && <CategoryManagement />}
+            {slug === "credit-term-management" && <CreditTermManagement />}
             {slug === "expenses" && <Expenses />}
             {slug === "cash-handover" && <CashHandover />}
+            {slug === "credit-payments" && <CreditPayments />}
             {slug === "profile" && <Profile />}
         </div>
     )

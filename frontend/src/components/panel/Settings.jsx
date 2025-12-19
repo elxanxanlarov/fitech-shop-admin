@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { MdSettings, MdArrowRight, MdSecurity, MdFolder } from 'react-icons/md';
+import { MdSettings, MdArrowRight, MdSecurity, MdFolder, MdCreditCard } from 'react-icons/md';
 
 export default function Settings() {
     const navigate = useNavigate();
@@ -24,6 +24,15 @@ export default function Settings() {
             bgColor: 'bg-green-100',
             iconColor: 'text-green-600',
             navigatePath: '/admin/category-management'
+        },
+        {
+            id: 'credit-term-management',
+            title: t('credit_term_management') || 'Kredit Müddətləri İdarəetməsi',
+            description: t('credit_term_management_desc') || 'Kredit müddətlərini və faizləri idarə edin',
+            icon: <MdCreditCard className="w-6 h-6" />,
+            bgColor: 'bg-purple-100',
+            iconColor: 'text-purple-600',
+            navigatePath: '/admin/credit-term-management'
         }
     ];
 

@@ -5,6 +5,8 @@
   "roles_management_desc": "Manage user roles and permissions",
   "category_management": "Category Management",
   "category_management_desc": "Manage product categories",
+  "credit_term_management": "Credit Terms Management",
+  "credit_term_management_desc": "Manage credit terms and interest rates",
   "no_settings": "No settings available",
   "no_settings_desc": "No settings have been added yet."
 }

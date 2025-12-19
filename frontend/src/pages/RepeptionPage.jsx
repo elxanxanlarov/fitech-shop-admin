@@ -7,6 +7,7 @@ import { useParams } from "react-router-dom"
 import SaleForm from "../components/forms/SaleForm"
 import ExpenseForm from "../components/forms/ExpenseForm"
 import CashHandoverForm from "../components/forms/CashHandoverForm"
+import CreditPayments from "../components/panel/CreditPayments"
 export default function RepeptionPage() {
     const { slug } = useParams()
     return (
@@ -18,7 +19,8 @@ export default function RepeptionPage() {
 
             {slug === "sales" && <Sales />}
             {slug === "expenses" && <Expenses />}
-            {slug === "cash-handover" && <CashHandover />}  
+            {slug === "cash-handover" && <CashHandover />}
+            {slug === "credit-payments" && <CreditPayments />}
             {slug === "statistics" && <Statistics />}
             {slug === "profile" && <Profile />}
         </div>

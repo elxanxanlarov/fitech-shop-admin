@@ -60,7 +60,16 @@ export const getSaleById = async (req, res) => {
 
 export const createSale = async (req, res) => {
     try {
-        const { customerName, customerSurname, customerPhone, items, note, paymentType } = req.body;
+        const { 
+            customerName, 
+            customerSurname, 
+            customerPhone, 
+            items, 
+            note, 
+            paymentType,
+            isCredit,
+            creditTermId
+        } = req.body;
 
         if (!items || !Array.isArray(items) || items.length === 0) {
             return res.status(400).json({ success: false, message: "Ən azı bir məhsul seçilməlidir" });
@@ -129,6 +138,53 @@ export const createSale = async (req, res) => {
             });
         }
 
+        // Kredit məntiqini hesabla
+        let creditData = {};
+        if (isCredit && creditTermId) {
+            const creditTerm = await prisma.creditTerm.findUnique({
+                where: { id: creditTermId }
+            });
+
+            if (!creditTerm) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Kredit müddəti tapılmadı"
+                });
+            }
+
+            if (!creditTerm.isActive) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Bu kredit müddəti aktiv deyil"
+                });
+            }
+
+            // Faizlə birlikdə ümumi məbləğ
+            const interestRate = creditTerm.interestRate.div(100); // 4.3% -> 0.043
+            const creditTotalAmount = totalAmount.mul(new Prisma.Decimal(1).add(interestRate));
+            
+            // Aylıq ödəniş (faizsiz bölünür)
+            const monthlyPayment = totalAmount.div(creditTerm.months);
+            
+            // Kredit başlama və bitmə tarixləri
+            const creditStartDate = new Date();
+            const creditEndDate = new Date(creditStartDate);
+            creditEndDate.setMonth(creditStartDate.getMonth() + creditTerm.months);
+
+            creditData = {
+                isCredit: true,
+                creditTermId: creditTermId,
+                creditInterestPercent: creditTerm.interestRate,
+                creditTotalAmount: creditTotalAmount,
+                creditRemainingAmount: creditTotalAmount, // İlkin olaraq tam məbləğ qalır
+                creditMonthlyPayment: monthlyPayment,
+                creditStartDate: creditStartDate,
+                creditEndDate: creditEndDate,
+                isCreditPaid: false,
+                paidAmount: new Prisma.Decimal(0) // Kreditdə ilkin ödəniş 0
+            };
+        }
+
         // Satış yarat
         const sale = await prisma.sale.create({
             data: {
@@ -136,10 +192,11 @@ export const createSale = async (req, res) => {
                 customerSurname: customerSurname?.trim() || null,
                 customerPhone: customerPhone?.trim() || null,
                 totalAmount,
-                paidAmount: totalAmount, // İlkin olaraq tam ödəniş
+                paidAmount: isCredit ? new Prisma.Decimal(0) : totalAmount, // Kreditdə 0, normalda tam
                 profitAmount: totalProfit,
                 paymentType: paymentType || 'cash', // "cash" (nagd) və ya "card" (kart)
                 note: note?.trim() || null,
+                ...creditData,
                 items: {
                     create: saleItems
                 }
@@ -171,6 +228,42 @@ export const createSale = async (req, res) => {
         } catch (receiptError) {
             console.error("Qəbz yaradılarkən xəta:", receiptError);
             // Qəbz xətası əsas əməliyyatı dayandırmamalıdır
+        }
+
+        // Əgər kredit satışıdırsa və ilk ödəniş məbləği varsa, ilk ödənişi yarat
+        if (isCredit && creditTermId && req.body.initialPaymentAmount && parseFloat(req.body.initialPaymentAmount) > 0) {
+            try {
+                const initialPaymentAmount = new Prisma.Decimal(req.body.initialPaymentAmount);
+                const initialPaymentType = req.body.initialPaymentType || 'cash';
+                
+                // İlk ödənişi yarat
+                await prisma.creditPayment.create({
+                    data: {
+                        saleId: sale.id,
+                        amount: initialPaymentAmount,
+                        paymentType: initialPaymentType,
+                        paymentDate: new Date(),
+                        note: 'Bu ayın ödənişi',
+                        staffId: req.staffId || null
+                    }
+                });
+                
+                // Satışın paidAmount və creditRemainingAmount-u yenilə
+                const newRemainingAmount = creditData.creditTotalAmount.sub(initialPaymentAmount);
+                const isFullyPaid = newRemainingAmount.lte(0);
+                
+                await prisma.sale.update({
+                    where: { id: sale.id },
+                    data: {
+                        paidAmount: initialPaymentAmount,
+                        creditRemainingAmount: isFullyPaid ? new Prisma.Decimal(0) : newRemainingAmount,
+                        isCreditPaid: isFullyPaid
+                    }
+                });
+            } catch (paymentError) {
+                console.error("İlk ödəniş yaradılarkən xəta:", paymentError);
+                // Ödəniş xətası əsas əməliyyatı dayandırmamalıdır
+            }
         }
 
         // Activity log yarat

@@ -128,6 +128,8 @@
   "file_too_large": "Fayl ölçüsü 10MB-dan böyük ola bilməz",
   "no_file_selected": "Zəhmət olmasa fayl seçin",
   "is_active": "Aktiv",
-  "subcategory": "Alt Kateqoriya"
+  "subcategory": "Alt Kateqoriya",
+  "select_category": "Kateqoriya seçin",
+  "select_subcategory": "Alt kateqoriya seçin"
 }
 

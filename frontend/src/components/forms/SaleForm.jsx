@@ -4,9 +4,10 @@ import { useTranslation } from 'react-i18next';
 import Input from '../ui/Input';
 import Alert from '../ui/Alert';
 import SearchDropdown from '../ui/SearchDropdown';
-import { MdPerson, MdShoppingCart, MdAdd, MdDelete, MdAttachMoney, MdNote, MdUndo, MdCreditCard, MdMoney } from 'react-icons/md';
-import { saleApi, productApi, returnApi } from '../../api';
+import { MdPerson, MdShoppingCart, MdAdd, MdDelete, MdAttachMoney, MdNote, MdUndo, MdCreditCard, MdMoney, MdCheckCircle } from 'react-icons/md';
+import { saleApi, productApi, returnApi, creditTermApi, creditPaymentApi } from '../../api';
 import { validateNumberInput } from '../../utils/validation';
+import { getFullMonthYear } from '../../data/months';
 
 export default function SaleForm() {
     const navigate = useNavigate();
@@ -26,7 +27,10 @@ export default function SaleForm() {
         customerPhone: '',
         paymentType: 'cash', // Default: nagd
         paidAmount: '', // Ödənilən məbləğ
-        note: ''
+        note: '',
+        isCredit: false, // Kredit satışı?
+        creditTermId: '', // Kredit müddəti
+        initialPaymentAmount: '' // Kredit üçün ilk ödəniş məbləği
     });
 
     const [selectedProducts, setSelectedProducts] = useState([
@@ -47,6 +51,15 @@ export default function SaleForm() {
     const [isLoading, setIsLoading] = useState(false);
     const [isReturnLoading, setIsReturnLoading] = useState(false);
     const [loadingProducts, setLoadingProducts] = useState(true);
+    const [creditTerms, setCreditTerms] = useState([]);
+    const [creditPayments, setCreditPayments] = useState([]);
+    const [saleData, setSaleData] = useState(null); // Edit modunda sale məlumatları
+    const [paymentData, setPaymentData] = useState({
+        amount: '',
+        paymentType: 'cash',
+        note: ''
+    });
+    const [paymentLoading, setPaymentLoading] = useState(false);
 
     // Fetch products
     useEffect(() => {
@@ -69,6 +82,21 @@ export default function SaleForm() {
         fetchProducts();
     }, [t]);
 
+    // Fetch credit terms
+    useEffect(() => {
+        const fetchCreditTerms = async () => {
+            try {
+                const response = await creditTermApi.getAll();
+                if (response.success && response.date) {
+                    setCreditTerms(response.date);
+                }
+            } catch (error) {
+                console.error('Error fetching credit terms:', error);
+            }
+        };
+        fetchCreditTerms();
+    }, []);
+
     // Fetch sale data (if edit mode)
     useEffect(() => {
         const fetchSale = async () => {
@@ -84,8 +112,28 @@ export default function SaleForm() {
                             customerPhone: sale.customerPhone || '',
                             paymentType: sale.paymentType || 'cash',
                             paidAmount: sale.paidAmount ? parseFloat(sale.paidAmount).toFixed(2) : '',
-                            note: sale.note || ''
+                            note: sale.note || '',
+                            isCredit: sale.isCredit || false,
+                            creditTermId: sale.creditTermId || ''
                         });
+                        
+                        // Kredit ödənişləri yüklə
+                        if (sale.isCredit && sale.id) {
+                            try {
+                                const paymentsResponse = await creditPaymentApi.getBySaleId(sale.id);
+                                if (paymentsResponse.success && paymentsResponse.date) {
+                                    setCreditPayments(paymentsResponse.date);
+                                }
+                            } catch (error) {
+                                console.error('Error fetching credit payments:', error);
+                            }
+                        }
+                        
+                        // Sale məlumatlarını saxla (kredit məlumatları üçün)
+                        if (sale.isCredit) {
+                            // Sale məlumatlarını state-də saxla
+                            setSaleData(sale);
+                        }
                         // Sale items-ı selectedProducts-a çevir
                         if (sale.items && sale.items.length > 0) {
                             setSelectedProducts(sale.items.map(item => ({
@@ -173,7 +221,14 @@ export default function SaleForm() {
                 // Həmişə məhsulun salePrice-ını default olaraq təyin et
                 const defaultSalePrice = parseFloat(product.salePrice);
                 newProducts[index].salePrice = defaultSalePrice.toFixed(2);
-                newProducts[index].discountAmount = ''; // Endirim məbləğini sıfırla
+                // Endirim varsa, endirim məbləğini default olaraq yaz
+                if (product.hasDiscount && product.discountPrice) {
+                    const discountPrice = parseFloat(product.discountPrice);
+                    const discountAmount = defaultSalePrice - discountPrice;
+                    newProducts[index].discountAmount = discountAmount.toFixed(2);
+                } else {
+                    newProducts[index].discountAmount = '';
+                }
             }
         } else {
             newProducts[index].salePrice = '';
@@ -193,24 +248,11 @@ export default function SaleForm() {
     };
 
     const handleQuantityChange = (index, quantity) => {
-        // Real-time validation for quantity
-        const validation = validateNumberInput('quantity', quantity, ['quantity'], t);
-        if (!validation.isValid) {
-            setErrors(prev => ({
-                ...prev,
-                [`quantity_${index}`]: validation.error
-            }));
-            return; // Don't update value if validation fails
-        }
-        
-        // Boş ola bilər (tam silmək), amma 0 ola bilməz
+        // Yalnız rəqəm və boş buraxıla bilər
         if (quantity === '' || quantity === null || quantity === undefined) {
-            // Boş buraxıla bilər (tam silmək)
             const newProducts = [...selectedProducts];
             newProducts[index].quantity = '';
             setSelectedProducts(newProducts);
-            
-            // Clear error
             if (errors[`quantity_${index}`]) {
                 setErrors(prev => {
                     const newErrors = { ...prev };
@@ -221,19 +263,25 @@ export default function SaleForm() {
             return;
         }
         
+        // Yalnız rəqəm yazıla bilər
+        const isValidNumber = /^\d*$/.test(quantity);
+        if (!isValidNumber) {
+            return; // Yalnız rəqəm yazıla bilər
+        }
+        
         const qtyNum = parseInt(quantity) || 0;
         
         // 0 ola bilməz
-        if (qtyNum === 0) {
+        if (qtyNum === 0 && quantity !== '') {
             setErrors(prev => ({
                 ...prev,
                 [`quantity_${index}`]: t('quantity_cannot_be_zero') || 'Miqdar 0 ola bilməz'
             }));
-            return; // Don't update value if it's 0
+            return;
         }
         
         const newProducts = [...selectedProducts];
-        newProducts[index].quantity = qtyNum;
+        newProducts[index].quantity = quantity; // Formatlanmamış dəyəri saxla
         setSelectedProducts(newProducts);
 
         // Error-u sil
@@ -247,31 +295,32 @@ export default function SaleForm() {
     };
 
     const handleSalePriceChange = (index, salePrice) => {
-        const validation = validateNumberInput('price', salePrice, ['price'], t);
-        if (!validation.isValid) {
+        // Yalnız rəqəm və onluq nöqtə yazıla bilər
+        if (salePrice === '' || salePrice === null || salePrice === undefined) {
+            const newProducts = [...selectedProducts];
+            newProducts[index].salePrice = '';
+            setSelectedProducts(newProducts);
+            return;
+        }
+        
+        // Yalnız rəqəm və onluq nöqtə yazıla bilər
+        const isValidNumber = /^\d*\.?\d*$/.test(salePrice);
+        if (!isValidNumber) {
+            return; // Yalnız rəqəm və onluq nöqtə yazıla bilər
+        }
+        
+        const newProducts = [...selectedProducts];
+        const priceNum = parseFloat(salePrice) || 0;
+        
+        if (priceNum < 0) {
             setErrors(prev => ({
                 ...prev,
-                [`salePrice_${index}`]: validation.error
+                [`salePrice_${index}`]: t('price_cannot_be_negative') || 'Qiymət mənfi ola bilməz'
             }));
             return;
         }
         
-        const newProducts = [...selectedProducts];
-        
-        if (salePrice === '' || salePrice === null || salePrice === undefined) {
-            newProducts[index].salePrice = '';
-        } else {
-            const priceNum = parseFloat(salePrice) || 0;
-            if (priceNum < 0) {
-                setErrors(prev => ({
-                    ...prev,
-                    [`salePrice_${index}`]: t('price_cannot_be_negative') || 'Qiymət mənfi ola bilməz'
-                }));
-                return;
-            }
-            newProducts[index].salePrice = priceNum.toFixed(2);
-        }
-        
+        newProducts[index].salePrice = salePrice; // Formatlanmamış dəyəri saxla
         setSelectedProducts(newProducts);
 
         if (errors[`salePrice_${index}`]) {
@@ -409,7 +458,13 @@ export default function SaleForm() {
     useEffect(() => {
         if (!isEditMode) {
             const total = calculateTotal();
-            if (total > 0) {
+            if (formData.isCredit) {
+                // Kredit satışında paidAmount-u sıfırla
+                setFormData(prev => ({
+                    ...prev,
+                    paidAmount: ''
+                }));
+            } else if (total > 0) {
                 setFormData(prev => ({
                     ...prev,
                     paidAmount: total.toFixed(2)
@@ -421,7 +476,28 @@ export default function SaleForm() {
                 }));
             }
         }
-    }, [selectedProducts, isEditMode]);
+    }, [selectedProducts, isEditMode, formData.isCredit]);
+    
+    // Kredit müddəti seçildikdə ilk ödəniş məbləğini hesabla və default olaraq doldur
+    useEffect(() => {
+        if (!isEditMode && formData.isCredit && formData.creditTermId) {
+            const selectedTerm = creditTerms.find(t => t.id === formData.creditTermId);
+            const total = calculateTotal();
+            if (selectedTerm && total > 0) {
+                const monthlyPayment = total / selectedTerm.months;
+                // Default olaraq aylıq ödəniş məbləğini doldur (həmişə yenilə)
+                setFormData(prev => ({
+                    ...prev,
+                    initialPaymentAmount: monthlyPayment.toFixed(2)
+                }));
+            }
+        } else if (!formData.isCredit) {
+            setFormData(prev => ({
+                ...prev,
+                initialPaymentAmount: ''
+            }));
+        }
+    }, [formData.isCredit, formData.creditTermId, selectedProducts, creditTerms, isEditMode]);
 
     // Qaytarma funksiyaları
     const getAvailableReturnQuantity = (saleItem) => {
@@ -598,6 +674,17 @@ export default function SaleForm() {
                 // Paid amount və payment type əlavə et
                 payload.paidAmount = formData.paidAmount ? parseFloat(formData.paidAmount) : calculateTotal();
                 payload.paymentType = formData.paymentType;
+                
+                // Kredit məlumatları
+                if (formData.isCredit && formData.creditTermId) {
+                    payload.isCredit = true;
+                    payload.creditTermId = formData.creditTermId;
+                    // İlk ödəniş məbləği varsa göndər
+                    if (formData.initialPaymentAmount && parseFloat(formData.initialPaymentAmount) > 0) {
+                        payload.initialPaymentAmount = parseFloat(formData.initialPaymentAmount);
+                        payload.initialPaymentType = formData.paymentType;
+                    }
+                }
             } else {
                 // Edit modunda paidAmount və paymentType yenilənə bilər
                 if (formData.paidAmount) {
@@ -727,6 +814,131 @@ export default function SaleForm() {
                                 </label>
                             </div>
                         </div>
+
+                        {/* Kredit seçimi */}
+                        {!isEditMode && (
+                            <div className="mt-6">
+                                <label className="flex items-center gap-2 cursor-pointer mb-4">
+                                    <input
+                                        type="checkbox"
+                                        checked={formData.isCredit}
+                                        onChange={(e) => {
+                                            setFormData(prev => ({
+                                                ...prev,
+                                                isCredit: e.target.checked,
+                                                creditTermId: e.target.checked ? prev.creditTermId : ''
+                                            }));
+                                        }}
+                                        className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500 rounded"
+                                        disabled={isLoading}
+                                    />
+                                    <MdCreditCard className="w-5 h-5 text-purple-600" />
+                                    <span className="text-sm font-medium text-gray-700">
+                                        {t('credit_sale') || 'Kredit satışı'}
+                                    </span>
+                                </label>
+
+                                {formData.isCredit && (
+                                    <div className="mt-4 p-4 bg-purple-50 rounded-lg border border-purple-200">
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            {t('credit_term') || 'Kredit müddəti'}
+                                        </label>
+                                        <select
+                                            value={formData.creditTermId}
+                                            onChange={(e) => handleInputChange('creditTermId', e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                            disabled={isLoading}
+                                            required={formData.isCredit}
+                                        >
+                                            <option value="">{t('select_credit_term') || 'Kredit müddəti seçin'}</option>
+                                            {creditTerms.length > 0 ? (
+                                                creditTerms.map(term => (
+                                                    <option key={term.id} value={term.id}>
+                                                        {term.months} {t('months') || 'ay'} - {parseFloat(term.interestRate).toFixed(1)}% ({term.description || ''})
+                                                    </option>
+                                                ))
+                                            ) : (
+                                                <option value="" disabled>{t('loading') || 'Yüklənir...'}</option>
+                                            )}
+                                        </select>
+                                        
+                                        {formData.creditTermId && (() => {
+                                            const selectedTerm = creditTerms.find(t => t.id === formData.creditTermId);
+                                            const total = calculateTotal();
+                                            if (!selectedTerm || total === 0) return null;
+                                            
+                                            const interestRate = parseFloat(selectedTerm.interestRate) / 100;
+                                            const creditTotal = total * (1 + interestRate);
+                                            const monthlyPayment = total / selectedTerm.months;
+                                            
+                                            return (
+                                                <div className="mt-4 space-y-2 text-sm">
+                                                    <div className="flex justify-between">
+                                                        <span className="text-gray-600">{t('base_amount') || 'Əsas məbləğ'}:</span>
+                                                        <span className="font-medium">{total.toFixed(2)} ₼</span>
+                                                    </div>
+                                                    <div className="flex justify-between">
+                                                        <span className="text-gray-600">{t('interest_rate') || 'Faiz'}:</span>
+                                                        <span className="font-medium">{parseFloat(selectedTerm.interestRate).toFixed(1)}%</span>
+                                                    </div>
+                                                    <div className="flex justify-between">
+                                                        <span className="text-gray-600">{t('total_with_interest') || 'Faizlə birlikdə ümumi'}:</span>
+                                                        <span className="font-medium text-purple-600">{creditTotal.toFixed(2)} ₼</span>
+                                                    </div>
+                                                    <div className="flex justify-between">
+                                                        <span className="text-gray-600">{t('monthly_payment') || 'Aylıq ödəniş'}:</span>
+                                                        <span className="font-medium text-green-600">{monthlyPayment.toFixed(2)} ₼</span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
+                                        
+                                        {/* İlk ödəniş inputu */}
+                                        <div className="mt-6 pt-6 border-t-2 border-purple-300 bg-purple-50 rounded-lg p-4">
+                                            <label className="block text-base font-semibold text-gray-900 mb-3">
+                                                <MdAttachMoney className="inline w-5 h-5 mr-2 text-purple-600" />
+                                                {t('initial_payment') || 'Bu ayın ödənişi'}
+                                            </label>
+                                            <div className="flex items-center gap-3">
+                                                <Input
+                                                    type="text"
+                                                    value={formData.initialPaymentAmount}
+                                                    onChange={(e) => {
+                                                        const value = e.target.value;
+                                                        // Yalnız rəqəm və onluq nöqtəyə icazə ver
+                                                        if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                                                            setFormData(prev => ({
+                                                                ...prev,
+                                                                initialPaymentAmount: value
+                                                            }));
+                                                        }
+                                                    }}
+                                                    onKeyPress={(e) => {
+                                                        if (!/[0-9.]/.test(e.key)) {
+                                                            e.preventDefault();
+                                                        }
+                                                    }}
+                                                    placeholder={(() => {
+                                                        const selectedTerm = creditTerms.find(t => t.id === formData.creditTermId);
+                                                        const total = calculateTotal();
+                                                        if (selectedTerm && total > 0) {
+                                                            return (total / selectedTerm.months).toFixed(2);
+                                                        }
+                                                        return '0.00';
+                                                    })()}
+                                                    className="flex-1 text-lg font-semibold py-3 px-4 border-2 border-purple-300 focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
+                                                    disabled={isLoading}
+                                                />
+                                                <span className="text-xl font-bold text-purple-700">₼</span>
+                                            </div>
+                                            <p className="mt-2 text-sm text-gray-600 font-medium">
+                                                {t('initial_payment_hint') || 'Bu ayın ödənişi avtomatik olaraq qeyd olunacaq'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -805,6 +1017,13 @@ export default function SaleForm() {
                                                     type="text"
                                                     value={item.quantity || ''}
                                                     onChange={(e) => handleQuantityChange(index, e.target.value)}
+                                                    onKeyPress={(e) => {
+                                                        // Yalnız rəqəm yazıla bilər
+                                                        const char = String.fromCharCode(e.which);
+                                                        if (!/[0-9]/.test(char)) {
+                                                            e.preventDefault();
+                                                        }
+                                                    }}
                                                     className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                                                         errors[`quantity_${index}`] ? 'border-red-500' : 'border-gray-300'
                                                     } ${isEditMode ? 'bg-gray-100 cursor-not-allowed' : ''}`}
@@ -844,40 +1063,50 @@ export default function SaleForm() {
                                                 )}
                                             </div>
 
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    {t('discount_amount') || 'Endirim Məbləği'} (₼)
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    value={item.discountAmount || ''}
-                                                    onChange={(e) => handleDiscountAmountChange(index, e.target.value)}
-                                                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                                                        errors[`discount_${index}`] ? 'border-red-500' : 'border-gray-300'
-                                                    } ${isEditMode ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                                                    disabled={isLoading || !item.productId || isEditMode}
-                                                    placeholder="0.00"
-                                                />
-                                                {errors[`discount_${index}`] && (
-                                                    <p className="mt-1 text-sm text-red-600">{errors[`discount_${index}`]}</p>
-                                                )}
-                                                {selectedProduct && (() => {
-                                                    const defaultSalePrice = parseFloat(selectedProduct.salePrice);
-                                                    const maxDiscount = selectedProduct.hasDiscount && selectedProduct.discountPrice
-                                                        ? (defaultSalePrice - parseFloat(selectedProduct.discountPrice))
-                                                        : defaultSalePrice;
-                                                    return (
-                                                        <p className="mt-1 text-xs text-gray-500">
-                                                            {t('max_discount') || 'Maksimum endirim'}: {maxDiscount.toFixed(2)} ₼
+                                            {/* Endirim inputu yalnız məhsulun endirimi olduqda görünsün */}
+                                            {selectedProduct && selectedProduct.hasDiscount && selectedProduct.discountPrice && (
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                        {t('discount_amount') || 'Endirim Məbləği'} (₼)
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={item.discountAmount || ''}
+                                                        onChange={(e) => handleDiscountAmountChange(index, e.target.value)}
+                                                        className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                                                            errors[`discount_${index}`] ? 'border-red-500' : 'border-gray-300'
+                                                        } ${isEditMode ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                                        disabled={isLoading || !item.productId || isEditMode}
+                                                        placeholder="0.00"
+                                                        onKeyPress={(e) => {
+                                                            // Yalnız rəqəm və onluq nöqtə yazıla bilər
+                                                            const char = String.fromCharCode(e.which);
+                                                            if (!/[0-9.]/.test(char)) {
+                                                                e.preventDefault();
+                                                            }
+                                                        }}
+                                                    />
+                                                    {errors[`discount_${index}`] && (
+                                                        <p className="mt-1 text-sm text-red-600">{errors[`discount_${index}`]}</p>
+                                                    )}
+                                                    {selectedProduct && (() => {
+                                                        const defaultSalePrice = parseFloat(selectedProduct.salePrice);
+                                                        const maxDiscount = selectedProduct.hasDiscount && selectedProduct.discountPrice
+                                                            ? (defaultSalePrice - parseFloat(selectedProduct.discountPrice))
+                                                            : defaultSalePrice;
+                                                        return (
+                                                            <p className="mt-1 text-xs text-gray-500">
+                                                                {t('max_discount') || 'Maksimum endirim'}: {maxDiscount.toFixed(2)} ₼
+                                                            </p>
+                                                        );
+                                                    })()}
+                                                    {selectedProduct && item.discountAmount && parseFloat(item.discountAmount) > 0 && (
+                                                        <p className="mt-1 text-xs text-green-600">
+                                                            {t('new_price') || 'Yeni qiymət'}: {item.salePrice} ₼
                                                         </p>
-                                                    );
-                                                })()}
-                                                {selectedProduct && item.discountAmount && parseFloat(item.discountAmount) > 0 && (
-                                                    <p className="mt-1 text-xs text-green-600">
-                                                        {t('new_price') || 'Yeni qiymət'}: {item.salePrice} ₼
-                                                    </p>
-                                                )}
-                                            </div>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
 
                                         <div className="flex flex-col items-end gap-2">
@@ -1047,6 +1276,230 @@ export default function SaleForm() {
                                             t('create_return') || 'Qaytarma Yarat'
                                         )}
                                     </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Kredit ödənişləri (Edit modunda) */}
+                        {isEditMode && formData.isCredit && (
+                            <div className="mt-6 pt-6 border-t border-gray-200">
+                                <h4 className="text-md font-semibold text-gray-900 mb-4">
+                                    {t('credit_payments') || 'Kredit Ödənişləri'}
+                                </h4>
+                                
+                                {/* Kredit məlumatları */}
+                                {(() => {
+                                    if (!saleData) return null;
+                                    
+                                    const creditTotalAmount = parseFloat(saleData.creditTotalAmount || saleData.totalAmount || 0);
+                                    const totalPaid = creditPayments.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
+                                    const creditRemainingAmount = Math.max(0, creditTotalAmount - totalPaid);
+                                    const creditMonthlyPayment = parseFloat(saleData.creditMonthlyPayment || 0);
+                                    
+                                    const isFullyPaid = creditRemainingAmount <= 0.01; // 0.01-dən kiçik olsa tam ödənilib sayılır
+                                    
+                                    return (
+                                        <div className="bg-purple-50 rounded-lg border border-purple-200 p-4 mb-4">
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                                                <div>
+                                                    <p className="text-sm text-gray-600">{t('total_amount') || 'Ümumi məbləğ'}</p>
+                                                    <p className="text-lg font-semibold">{creditTotalAmount.toFixed(2)} ₼</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm text-gray-600">{t('paid_amount') || 'Ödənilən'}</p>
+                                                    <p className="text-lg font-semibold text-green-600">{totalPaid.toFixed(2)} ₼</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm text-gray-600">{t('remaining_amount') || 'Qalan'}</p>
+                                                    <p className="text-lg font-semibold text-red-600">{creditRemainingAmount.toFixed(2)} ₼</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm text-gray-600">{t('monthly_payment') || 'Aylıq ödəniş'}</p>
+                                                    <p className="text-lg font-semibold">{creditMonthlyPayment.toFixed(2)} ₼</p>
+                                                </div>
+                                            </div>
+                                            
+                                            {!isFullyPaid && (
+                                                <div className="mt-4 p-4 bg-white rounded-lg border border-purple-200">
+                                                    <h5 className="text-sm font-semibold text-gray-900 mb-3">{t('make_payment') || 'Ödəniş Et'}</h5>
+                                                    <div className="space-y-3">
+                                                        <Input
+                                                            label={t('amount') || 'Məbləğ'}
+                                                            type="number"
+                                                            step="0.01"
+                                                            min="0.01"
+                                                            max={creditRemainingAmount}
+                                                            value={paymentData.amount}
+                                                            onChange={(e) => setPaymentData(prev => ({ ...prev, amount: e.target.value }))}
+                                                            placeholder={t('enter_amount') || 'Məbləğ daxil edin'}
+                                                            icon={<MdAttachMoney />}
+                                                        />
+                                                        <div>
+                                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                                {t('payment_type') || 'Ödəniş növü'}
+                                                            </label>
+                                                            <div className="flex gap-4">
+                                                                <label className="flex items-center gap-2 cursor-pointer">
+                                                                    <input
+                                                                        type="radio"
+                                                                        name="paymentType"
+                                                                        value="cash"
+                                                                        checked={paymentData.paymentType === 'cash'}
+                                                                        onChange={(e) => setPaymentData(prev => ({ ...prev, paymentType: e.target.value }))}
+                                                                        className="w-4 h-4 text-blue-600"
+                                                                    />
+                                                                    <span className="text-sm">{t('cash') || 'Nağd'}</span>
+                                                                </label>
+                                                                <label className="flex items-center gap-2 cursor-pointer">
+                                                                    <input
+                                                                        type="radio"
+                                                                        name="paymentType"
+                                                                        value="card"
+                                                                        checked={paymentData.paymentType === 'card'}
+                                                                        onChange={(e) => setPaymentData(prev => ({ ...prev, paymentType: e.target.value }))}
+                                                                        className="w-4 h-4 text-blue-600"
+                                                                    />
+                                                                    <span className="text-sm">{t('card') || 'Kart'}</span>
+                                                                </label>
+                                                            </div>
+                                                        </div>
+                                                        <Input
+                                                            label={t('note') || 'Qeyd'}
+                                                            type="text"
+                                                            value={paymentData.note}
+                                                            onChange={(e) => setPaymentData(prev => ({ ...prev, note: e.target.value }))}
+                                                            placeholder={t('note_placeholder') || 'Qeyd (istəyə bağlı)'}
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            onClick={async () => {
+                                                                if (!paymentData.amount || parseFloat(paymentData.amount) <= 0) {
+                                                                    Alert.error(tAlert('error') || 'Xəta!', t('invalid_amount') || 'Düzgün məbləğ daxil edin');
+                                                                    return;
+                                                                }
+                                                                
+                                                                    const paymentAmount = parseFloat(paymentData.amount);
+                                                                if (paymentAmount > creditRemainingAmount) {
+                                                                    Alert.error(tAlert('error') || 'Xəta!', t('payment_exceeds_remaining') || 'Ödəniş məbləği qalan məbləğdən çox ola bilməz');
+                                                                    return;
+                                                                }
+                                                                
+                                                                setPaymentLoading(true);
+                                                                try {
+                                                                    const response = await creditPaymentApi.makePayment({
+                                                                        saleId: id,
+                                                                        amount: paymentAmount,
+                                                                        paymentType: paymentData.paymentType,
+                                                                        note: paymentData.note
+                                                                    });
+                                                                    
+                                                                    if (response.success) {
+                                                                        Alert.success(t('payment_success') || 'Uğurlu!', t('payment_success_text') || 'Ödəniş uğurla edildi');
+                                                                        setPaymentData({ amount: '', paymentType: 'cash', note: '' });
+                                                                        const paymentsResponse = await creditPaymentApi.getBySaleId(id);
+                                                                        if (paymentsResponse.success && paymentsResponse.date) {
+                                                                            setCreditPayments(paymentsResponse.date);
+                                                                        }
+                                                                        // Sale məlumatlarını yenilə
+                                                                        const saleResponse = await saleApi.getById(id);
+                                                                        if (saleResponse.success && saleResponse.date) {
+                                                                            const updatedSale = saleResponse.date;
+                                                                            setFormData(prev => ({
+                                                                                ...prev,
+                                                                                paidAmount: updatedSale.paidAmount ? parseFloat(updatedSale.paidAmount).toFixed(2) : prev.paidAmount
+                                                                            }));
+                                                                        }
+                                                                    }
+                                                                } catch (error) {
+                                                                    console.error('Error making payment:', error);
+                                                                    Alert.error(tAlert('error') || 'Xəta!', error.response?.data?.message || tAlert('error_text') || 'Ödəniş edilərkən xəta baş verdi');
+                                                                } finally {
+                                                                    setPaymentLoading(false);
+                                                                }
+                                                            }}
+                                                            disabled={paymentLoading || !paymentData.amount || parseFloat(paymentData.amount) <= 0}
+                                                            className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                                                        >
+                                                            {paymentLoading ? (t('processing') || 'İşlənir...') : (t('make_payment') || 'Ödəniş Et')}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            
+                                            {isFullyPaid && (
+                                                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                                                    <div className="flex items-center gap-2 text-green-800">
+                                                        <MdCheckCircle className="w-5 h-5" />
+                                                        <p className="font-medium">{t('credit_fully_paid') || 'Kredit tam ödənilib'}</p>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })()}
+                                
+                                {/* Ödəniş tarixçəsi */}
+                                <div className="mt-4">
+                                    <h5 className="text-sm font-semibold text-gray-900 mb-3">{t('payment_history') || 'Ödəniş Tarixçəsi'}</h5>
+                                    {creditPayments.length === 0 ? (
+                                        <p className="text-gray-500 text-center py-4">{t('no_payments') || 'Hələ ödəniş edilməyib'}</p>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            {creditPayments.map((payment, index) => {
+                                                const paymentDate = new Date(payment.paymentDate);
+                                                const paymentMonth = getFullMonthYear(paymentDate, 'az');
+                                                
+                                                // Növbəti ay hesabla
+                                                const nextMonth = new Date(paymentDate);
+                                                nextMonth.setMonth(nextMonth.getMonth() + 1);
+                                                const nextMonthStr = getFullMonthYear(nextMonth, 'az');
+                                                
+                                                // Qalan məbləği hesabla (bu ödənişdən sonra)
+                                                const creditTotal = parseFloat(saleData?.creditTotalAmount || saleData?.totalAmount || 0);
+                                                const totalPaidSoFar = creditPayments.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
+                                                const paidAfterThis = creditPayments
+                                                    .slice(index + 1)
+                                                    .reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
+                                                const paymentRemainingAmount = Math.max(0, creditTotal - totalPaidSoFar + paidAfterThis);
+                                                
+                                                return (
+                                                    <div key={payment.id} className="border border-gray-200 rounded-lg p-3 bg-white">
+                                                        <div className="flex justify-between items-start">
+                                                            <div className="flex-1">
+                                                                <p className="font-semibold text-base">{parseFloat(payment.amount).toFixed(2)} ₼</p>
+                                                                <p className="text-xs font-medium text-purple-600 mt-1">
+                                                                    {paymentMonth} {t('month_paid') || 'ayı ödənildi'}
+                                                                </p>
+                                                                {paymentRemainingAmount > 0 && (
+                                                                    <p className="text-xs text-gray-500 mt-1">
+                                                                        {t('remaining_month') || 'Qalan ay'}: {nextMonthStr} ({paymentRemainingAmount.toFixed(2)} ₼)
+                                                                    </p>
+                                                                )}
+                                                                <p className="text-xs text-gray-400 mt-1">
+                                                                    {paymentDate.toLocaleString('az-AZ', {
+                                                                        day: 'numeric',
+                                                                        month: 'short',
+                                                                        year: 'numeric',
+                                                                        hour: '2-digit',
+                                                                        minute: '2-digit'
+                                                                    })}
+                                                                </p>
+                                                                {payment.paymentType && (
+                                                                    <p className="text-xs text-gray-500 mt-1">
+                                                                        {payment.paymentType === 'cash' ? (t('cash') || 'Nağd') : (t('card') || 'Kart')}
+                                                                    </p>
+                                                                )}
+                                                                {payment.note && (
+                                                                    <p className="text-xs text-gray-500 mt-1">{payment.note}</p>
+                                                                )}
+                                                            </div>
+                                                            <MdCheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 ml-2" />
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}

@@ -13,7 +13,8 @@ import {
   ArrowDown,
   Calendar,
   PieChart,
-  HandCoins
+  HandCoins,
+  CreditCard
 } from 'lucide-react';
 
 export default function Statistics() {
@@ -326,6 +327,40 @@ export default function Statistics() {
                 </div>
                 <div className="bg-orange-100 rounded-full p-3">
                   <HandCoins className="w-8 h-8 text-orange-600" />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Credits Card */}
+          {overallData.credits && (
+            <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-purple-500">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-600 text-sm font-medium">{t('credits') || 'Kreditlər'}</p>
+                  <p className="text-2xl font-bold text-gray-800 mt-2">
+                    {overallData.credits.total.toLocaleString()}
+                  </p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {t('total_amount')}: {formatCurrency(overallData.credits.totalAmount)} AZN
+                  </p>
+                  <p className="text-sm text-green-600 mt-1">
+                    {t('paid_amount')}: {formatCurrency(overallData.credits.paidAmount)} AZN
+                  </p>
+                  <p className="text-sm text-red-600 mt-1">
+                    {t('remaining_amount')}: {formatCurrency(overallData.credits.remainingAmount)} AZN
+                  </p>
+                  <p className="text-sm text-purple-600 mt-1">
+                    {t('active')}: {overallData.credits.active}
+                  </p>
+                  {(!startDate || !endDate) && overallData.credits.today && (
+                    <p className="text-xs text-gray-400 mt-2">
+                      {t('today')}: {overallData.credits.today.count} ({formatCurrency(overallData.credits.today.amount)} AZN)
+                    </p>
+                  )}
+                </div>
+                <div className="bg-purple-100 rounded-full p-3">
+                  <CreditCard className="w-8 h-8 text-purple-600" />
                 </div>
               </div>
             </div>
