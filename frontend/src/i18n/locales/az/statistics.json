@@ -49,6 +49,9 @@
   "credits": "Kreditlər",
   "paid_amount": "Ödənilən məbləğ",
   "remaining_amount": "Qalan məbləğ",
-  "total_amount": "Ümumi məbləğ"
+  "total_amount": "Ümumi məbləğ",
+  "deleted": "Silinmiş",
+  "soft_deleted": "Soft silinmiş",
+  "archived": "Arxivləşdirilmiş"
 }
 

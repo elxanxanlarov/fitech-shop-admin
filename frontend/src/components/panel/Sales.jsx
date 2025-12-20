@@ -40,6 +40,17 @@ export default function Sales() {
             }
         };
         fetchSales();
+        
+        // Custom event dinlə - satış bərpa ediləndə yenilə
+        const handleSaleRestored = () => {
+            fetchSales();
+        };
+        
+        window.addEventListener('saleRestored', handleSaleRestored);
+        
+        return () => {
+            window.removeEventListener('saleRestored', handleSaleRestored);
+        };
     }, [t, i18n.language]);
 
     const handleEdit = async (sale) => {
@@ -60,6 +71,12 @@ export default function Sales() {
                 Alert.loading(t('loading') || 'Yüklənir...');
                 await saleApi.delete(sale.id);
                 setSaleData(prev => prev.filter(item => item.id !== sale.id));
+                
+                // Custom event dispatch et - DeletedProductsBell yenilənsin
+                window.dispatchEvent(new CustomEvent('saleDeleted', { 
+                    detail: { saleId: sale.id } 
+                }));
+                
                 Alert.close();
                 setTimeout(() => { Alert.success(tAlert('delete_success'), tAlert('delete_success_text')); }, 100);
             } catch (error) {
@@ -118,6 +135,14 @@ export default function Sales() {
                 Alert.loading(t('loading') || 'Yüklənir...');
                 await Promise.all(selectedIds.map(id => saleApi.delete(id)));
                 setSaleData(prev => prev.filter(item => !selectedIds.includes(item.id)));
+                
+                // Custom event dispatch et - DeletedProductsBell yenilənsin
+                selectedIds.forEach(id => {
+                    window.dispatchEvent(new CustomEvent('saleDeleted', { 
+                        detail: { saleId: id } 
+                    }));
+                });
+                
                 Alert.close();
                 setTimeout(() => { Alert.success(tAlert('bulk_delete_success'), tAlert('bulk_delete_success_text')); }, 100);
             } catch (error) {

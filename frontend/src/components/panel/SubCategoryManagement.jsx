@@ -98,6 +98,17 @@ export default function SubCategoryManagement() {
         };
 
         fetchSubCategories();
+        
+        // Custom event dinlə - alt kateqoriya bərpa ediləndə yenilə
+        const handleSubCategoryRestored = () => {
+            fetchSubCategories();
+        };
+        
+        window.addEventListener('subCategoryRestored', handleSubCategoryRestored);
+        
+        return () => {
+            window.removeEventListener('subCategoryRestored', handleSubCategoryRestored);
+        };
     }, [categoryId, tAlert, t]);
 
     const handleEdit = async (subCategory) => {

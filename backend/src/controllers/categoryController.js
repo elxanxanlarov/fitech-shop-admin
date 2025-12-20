@@ -4,7 +4,22 @@ import { createActivityLog } from "./activityLogController.js";
 // Bütün kateqoriyaları gətir
 export const getAllCategories = async (req, res) => {
     try {
+        const { deleteType, includeDeleted } = req.query;
+        
+        const where = {};
+        
+        // DeleteType filter - default olaraq yalnız silinməyən kateqoriyaları göstər
+        if (includeDeleted === 'true') {
+            // Bütün kateqoriyaları göstər (silinmişlər də daxil)
+        } else if (deleteType) {
+            where.deleteType = deleteType.toUpperCase();
+        } else {
+            // Default: yalnız silinməyən kateqoriyaları göstər
+            where.deleteType = 'NONE';
+        }
+        
         const categories = await prisma.category.findMany({
+            where,
             include: {
                 subCategories: {
                     where: {
@@ -152,7 +167,7 @@ export const createCategory = async (req, res) => {
 export const updateCategory = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, description, isActive } = req.body;
+        const { name, description, isActive, deleteType } = req.body;
 
         // Kateqoriyanın mövcud olub olmadığını yoxla
         const existingCategory = await prisma.category.findUnique({
@@ -192,6 +207,7 @@ export const updateCategory = async (req, res) => {
                 name: name ? name.trim() : existingCategory.name,
                 description: description !== undefined ? (description?.trim() || null) : existingCategory.description,
                 isActive: isActive !== undefined ? isActive : existingCategory.isActive,
+                deleteType: deleteType !== undefined ? deleteType.toUpperCase() : existingCategory.deleteType,
             }
         });
 
@@ -236,6 +252,10 @@ export const updateCategory = async (req, res) => {
 export const deleteCategory = async (req, res) => {
     try {
         const { id } = req.params;
+        const { deleteType = 'SOFT' } = req.body; // Default: SOFT delete
+        
+        // Ensure deleteType is valid
+        const validDeleteType = (deleteType && typeof deleteType === 'string' && deleteType.toUpperCase() === 'HARD') ? 'HARD' : 'SOFT';
 
         // Kateqoriyanın mövcud olub olmadığını yoxla
         const existingCategory = await prisma.category.findUnique({
@@ -253,45 +273,75 @@ export const deleteCategory = async (req, res) => {
             });
         }
 
-        // Əgər kateqoriyaya aid məhsul və ya alt kateqoriya varsa, silməyə icazə vermə
-        if (existingCategory.products.length > 0) {
-            return res.status(400).json({
-                success: false,
-                message: "Bu kateqoriyaya aid məhsullar var. Əvvəlcə məhsulları silin və ya başqa kateqoriyaya köçürün"
+        // DeleteType-a görə silmə
+        if (validDeleteType === 'HARD') {
+            // Hard delete - əvvəlcə yoxla ki, məhsul və ya alt kateqoriya var
+            if (existingCategory.products.length > 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Bu kateqoriyaya aid məhsullar var. Əvvəlcə məhsulları silin və ya başqa kateqoriyaya köçürün"
+                });
+            }
+
+            if (existingCategory.subCategories.length > 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Bu kateqoriyaya aid alt kateqoriyalar var. Əvvəlcə alt kateqoriyaları silin"
+                });
+            }
+
+            await prisma.category.delete({
+                where: { id }
             });
-        }
 
-        if (existingCategory.subCategories.length > 0) {
-            return res.status(400).json({
-                success: false,
-                message: "Bu kateqoriyaya aid alt kateqoriyalar var. Əvvəlcə alt kateqoriyaları silin"
-            });
-        }
-
-        await prisma.category.delete({
-            where: { id }
-        });
-
-        // Activity log yarat
-        try {
-            await createActivityLog({
-                staffId: req.staffId || null,
-                entityType: "Category",
-                entityId: id,
-                action: "DELETE",
-                description: `Kateqoriya silindi: ${existingCategory.name}`,
-                changes: {
-                    name: existingCategory.name,
-                    description: existingCategory.description
+            // Activity log yarat
+            try {
+                await createActivityLog({
+                    staffId: req.staffId || null,
+                    entityType: "Category",
+                    entityId: id,
+                    action: "HARD_DELETE",
+                    description: `Kateqoriya tamamilə silindi: ${existingCategory.name}`,
+                    changes: {
+                        name: existingCategory.name,
+                        description: existingCategory.description
+                    }
+                });
+            } catch (logError) {
+                console.error("Activity log yaradılarkən xəta:", logError);
+            }
+        } else {
+            // Soft delete - deleteType-u dəyiş
+            await prisma.category.update({
+                where: { id },
+                data: {
+                    deleteType: 'SOFT',
+                    isActive: false // Soft delete zamanı isActive də false olsun
                 }
             });
-        } catch (logError) {
-            console.error("Activity log yaradılarkən xəta:", logError);
+
+            // Activity log yarat
+            try {
+                await createActivityLog({
+                    staffId: req.staffId || null,
+                    entityType: "Category",
+                    entityId: id,
+                    action: "SOFT_DELETE",
+                    description: `Kateqoriya soft delete edildi: ${existingCategory.name}`,
+                    changes: {
+                        name: existingCategory.name,
+                        description: existingCategory.description,
+                        deleteType: 'SOFT'
+                    }
+                });
+            } catch (logError) {
+                console.error("Activity log yaradılarkən xəta:", logError);
+            }
         }
 
         return res.json({
             success: true,
-            message: "Kateqoriya uğurla silindi",
+            message: validDeleteType === 'HARD' ? "Kateqoriya tamamilə silindi" : "Kateqoriya soft delete edildi",
         });
     } catch (error) {
         console.error("deleteCategory error", error);

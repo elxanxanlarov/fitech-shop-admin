@@ -49,6 +49,9 @@
   "credits": "Credits",
   "paid_amount": "Paid Amount",
   "remaining_amount": "Remaining Amount",
-  "total_amount": "Total Amount"
+  "total_amount": "Total Amount",
+  "deleted": "Deleted",
+  "soft_deleted": "Soft Deleted",
+  "archived": "Archived"
 }
 

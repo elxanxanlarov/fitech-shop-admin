@@ -4,9 +4,19 @@ import { createActivityLog } from "./activityLogController.js";
 // Bütün məbləğ təslimlərini gətir
 export const getAllCashHandovers = async (req, res) => {
     try {
-        const { startDate, endDate } = req.query;
+        const { startDate, endDate, deleteType, includeDeleted } = req.query;
         
         const where = {};
+        
+        // DeleteType filter - default olaraq yalnız silinməyən məbləğ təslimlərini göstər
+        if (includeDeleted === 'true') {
+            // Bütün məbləğ təslimlərini göstər (silinmişlər də daxil)
+        } else if (deleteType) {
+            where.deleteType = deleteType.toUpperCase();
+        } else {
+            // Default: yalnız silinməyən məbləğ təslimlərini göstər
+            where.deleteType = 'NONE';
+        }
         
         // Tarix filter
         if (startDate || endDate) {
@@ -335,7 +345,11 @@ export const updateCashHandover = async (req, res) => {
 export const deleteCashHandover = async (req, res) => {
     try {
         const { id } = req.params;
-        const staffId = req.user?.id;
+        const { deleteType = 'SOFT' } = req.body; // Default: SOFT delete
+        const staffId = req.user?.id || req.staffId;
+        
+        // Ensure deleteType is valid
+        const validDeleteType = (deleteType && typeof deleteType === 'string' && deleteType.toUpperCase() === 'HARD') ? 'HARD' : 'SOFT';
 
         // Məbləğ təsliminin mövcud olduğunu yoxla
         const cashHandover = await prisma.cashHandover.findUnique({
@@ -363,22 +377,62 @@ export const deleteCashHandover = async (req, res) => {
             });
         }
 
-        await prisma.cashHandover.delete({
-            where: { id }
-        });
+        // DeleteType-a görə silmə
+        if (validDeleteType === 'HARD') {
+            // Hard delete - məbləğ təslimini tamamilə sil
+            await prisma.cashHandover.delete({
+                where: { id }
+            });
 
-        // Activity log
-        await createActivityLog({
-            staffId: staffId || cashHandover.handedOverById,
-            entityType: "CashHandover",
-            entityId: id,
-            action: "DELETE",
-            description: `Məbləğ təslimi silindi (${cashHandover.amount} AZN)`
-        });
+            // Activity log
+            try {
+                await createActivityLog({
+                    staffId: staffId || cashHandover.handedOverById,
+                    entityType: "CashHandover",
+                    entityId: id,
+                    action: "HARD_DELETE",
+                    description: `Məbləğ təslimi tamamilə silindi (${cashHandover.amount} AZN)`,
+                    changes: {
+                        amount: cashHandover.amount.toString(),
+                        date: cashHandover.date,
+                        note: cashHandover.note
+                    }
+                });
+            } catch (logError) {
+                console.error("Activity log yaradılarkən xəta:", logError);
+            }
+        } else {
+            // Soft delete - deleteType-u dəyiş
+            await prisma.cashHandover.update({
+                where: { id },
+                data: {
+                    deleteType: 'SOFT'
+                }
+            });
+
+            // Activity log
+            try {
+                await createActivityLog({
+                    staffId: staffId || cashHandover.handedOverById,
+                    entityType: "CashHandover",
+                    entityId: id,
+                    action: "SOFT_DELETE",
+                    description: `Məbləğ təslimi soft delete edildi (${cashHandover.amount} AZN)`,
+                    changes: {
+                        amount: cashHandover.amount.toString(),
+                        date: cashHandover.date,
+                        note: cashHandover.note,
+                        deleteType: 'SOFT'
+                    }
+                });
+            } catch (logError) {
+                console.error("Activity log yaradılarkən xəta:", logError);
+            }
+        }
 
         return res.status(200).json({
             success: true,
-            message: "Məbləğ təslimi uğurla silindi"
+            message: validDeleteType === 'HARD' ? "Məbləğ təslimi tamamilə silindi" : "Məbləğ təslimi soft delete edildi"
         });
     } catch (error) {
         console.error("deleteCashHandover error", error);

@@ -26,8 +26,10 @@ export const cashHandoverApi = {
   },
 
   // Delete cash handover
-  delete: async (id) => {
-    const response = await api.delete(`/cash-handover/${id}`);
+  delete: async (id, deleteType = 'SOFT') => {
+    const response = await api.delete(`/cash-handover/${id}`, {
+      data: { deleteType }
+    });
     return response.data;
   },
 };

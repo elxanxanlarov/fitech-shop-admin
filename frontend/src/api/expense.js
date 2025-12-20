@@ -26,8 +26,10 @@ export const expenseApi = {
   },
 
   // Delete expense
-  delete: async (id) => {
-    const response = await api.delete(`/expense/${id}`);
+  delete: async (id, deleteType = 'SOFT') => {
+    const response = await api.delete(`/expense/${id}`, {
+      data: { deleteType }
+    });
     return response.data;
   },
 };

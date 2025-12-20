@@ -1,8 +1,8 @@
 import api from './axios.js';
 
 export const saleApi = {
-  getAll: async () => {
-    const response = await api.get('/sale');
+  getAll: async (params = {}) => {
+    const response = await api.get('/sale', { params });
     return response.data;
   },
   getById: async (id) => {
@@ -17,8 +17,10 @@ export const saleApi = {
     const response = await api.put(`/sale/${id}`, saleData);
     return response.data;
   },
-  delete: async (id) => {
-    const response = await api.delete(`/sale/${id}`);
+  delete: async (id, deleteType = 'SOFT') => {
+    const response = await api.delete(`/sale/${id}`, {
+      data: { deleteType }
+    });
     return response.data;
   },
 };

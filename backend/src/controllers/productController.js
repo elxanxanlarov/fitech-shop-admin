@@ -18,10 +18,22 @@ export const getAllProducts = async (req, res) => {
             hasImage,
             isActive,
             isOfficial,
-            search
+            search,
+            deleteType,
+            includeDeleted
         } = req.query;
 
         const where = {};
+
+        // DeleteType filter - default olaraq yalnız silinməyən məhsulları göstər
+        if (includeDeleted === 'true') {
+            // Bütün məhsulları göstər (silinmişlər də daxil)
+        } else if (deleteType) {
+            where.deleteType = deleteType.toUpperCase();
+        } else {
+            // Default: yalnız silinməyən məhsulları göstər
+            where.deleteType = 'NONE';
+        }
 
         // Category filter by ID (takes precedence over categoryName)
         if (categoryId) {
@@ -319,7 +331,8 @@ export const updateProduct = async (req, res) => {
             isActive,
             isOfficial,
             categoryId,
-            subCategoryId
+            subCategoryId,
+            deleteType
         } = req.body;
 
         const existingProduct = await prisma.product.findUnique({
@@ -392,6 +405,7 @@ export const updateProduct = async (req, res) => {
                 stock: stock !== undefined ? parseInt(stock) : undefined,
                 isActive: typeof isActive === "boolean" ? isActive : undefined,
                 isOfficial: typeof isOfficial === "boolean" ? isOfficial : undefined,
+                deleteType: deleteType !== undefined ? deleteType.toUpperCase() : undefined,
 
                 category: categoryId
                     ? { connect: { id: categoryId } }
@@ -422,6 +436,7 @@ export const updateProduct = async (req, res) => {
             if (stock !== undefined && parseInt(stock) !== existingProduct.stock) changes.stock = { old: existingProduct.stock, new: updated.stock };
             if (isActive !== undefined && isActive !== existingProduct.isActive) changes.isActive = { old: existingProduct.isActive, new: updated.isActive };
             if (hasDiscount !== undefined && finalHasDiscount !== existingProduct.hasDiscount) changes.hasDiscount = { old: existingProduct.hasDiscount, new: updated.hasDiscount };
+            if (deleteType !== undefined && deleteType.toUpperCase() !== existingProduct.deleteType) changes.deleteType = { old: existingProduct.deleteType, new: updated.deleteType };
             if (categoryId !== undefined && categoryId !== existingProduct.categoryId) changes.categoryId = { old: existingProduct.categoryId, new: updated.categoryId };
             if (subCategoryId !== undefined && subCategoryId !== existingProduct.subCategoryId) changes.subCategoryId = { old: existingProduct.subCategoryId, new: updated.subCategoryId };
 
@@ -463,6 +478,11 @@ export const updateProduct = async (req, res) => {
 export const deleteProduct = async (req, res) => {
     try {
         const { id } = req.params;
+        const { deleteType = 'SOFT' } = req.body; // Default: SOFT delete
+        
+        // Ensure deleteType is valid
+        const validDeleteType = (deleteType && typeof deleteType === 'string' && deleteType.toUpperCase() === 'HARD') ? 'HARD' : 'SOFT';
+        
         const existingProduct = await prisma.product.findUnique({
             where: { id }
         });
@@ -474,23 +494,38 @@ export const deleteProduct = async (req, res) => {
             });
         }
 
-        await prisma.product.delete({
-            where: { id }
-        });
+        // DeleteType-a görə silmə
+        if (validDeleteType === 'HARD') {
+            // Hard delete - məhsulu tamamilə sil
+            await prisma.product.delete({
+                where: { id }
+            });
+        } else {
+            // Soft delete - deleteType-u dəyiş
+            await prisma.product.update({
+                where: { id },
+                data: {
+                    deleteType: 'SOFT',
+                    isActive: false // Soft delete zamanı isActive də false olsun
+                }
+            });
+        }
 
         // Activity log yarat
         try {
+            const actionType = validDeleteType === 'HARD' ? "HARD_DELETE" : "SOFT_DELETE";
             await createActivityLog({
                 staffId: req.staffId || null,
                 entityType: "Product",
                 entityId: existingProduct.id,
-                action: "DELETE",
-                description: `Məhsul silindi: ${existingProduct.name}`,
+                action: actionType,
+                description: `Məhsul ${validDeleteType === 'HARD' ? 'tamamilə silindi' : 'soft delete edildi'}: ${existingProduct.name}`,
                 changes: {
                     name: existingProduct.name,
                     purchasePrice: existingProduct.purchasePrice.toString(),
                     salePrice: existingProduct.salePrice.toString(),
-                    stock: existingProduct.stock
+                    stock: existingProduct.stock,
+                    deleteType: validDeleteType
                 }
             });
         } catch (logError) {

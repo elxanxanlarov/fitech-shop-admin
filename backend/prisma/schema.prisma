@@ -7,10 +7,18 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum DeleteType {
+  NONE        // Silinməyib
+  SOFT        // Soft delete (soft silinmə)
+  HARD        // Hard delete (tam silinmə)
+  ARCHIVED    // Arxivləşdirilib
+}
+
 model Role {
   id        String   @id @default(uuid())
   name      String   @unique
   isCore    Boolean  @default(false)
+  deleteType DeleteType @default(NONE) // Silinmə tipi
   staff     Staff[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -23,6 +31,7 @@ model Category {
   name          String        @unique
   description   String?
   isActive      Boolean       @default(true)
+  deleteType    DeleteType    @default(NONE) // Silinmə tipi
   
   subCategories SubCategory[]
   products      Product[]
@@ -38,6 +47,7 @@ model SubCategory {
   categoryId  String
   category    Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   isActive    Boolean    @default(true)
+  deleteType  DeleteType @default(NONE) // Silinmə tipi
   
   products    Product[]
   
@@ -63,6 +73,7 @@ model Product {
   stock           Int       @default(0)
   isActive        Boolean   @default(true)
   isOfficial      Boolean   @default(false) // Rəsmi və ya qeyri-rəsmi
+  deleteType      DeleteType @default(NONE) // Silinmə tipi
 
   categoryId      String?
   category        Category? @relation(fields: [categoryId], references: [id])
@@ -105,6 +116,7 @@ model Sale {
   isRefunded      Boolean  @default(false)
   refundedAt      DateTime?
   note            String?
+  deleteType      DeleteType @default(NONE) // Silinmə tipi
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -184,6 +196,8 @@ enum ActivityAction {
   CREATE
   UPDATE
   DELETE
+  SOFT_DELETE
+  HARD_DELETE
   LOGIN
   LOGOUT
   SALE
@@ -235,6 +249,7 @@ model Expense {
   
   staffId     String?  // Kim əlavə edib
   staff       Staff?   @relation(fields: [staffId], references: [id])
+  deleteType  DeleteType @default(NONE) // Silinmə tipi
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -251,6 +266,7 @@ model CashHandover {
   
   handedOverById  String   // Kim təslim etdi
   handedOverBy    Staff    @relation("HandedOverBy", fields: [handedOverById], references: [id])
+  deleteType      DeleteType @default(NONE) // Silinmə tipi
   
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

@@ -4,9 +4,19 @@ import { createActivityLog } from "./activityLogController.js";
 // Bütün xərcləri gətir
 export const getAllExpenses = async (req, res) => {
     try {
-        const { startDate, endDate, category } = req.query;
+        const { startDate, endDate, category, deleteType, includeDeleted } = req.query;
         
         const where = {};
+        
+        // DeleteType filter - default olaraq yalnız silinməyən xərcləri göstər
+        if (includeDeleted === 'true') {
+            // Bütün xərcləri göstər (silinmişlər də daxil)
+        } else if (deleteType) {
+            where.deleteType = deleteType.toUpperCase();
+        } else {
+            // Default: yalnız silinməyən xərcləri göstər
+            where.deleteType = 'NONE';
+        }
         
         // Tarix filter
         if (startDate || endDate) {
@@ -172,7 +182,7 @@ export const createExpense = async (req, res) => {
 export const updateExpense = async (req, res) => {
     try {
         const { id } = req.params;
-        const { title, description, amount, category, date, note } = req.body;
+        const { title, description, amount, category, date, note, deleteType } = req.body;
 
         // Xərcin mövcud olub olmadığını yoxla
         const existingExpense = await prisma.expense.findUnique({
@@ -218,6 +228,7 @@ export const updateExpense = async (req, res) => {
                 category: category !== undefined ? (category?.trim() || null) : existingExpense.category,
                 date: date !== undefined ? new Date(date) : existingExpense.date,
                 note: note !== undefined ? (note?.trim() || null) : existingExpense.note,
+                deleteType: deleteType !== undefined ? deleteType.toUpperCase() : existingExpense.deleteType,
             },
             include: {
                 staff: {
@@ -275,6 +286,10 @@ export const updateExpense = async (req, res) => {
 export const deleteExpense = async (req, res) => {
     try {
         const { id } = req.params;
+        const { deleteType = 'SOFT' } = req.body; // Default: SOFT delete
+        
+        // Ensure deleteType is valid
+        const validDeleteType = (deleteType && typeof deleteType === 'string' && deleteType.toUpperCase() === 'HARD') ? 'HARD' : 'SOFT';
 
         // Xərcin mövcud olub olmadığını yoxla
         const existingExpense = await prisma.expense.findUnique({
@@ -288,34 +303,68 @@ export const deleteExpense = async (req, res) => {
             });
         }
 
-        await prisma.expense.delete({
-            where: { id }
-        });
+        // DeleteType-a görə silmə
+        if (validDeleteType === 'HARD') {
+            // Hard delete - xərci tamamilə sil
+            await prisma.expense.delete({
+                where: { id }
+            });
 
-        // Activity log yarat
-        try {
-            await createActivityLog({
-                staffId: req.staffId || null,
-                entityType: "Expense",
-                entityId: id,
-                action: "DELETE",
-                description: `Xərc silindi: ${existingExpense.title} - ${existingExpense.amount} AZN`,
-                changes: {
-                    title: existingExpense.title,
-                    description: existingExpense.description,
-                    amount: existingExpense.amount,
-                    category: existingExpense.category,
-                    date: existingExpense.date,
-                    note: existingExpense.note
+            // Activity log yarat
+            try {
+                await createActivityLog({
+                    staffId: req.staffId || null,
+                    entityType: "Expense",
+                    entityId: id,
+                    action: "HARD_DELETE",
+                    description: `Xərc tamamilə silindi: ${existingExpense.title} - ${existingExpense.amount} AZN`,
+                    changes: {
+                        title: existingExpense.title,
+                        description: existingExpense.description,
+                        amount: existingExpense.amount,
+                        category: existingExpense.category,
+                        date: existingExpense.date,
+                        note: existingExpense.note
+                    }
+                });
+            } catch (logError) {
+                console.error("Activity log yaradılarkən xəta:", logError);
+            }
+        } else {
+            // Soft delete - deleteType-u dəyiş
+            await prisma.expense.update({
+                where: { id },
+                data: {
+                    deleteType: 'SOFT'
                 }
             });
-        } catch (logError) {
-            console.error("Activity log yaradılarkən xəta:", logError);
+
+            // Activity log yarat
+            try {
+                await createActivityLog({
+                    staffId: req.staffId || null,
+                    entityType: "Expense",
+                    entityId: id,
+                    action: "SOFT_DELETE",
+                    description: `Xərc soft delete edildi: ${existingExpense.title} - ${existingExpense.amount} AZN`,
+                    changes: {
+                        title: existingExpense.title,
+                        description: existingExpense.description,
+                        amount: existingExpense.amount,
+                        category: existingExpense.category,
+                        date: existingExpense.date,
+                        note: existingExpense.note,
+                        deleteType: 'SOFT'
+                    }
+                });
+            } catch (logError) {
+                console.error("Activity log yaradılarkən xəta:", logError);
+            }
         }
 
         return res.json({
             success: true,
-            message: "Xərc uğurla silindi",
+            message: validDeleteType === 'HARD' ? "Xərc tamamilə silindi" : "Xərc soft delete edildi",
         });
     } catch (error) {
         console.error("deleteExpense error", error);

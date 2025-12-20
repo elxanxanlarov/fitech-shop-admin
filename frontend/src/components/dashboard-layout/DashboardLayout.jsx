@@ -2,6 +2,7 @@
 import Sidebar from "./Sidebar"
 import LanguageSwitcher from "../../i18n/LanguageSwitcher"
 import NotificationBell from "../ui/NotificationBell"
+import DeletedProductsBell from "../ui/DeletedProductsBell"
 import { useState } from "react"
 import { FiMenu } from "react-icons/fi"
 
@@ -47,6 +48,7 @@ export default function DashboardLayout({ children, sidebarData , title, profile
             <span className="text-lg font-semibold text-slate-800">{title}</span>
           </div>
           <div className="flex items-center gap-3">
+            <DeletedProductsBell />
             <NotificationBell />
             <LanguageSwitcher />
           </div>

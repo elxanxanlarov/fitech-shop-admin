@@ -26,8 +26,10 @@ export const productApi = {
   },
 
   // Delete product
-  delete: async (id) => {
-    const response = await api.delete(`/product/${id}`);
+  delete: async (id, deleteType = 'SOFT') => {
+    const response = await api.delete(`/product/${id}`, {
+      data: { deleteType }
+    });
     return response.data;
   },
 

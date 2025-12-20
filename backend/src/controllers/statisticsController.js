@@ -54,10 +54,42 @@ export const getOverallStatistics = async (req, res) => {
         });
 
         // Ümumi məhsullar
-        const totalProducts = await prisma.product.count();
+        const totalProducts = await prisma.product.count({
+            where: {
+                deleteType: 'NONE'
+            }
+        });
         const activeProducts = await prisma.product.count({
             where: {
-                isActive: true
+                isActive: true,
+                deleteType: 'NONE'
+            }
+        });
+        
+        // Silinmiş məhsullar
+        const deletedProducts = await prisma.product.count({
+            where: {
+                deleteType: {
+                    not: 'NONE'
+                }
+            }
+        });
+        
+        const softDeletedProducts = await prisma.product.count({
+            where: {
+                deleteType: 'SOFT'
+            }
+        });
+        
+        const hardDeletedProducts = await prisma.product.count({
+            where: {
+                deleteType: 'HARD'
+            }
+        });
+        
+        const archivedProducts = await prisma.product.count({
+            where: {
+                deleteType: 'ARCHIVED'
             }
         });
 
@@ -298,7 +330,13 @@ export const getOverallStatistics = async (req, res) => {
                 products: {
                     total: totalProducts,
                     active: activeProducts,
-                    totalStock: stockAggregation._sum.stock || 0
+                    totalStock: stockAggregation._sum.stock || 0,
+                    deleted: {
+                        total: deletedProducts,
+                        soft: softDeletedProducts,
+                        hard: hardDeletedProducts,
+                        archived: archivedProducts
+                    }
                 },
                 staff: {
                     total: totalStaff,

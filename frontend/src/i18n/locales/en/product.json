@@ -130,6 +130,18 @@
   "is_active": "Active",
   "subcategory": "Subcategory",
   "select_category": "Select category",
-  "select_subcategory": "Select subcategory"
+  "select_subcategory": "Select subcategory",
+  "deleted_items": "Deleted Items",
+  "no_deleted_items": "No deleted items",
+  "total_deleted": "Total",
+  "delete_all": "Delete All",
+  "restore_all": "Restore All",
+  "restore": "Restore",
+  "restore_confirm_text": "Do you want to restore this item?",
+  "restore_success": "Item restored",
+  "restore_all_success": "All items restored",
+  "restore_all_confirm": "Do you want to restore all deleted items?",
+  "hard_delete": "Hard Delete",
+  "items": "items"
 }
 

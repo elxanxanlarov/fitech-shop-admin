@@ -26,8 +26,10 @@ export const categoryApi = {
   },
 
   // Delete category
-  delete: async (id) => {
-    const response = await api.delete(`/category/${id}`);
+  delete: async (id, deleteType = 'SOFT') => {
+    const response = await api.delete(`/category/${id}`, {
+      data: { deleteType }
+    });
     return response.data;
   },
 };

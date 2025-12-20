@@ -17,6 +17,8 @@
   "no": "No",
   "cancel": "Cancel",
   "updating": "Updating...",
-  "adding": "Adding..."
+  "adding": "Adding...",
+  "restore_confirm": "Restore?",
+  "success": "Success!"
 }
 

@@ -3,26 +3,41 @@ import { createActivityLog } from "./activityLogController.js";
 
 export const getAllRoles = async (req, res) => {
     try {
-      const roles = await prisma.role.findMany({
-        include: {
-          staff: {
-            select: {
-              id: true,
-              name: true,
-              surName: true,
-              email: true
-            }
-          }
-        },
-        orderBy: {
-          createdAt: 'desc',
+        const { deleteType, includeDeleted } = req.query;
+        
+        const where = {};
+        
+        // DeleteType filter - default olaraq yalnız silinməyən rolları göstər
+        if (includeDeleted === 'true') {
+            // Bütün rolları göstər (silinmişlər də daxil)
+        } else if (deleteType) {
+            where.deleteType = deleteType.toUpperCase();
+        } else {
+            // Default: yalnız silinməyən rolları göstər
+            where.deleteType = 'NONE';
         }
-      });
+        
+        const roles = await prisma.role.findMany({
+            where,
+            include: {
+                staff: {
+                    select: {
+                        id: true,
+                        name: true,
+                        surName: true,
+                        email: true
+                    }
+                }
+            },
+            orderBy: {
+                createdAt: 'desc',
+            }
+        });
 
-      return res.status(200).json({
-        success: true,
-        date: roles,
-      });
+        return res.status(200).json({
+            success: true,
+            date: roles,
+        });
     } catch (error) {
         console.error("getAllRoles error", error);
         return res.status(500).json({
@@ -111,7 +126,7 @@ export const createRole = async (req, res) => {
 export const updateRole = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, isCore } = req.body;
+        const { name, isCore, deleteType } = req.body;
         
         const existingRole = await prisma.role.findUnique({
           where: { id }
@@ -129,6 +144,7 @@ export const updateRole = async (req, res) => {
           data: {
             name: name !== undefined ? (name?.trim() || null) : existingRole.name,
             isCore: typeof isCore === "boolean" ? isCore : existingRole.isCore,
+            deleteType: deleteType !== undefined ? deleteType.toUpperCase() : existingRole.deleteType,
           }
         });
 
@@ -168,8 +184,16 @@ export const updateRole = async (req, res) => {
 export const deleteRole = async (req, res) => {
     try {
         const { id } = req.params;
+        const { deleteType = 'SOFT' } = req.body; // Default: SOFT delete
+        
+        // Ensure deleteType is valid
+        const validDeleteType = (deleteType && typeof deleteType === 'string' && deleteType.toUpperCase() === 'HARD') ? 'HARD' : 'SOFT';
+        
         const existingRole = await prisma.role.findUnique({
-          where: { id }
+            where: { id },
+            include: {
+                staff: true
+            }
         });
         
         if (!existingRole) {
@@ -179,30 +203,67 @@ export const deleteRole = async (req, res) => {
             });
         }
         
-        await prisma.role.delete({
-          where: { id }
-        });
+        // DeleteType-a görə silmə
+        if (validDeleteType === 'HARD') {
+            // Hard delete - əvvəlcə yoxla ki, staff var
+            if (existingRole.staff && existingRole.staff.length > 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Bu rol istifadəçilərə təyin edilib. Əvvəlcə istifadəçilərdən rolunu dəyişdirin"
+                });
+            }
+            
+            await prisma.role.delete({
+                where: { id }
+            });
 
-        // Activity log yarat
-        try {
-            await createActivityLog({
-                staffId: req.staffId || null,
-                entityType: "Role",
-                entityId: existingRole.id,
-                action: "DELETE",
-                description: `Rol silindi: ${existingRole.name}`,
-                changes: {
-                    name: existingRole.name,
-                    isCore: existingRole.isCore
+            // Activity log yarat
+            try {
+                await createActivityLog({
+                    staffId: req.staffId || null,
+                    entityType: "Role",
+                    entityId: existingRole.id,
+                    action: "HARD_DELETE",
+                    description: `Rol tamamilə silindi: ${existingRole.name}`,
+                    changes: {
+                        name: existingRole.name,
+                        isCore: existingRole.isCore
+                    }
+                });
+            } catch (logError) {
+                console.error("Activity log yaradılarkən xəta:", logError);
+            }
+        } else {
+            // Soft delete - deleteType-u dəyiş
+            await prisma.role.update({
+                where: { id },
+                data: {
+                    deleteType: 'SOFT'
                 }
             });
-        } catch (logError) {
-            console.error("Activity log yaradılarkən xəta:", logError);
+
+            // Activity log yarat
+            try {
+                await createActivityLog({
+                    staffId: req.staffId || null,
+                    entityType: "Role",
+                    entityId: existingRole.id,
+                    action: "SOFT_DELETE",
+                    description: `Rol soft delete edildi: ${existingRole.name}`,
+                    changes: {
+                        name: existingRole.name,
+                        isCore: existingRole.isCore,
+                        deleteType: 'SOFT'
+                    }
+                });
+            } catch (logError) {
+                console.error("Activity log yaradılarkən xəta:", logError);
+            }
         }
 
         return res.json({
             success: true,
-            message: "Role silindi",
+            message: validDeleteType === 'HARD' ? "Rol tamamilə silindi" : "Rol soft delete edildi",
             date: existingRole,
             data: existingRole,
         });

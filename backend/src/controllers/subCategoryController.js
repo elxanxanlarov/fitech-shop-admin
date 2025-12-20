@@ -4,9 +4,20 @@ import { createActivityLog } from "./activityLogController.js";
 // Bütün alt kateqoriyaları gətir
 export const getAllSubCategories = async (req, res) => {
     try {
-        const { categoryId } = req.query;
+        const { categoryId, deleteType, includeDeleted } = req.query;
         
         const where = {};
+        
+        // DeleteType filter - default olaraq yalnız silinməyən alt kateqoriyaları göstər
+        if (includeDeleted === 'true') {
+            // Bütün alt kateqoriyaları göstər (silinmişlər də daxil)
+        } else if (deleteType) {
+            where.deleteType = deleteType.toUpperCase();
+        } else {
+            // Default: yalnız silinməyən alt kateqoriyaları göstər
+            where.deleteType = 'NONE';
+        }
+        
         if (categoryId) {
             where.categoryId = categoryId;
         }
@@ -183,7 +194,7 @@ export const createSubCategory = async (req, res) => {
 export const updateSubCategory = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, description, categoryId, isActive } = req.body;
+        const { name, description, categoryId, isActive, deleteType } = req.body;
 
         // Alt kateqoriyanın mövcud olub olmadığını yoxla
         const existingSubCategory = await prisma.subCategory.findUnique({
@@ -251,6 +262,7 @@ export const updateSubCategory = async (req, res) => {
                 description: description !== undefined ? (description?.trim() || null) : existingSubCategory.description,
                 categoryId: finalCategoryId,
                 isActive: isActive !== undefined ? isActive : existingSubCategory.isActive,
+                deleteType: deleteType !== undefined ? deleteType.toUpperCase() : existingSubCategory.deleteType,
             },
             include: {
                 category: {
@@ -305,6 +317,10 @@ export const updateSubCategory = async (req, res) => {
 export const deleteSubCategory = async (req, res) => {
     try {
         const { id } = req.params;
+        const { deleteType = 'SOFT' } = req.body; // Default: SOFT delete
+        
+        // Ensure deleteType is valid
+        const validDeleteType = (deleteType && typeof deleteType === 'string' && deleteType.toUpperCase() === 'HARD') ? 'HARD' : 'SOFT';
 
         // Alt kateqoriyanın mövcud olub olmadığını yoxla
         const existingSubCategory = await prisma.subCategory.findUnique({
@@ -322,40 +338,72 @@ export const deleteSubCategory = async (req, res) => {
             });
         }
 
-        // Əgər alt kateqoriyaya aid məhsul varsa, silməyə icazə vermə
-        if (existingSubCategory.products.length > 0) {
-            return res.status(400).json({
-                success: false,
-                message: "Bu alt kateqoriyaya aid məhsullar var. Əvvəlcə məhsulları silin və ya başqa alt kateqoriyaya köçürün"
+        // DeleteType-a görə silmə
+        if (validDeleteType === 'HARD') {
+            // Hard delete - əvvəlcə yoxla ki, məhsul var
+            if (existingSubCategory.products.length > 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Bu alt kateqoriyaya aid məhsullar var. Əvvəlcə məhsulları silin və ya başqa alt kateqoriyaya köçürün"
+                });
+            }
+
+            await prisma.subCategory.delete({
+                where: { id }
             });
-        }
 
-        await prisma.subCategory.delete({
-            where: { id }
-        });
-
-        // Activity log yarat
-        try {
-            await createActivityLog({
-                staffId: req.staffId || null,
-                entityType: "SubCategory",
-                entityId: id,
-                action: "DELETE",
-                description: `Alt kateqoriya silindi: ${existingSubCategory.name} (${existingSubCategory.category.name})`,
-                changes: {
-                    name: existingSubCategory.name,
-                    description: existingSubCategory.description,
-                    categoryId: existingSubCategory.categoryId,
-                    categoryName: existingSubCategory.category.name
+            // Activity log yarat
+            try {
+                await createActivityLog({
+                    staffId: req.staffId || null,
+                    entityType: "SubCategory",
+                    entityId: id,
+                    action: "HARD_DELETE",
+                    description: `Alt kateqoriya tamamilə silindi: ${existingSubCategory.name} (${existingSubCategory.category.name})`,
+                    changes: {
+                        name: existingSubCategory.name,
+                        description: existingSubCategory.description,
+                        categoryId: existingSubCategory.categoryId,
+                        categoryName: existingSubCategory.category.name
+                    }
+                });
+            } catch (logError) {
+                console.error("Activity log yaradılarkən xəta:", logError);
+            }
+        } else {
+            // Soft delete - deleteType-u dəyiş
+            await prisma.subCategory.update({
+                where: { id },
+                data: {
+                    deleteType: 'SOFT',
+                    isActive: false // Soft delete zamanı isActive də false olsun
                 }
             });
-        } catch (logError) {
-            console.error("Activity log yaradılarkən xəta:", logError);
+
+            // Activity log yarat
+            try {
+                await createActivityLog({
+                    staffId: req.staffId || null,
+                    entityType: "SubCategory",
+                    entityId: id,
+                    action: "SOFT_DELETE",
+                    description: `Alt kateqoriya soft delete edildi: ${existingSubCategory.name} (${existingSubCategory.category.name})`,
+                    changes: {
+                        name: existingSubCategory.name,
+                        description: existingSubCategory.description,
+                        categoryId: existingSubCategory.categoryId,
+                        categoryName: existingSubCategory.category.name,
+                        deleteType: 'SOFT'
+                    }
+                });
+            } catch (logError) {
+                console.error("Activity log yaradılarkən xəta:", logError);
+            }
         }
 
         return res.json({
             success: true,
-            message: "Alt kateqoriya uğurla silindi",
+            message: validDeleteType === 'HARD' ? "Alt kateqoriya tamamilə silindi" : "Alt kateqoriya soft delete edildi",
         });
     } catch (error) {
         console.error("deleteSubCategory error", error);

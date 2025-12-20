@@ -88,6 +88,17 @@ export default function Expenses() {
             }
         };
         fetchExpenses();
+        
+        // Custom event dinlə - xərc bərpa ediləndə yenilə
+        const handleExpenseRestored = () => {
+            fetchExpenses();
+        };
+        
+        window.addEventListener('expenseRestored', handleExpenseRestored);
+        
+        return () => {
+            window.removeEventListener('expenseRestored', handleExpenseRestored);
+        };
     }, [t]);
 
     const handleEdit = async (expense) => {
@@ -116,6 +127,11 @@ export default function Expenses() {
                 await expenseApi.delete(expense.id);
                 
                 setExpenseData(prev => prev.filter(item => item.id !== expense.id));
+                
+                // Custom event dispatch et - DeletedProductsBell yenilənsin
+                window.dispatchEvent(new CustomEvent('expenseDeleted', { 
+                    detail: { expenseId: expense.id } 
+                }));
                 
                 Alert.close();
                 setTimeout(() => {
@@ -160,6 +176,13 @@ export default function Expenses() {
                 await Promise.all(selectedIds.map(id => expenseApi.delete(id)));
                 
                 setExpenseData(prev => prev.filter(item => !selectedIds.includes(item.id)));
+                
+                // Custom event dispatch et - DeletedProductsBell yenilənsin
+                selectedIds.forEach(id => {
+                    window.dispatchEvent(new CustomEvent('expenseDeleted', { 
+                        detail: { expenseId: id } 
+                    }));
+                });
                 
                 Alert.close();
                 setTimeout(() => {

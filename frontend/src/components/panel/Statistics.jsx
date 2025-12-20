@@ -282,6 +282,21 @@ export default function Statistics() {
                 <p className="text-sm text-gray-500 mt-1">
                   {t('stock')}: {overallData.products.totalStock.toLocaleString()}
                 </p>
+                {overallData.products.deleted && overallData.products.deleted.total > 0 && (
+                  <div className="mt-2 pt-2 border-t border-gray-200">
+                    <p className="text-xs text-red-600 font-medium">
+                      {t('deleted')}: {overallData.products.deleted.total}
+                    </p>
+                    <div className="text-xs text-gray-500 mt-1 space-y-0.5">
+                      {overallData.products.deleted.soft > 0 && (
+                        <p>• {t('soft_deleted')}: {overallData.products.deleted.soft}</p>
+                      )}
+                      {overallData.products.deleted.archived > 0 && (
+                        <p>• {t('archived')}: {overallData.products.deleted.archived}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="bg-green-100 rounded-full p-3">
                 <Package className="w-8 h-8 text-green-600" />

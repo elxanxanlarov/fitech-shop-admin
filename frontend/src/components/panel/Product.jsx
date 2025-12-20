@@ -104,6 +104,17 @@ export default function Product() {
 
     useEffect(() => {
         fetchProducts();
+        
+        // Custom event dinlə - məhsul bərpa ediləndə yenilə
+        const handleProductRestored = () => {
+            fetchProducts();
+        };
+        
+        window.addEventListener('productRestored', handleProductRestored);
+        
+        return () => {
+            window.removeEventListener('productRestored', handleProductRestored);
+        };
     }, [fetchProducts, i18n.language]);
 
     const handleEdit = async (product) => {
@@ -129,9 +140,16 @@ export default function Product() {
             try {
                 Alert.loading(t('loading'));
                 
-                await productApi.delete(product.id);
+                // Default olaraq SOFT delete istifadə et
+                await productApi.delete(product.id, 'SOFT');
                 
+                // Soft delete zamanı məhsul siyahıdan çıxır (çünki deleteType filter var)
                 setProductData(prev => prev.filter(item => item.id !== product.id));
+                
+                // Custom event dispatch et - DeletedProductsBell yenilənsin
+                window.dispatchEvent(new CustomEvent('productSoftDeleted', { 
+                    detail: { productId: product.id } 
+                }));
                 
                 Alert.close();
                 setTimeout(() => {

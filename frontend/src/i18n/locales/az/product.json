@@ -130,6 +130,18 @@
   "is_active": "Aktiv",
   "subcategory": "Alt Kateqoriya",
   "select_category": "Kateqoriya seçin",
-  "select_subcategory": "Alt kateqoriya seçin"
+  "select_subcategory": "Alt kateqoriya seçin",
+  "deleted_items": "Silinmiş Elementlər",
+  "no_deleted_items": "Silinmiş element yoxdur",
+  "total_deleted": "Ümumi",
+  "delete_all": "Hamısını Sil",
+  "restore_all": "Hamısını Bərpa Et",
+  "restore": "Bərpa et",
+  "restore_confirm_text": "Bu elementi bərpa etmək istəyirsiniz?",
+  "restore_success": "Element bərpa edildi",
+  "restore_all_success": "Bütün elementlər bərpa edildi",
+  "restore_all_confirm": "Bütün silinmiş elementləri bərpa etmək istəyirsiniz?",
+  "hard_delete": "Tamamilə sil",
+  "items": "element"
 }
 

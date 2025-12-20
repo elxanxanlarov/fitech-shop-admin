@@ -95,6 +95,17 @@ export default function CategoryManagement() {
         };
 
         fetchCategories();
+        
+        // Custom event dinlə - kateqoriya bərpa ediləndə yenilə
+        const handleCategoryRestored = () => {
+            fetchCategories();
+        };
+        
+        window.addEventListener('categoryRestored', handleCategoryRestored);
+        
+        return () => {
+            window.removeEventListener('categoryRestored', handleCategoryRestored);
+        };
     }, [tAlert, t]);
 
     // Fetch all products
@@ -114,6 +125,17 @@ export default function CategoryManagement() {
         };
 
         fetchProducts();
+        
+        // Custom event dinlə - məhsul bərpa ediləndə yenilə
+        const handleProductRestored = () => {
+            fetchProducts();
+        };
+        
+        window.addEventListener('productRestored', handleProductRestored);
+        
+        return () => {
+            window.removeEventListener('productRestored', handleProductRestored);
+        };
     }, []);
 
     const handleEdit = async (category) => {
@@ -584,13 +606,6 @@ export default function CategoryManagement() {
                                                     >
                                                         <Edit className="w-4 h-4" />
                                                     </button>
-                                                    <button
-                                                        onClick={() => handleDelete(category)}
-                                                        className="text-red-600 hover:text-red-900 p-1"
-                                                        title={t('delete') || 'Sil'}
-                                                    >
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -909,13 +924,6 @@ export default function CategoryManagement() {
                                                                                 title={t('edit') || 'Redaktə et'}
                                                                             >
                                                                                 <Edit className="w-4 h-4" />
-                                                                            </button>
-                                                                            <button
-                                                                                onClick={() => handleDeleteSubCategory(subCategory)}
-                                                                                className="text-red-600 hover:text-red-900 p-1"
-                                                                                title={t('delete') || 'Sil'}
-                                                                            >
-                                                                                <Trash2 className="w-4 h-4" />
                                                                             </button>
                                                                         </div>
                                                                     </div>

@@ -206,10 +206,10 @@ export default function CashHandover() {
                 title={t('cash_handovers') || 'Məbləğ Təslimləri'}
                 searchFields={['note']}
                 onEdit={handleEdit}
-                onDelete={handleDelete}
+                onDelete={undefined}
                 onView={handleView}
-                onBulkDelete={handleBulkDelete}
-                showBulkActions={true}
+                onBulkDelete={undefined}
+                showBulkActions={false}
                 showFilters={false}
                 showSearch={true}
                 showDateFilter={true}

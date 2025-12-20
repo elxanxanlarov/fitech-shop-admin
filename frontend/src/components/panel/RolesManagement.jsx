@@ -83,6 +83,17 @@ export default function RolesManagement() {
         };
 
         fetchRoles();
+        
+        // Custom event dinlə - rol bərpa ediləndə yenilə
+        const handleRoleRestored = () => {
+            fetchRoles();
+        };
+        
+        window.addEventListener('roleRestored', handleRoleRestored);
+        
+        return () => {
+            window.removeEventListener('roleRestored', handleRoleRestored);
+        };
     }, [tAlert, t]);
 
     const handleEdit = async (role) => {
@@ -250,10 +261,10 @@ export default function RolesManagement() {
                 title={t('roles') || 'Rollar'}
                 searchFields={['name']}
                 onEdit={handleEdit}
-                onDelete={handleDelete}
+                onDelete={undefined}
                 onView={handleView}
-                onBulkDelete={handleBulkDelete}
-                showBulkActions={true}
+                onBulkDelete={undefined}
+                showBulkActions={false}
                 showFilters={false}
                 showSearch={true}
                 showDateFilter={false}

@@ -26,8 +26,10 @@ export const roleApi = {
   },
 
   // Delete role
-  delete: async (id) => {
-    const response = await api.delete(`/role/${id}`);
+  delete: async (id, deleteType = 'SOFT') => {
+    const response = await api.delete(`/role/${id}`, {
+      data: { deleteType }
+    });
     return response.data;
   },
 };

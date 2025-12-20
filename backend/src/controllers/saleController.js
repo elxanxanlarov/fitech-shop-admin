@@ -5,7 +5,22 @@ import { createReceiptForSale } from "./receiptController.js";
 
 export const getAllSales = async (req, res) => {
     try {
+        const { deleteType, includeDeleted } = req.query;
+        
+        const where = {};
+        
+        // DeleteType filter - default olaraq yalnız silinməyən satışları göstər
+        if (includeDeleted === 'true') {
+            // Bütün satışları göstər (silinmişlər də daxil)
+        } else if (deleteType) {
+            where.deleteType = deleteType.toUpperCase();
+        } else {
+            // Default: yalnız silinməyən satışları göstər
+            where.deleteType = 'NONE';
+        }
+        
         const sales = await prisma.sale.findMany({
+            where,
             include: {
                 items: {
                     include: {
@@ -298,7 +313,7 @@ export const createSale = async (req, res) => {
 export const updateSale = async (req, res) => {
     try {
         const { id } = req.params;
-        const { customerName, customerSurname, customerPhone, paidAmount, note, paymentType } = req.body;
+        const { customerName, customerSurname, customerPhone, paidAmount, note, paymentType, deleteType } = req.body;
 
         const existingSale = await prisma.sale.findUnique({ 
             where: { id },
@@ -318,6 +333,7 @@ export const updateSale = async (req, res) => {
                 paidAmount: paidAmount !== undefined ? new Prisma.Decimal(paidAmount) : existingSale.paidAmount,
                 paymentType: paymentType !== undefined ? (paymentType || 'cash') : existingSale.paymentType,
                 note: note !== undefined ? (note?.trim() || null) : existingSale.note,
+                deleteType: deleteType !== undefined ? deleteType.toUpperCase() : existingSale.deleteType,
             },
             include: {
                 items: {
@@ -359,7 +375,12 @@ export const updateSale = async (req, res) => {
 export const deleteSale = async (req, res) => {
     try {
         const { id } = req.params;
-        console.log(`deleteSale request, id: ${id}`);
+        const { deleteType = 'SOFT' } = req.body; // Default: SOFT delete
+        
+        // Ensure deleteType is valid
+        const validDeleteType = (deleteType && typeof deleteType === 'string' && deleteType.toUpperCase() === 'HARD') ? 'HARD' : 'SOFT';
+        
+        console.log(`deleteSale request, id: ${id}, deleteType: ${validDeleteType}`);
         const existingSale = await prisma.sale.findUnique({ 
             where: { id },
             include: { items: true }
@@ -369,75 +390,107 @@ export const deleteSale = async (req, res) => {
             return res.status(404).json({ success: false, message: "Satış tapılmadı" });
         }
 
-        // Stokları geri qaytar
-        for (const item of existingSale.items) {
-            await prisma.product.update({
-                where: { id: item.productId },
-                data: {
-                    stock: {
-                        increment: item.quantity
+        // DeleteType-a görə silmə
+        if (validDeleteType === 'HARD') {
+            // Hard delete - stokları geri qaytar və tamamilə sil
+            // Stokları geri qaytar
+            for (const item of existingSale.items) {
+                await prisma.product.update({
+                    where: { id: item.productId },
+                    data: {
+                        stock: {
+                            increment: item.quantity
+                        }
                     }
+                });
+            }
+
+            // Remove related records that reference Sale to avoid foreign key constraint errors
+            try {
+                const saleItemIds = existingSale.items.map(i => i.id);
+
+                // 1) Delete SaleReturnItem entries that reference these sale items
+                if (saleItemIds.length > 0) {
+                    console.log(`Deleting SaleReturnItem by saleItemId count: ${saleItemIds.length}`);
+                    await prisma.saleReturnItem.deleteMany({ where: { saleItemId: { in: saleItemIds } } });
+                }
+
+                // 2) Find SaleReturn records for this sale and delete their items
+                const saleReturns = await prisma.saleReturn.findMany({ where: { saleId: id } });
+                const returnIds = saleReturns.map(r => r.id);
+                if (returnIds.length > 0) {
+                    console.log(`Deleting SaleReturnItem by returnId count: ${returnIds.length}`);
+                    await prisma.saleReturnItem.deleteMany({ where: { returnId: { in: returnIds } } });
+                    console.log(`Deleting SaleReturn records count: ${returnIds.length}`);
+                    await prisma.saleReturn.deleteMany({ where: { id: { in: returnIds } } });
+                }
+
+                // 3) Delete SaleItem records for this sale
+                if (saleItemIds.length > 0) {
+                    console.log(`Deleting SaleItem records count: ${saleItemIds.length}`);
+                    await prisma.saleItem.deleteMany({ where: { id: { in: saleItemIds } } });
+                }
+
+                // 4) Delete any receipts linked to this sale (should cascade, but be explicit)
+                console.log(`Deleting Receipt(s) for sale id: ${id}`);
+                await prisma.receipt.deleteMany({ where: { saleId: id } });
+
+                // Finally, delete the sale
+                await prisma.sale.delete({ where: { id } });
+            } catch (deleteError) {
+                console.error('Error while deleting related sale records', deleteError);
+                throw deleteError; // will be caught by outer catch
+            }
+
+            // Activity log yarat
+            try {
+                await createActivityLog({
+                    staffId: req.staffId || null,
+                    entityType: "Sale",
+                    entityId: existingSale.id,
+                    action: "HARD_DELETE",
+                    description: `Satış tamamilə silindi: ${existingSale.customerName || ''} ${existingSale.customerSurname || ''} - ${existingSale.totalAmount.toString()} AZN`,
+                    changes: {
+                        customerName: existingSale.customerName,
+                        customerSurname: existingSale.customerSurname,
+                        totalAmount: existingSale.totalAmount.toString(),
+                        itemsCount: existingSale.items.length
+                    }
+                });
+            } catch (logError) {
+                console.error("Activity log yaradılarkən xəta:", logError);
+            }
+        } else {
+            // Soft delete - deleteType-u dəyiş
+            await prisma.sale.update({
+                where: { id },
+                data: {
+                    deleteType: 'SOFT'
                 }
             });
+
+            // Activity log yarat
+            try {
+                await createActivityLog({
+                    staffId: req.staffId || null,
+                    entityType: "Sale",
+                    entityId: existingSale.id,
+                    action: "SOFT_DELETE",
+                    description: `Satış soft delete edildi: ${existingSale.customerName || ''} ${existingSale.customerSurname || ''} - ${existingSale.totalAmount.toString()} AZN`,
+                    changes: {
+                        customerName: existingSale.customerName,
+                        customerSurname: existingSale.customerSurname,
+                        totalAmount: existingSale.totalAmount.toString(),
+                        itemsCount: existingSale.items.length,
+                        deleteType: 'SOFT'
+                    }
+                });
+            } catch (logError) {
+                console.error("Activity log yaradılarkən xəta:", logError);
+            }
         }
 
-        // Remove related records that reference Sale to avoid foreign key constraint errors
-        try {
-            const saleItemIds = existingSale.items.map(i => i.id);
-
-            // 1) Delete SaleReturnItem entries that reference these sale items
-            if (saleItemIds.length > 0) {
-                console.log(`Deleting SaleReturnItem by saleItemId count: ${saleItemIds.length}`);
-                await prisma.saleReturnItem.deleteMany({ where: { saleItemId: { in: saleItemIds } } });
-            }
-
-            // 2) Find SaleReturn records for this sale and delete their items
-            const saleReturns = await prisma.saleReturn.findMany({ where: { saleId: id } });
-            const returnIds = saleReturns.map(r => r.id);
-            if (returnIds.length > 0) {
-                console.log(`Deleting SaleReturnItem by returnId count: ${returnIds.length}`);
-                await prisma.saleReturnItem.deleteMany({ where: { returnId: { in: returnIds } } });
-                console.log(`Deleting SaleReturn records count: ${returnIds.length}`);
-                await prisma.saleReturn.deleteMany({ where: { id: { in: returnIds } } });
-            }
-
-            // 3) Delete SaleItem records for this sale
-            if (saleItemIds.length > 0) {
-                console.log(`Deleting SaleItem records count: ${saleItemIds.length}`);
-                await prisma.saleItem.deleteMany({ where: { id: { in: saleItemIds } } });
-            }
-
-            // 4) Delete any receipts linked to this sale (should cascade, but be explicit)
-            console.log(`Deleting Receipt(s) for sale id: ${id}`);
-            await prisma.receipt.deleteMany({ where: { saleId: id } });
-
-            // Finally, delete the sale
-            await prisma.sale.delete({ where: { id } });
-        } catch (deleteError) {
-            console.error('Error while deleting related sale records', deleteError);
-            throw deleteError; // will be caught by outer catch
-        }
-
-        // Activity log yarat
-        try {
-            await createActivityLog({
-                staffId: req.staffId || null,
-                entityType: "Sale",
-                entityId: existingSale.id,
-                action: "DELETE",
-                description: `Satış silindi: ${existingSale.customerName || ''} ${existingSale.customerSurname || ''} - ${existingSale.totalAmount.toString()} AZN`,
-                changes: {
-                    customerName: existingSale.customerName,
-                    customerSurname: existingSale.customerSurname,
-                    totalAmount: existingSale.totalAmount.toString(),
-                    itemsCount: existingSale.items.length
-                }
-            });
-        } catch (logError) {
-            console.error("Activity log yaradılarkən xəta:", logError);
-        }
-
-        return res.json({ success: true, message: "Satış silindi", date: existingSale });
+        return res.json({ success: true, message: validDeleteType === 'HARD' ? "Satış tamamilə silindi" : "Satış soft delete edildi", date: existingSale });
     } catch (error) {
         console.error("deleteSale error", error);
         // Return error message for debugging (can be removed in production)

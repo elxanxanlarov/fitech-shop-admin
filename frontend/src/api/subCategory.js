@@ -27,8 +27,10 @@ export const subCategoryApi = {
   },
 
   // Delete subcategory
-  delete: async (id) => {
-    const response = await api.delete(`/subcategory/${id}`);
+  delete: async (id, deleteType = 'SOFT') => {
+    const response = await api.delete(`/subcategory/${id}`, {
+      data: { deleteType }
+    });
     return response.data;
   },
 };
