@@ -42,8 +42,12 @@ export default function Product() {
     const buildQueryString = useCallback((filters, searchQuery) => {
         const params = new URLSearchParams();
         
-        if (searchQuery && searchQuery.trim()) {
-            params.append('search', searchQuery.trim());
+        // Ensure searchQuery is a string before calling trim
+        if (searchQuery !== null && searchQuery !== undefined) {
+            const searchStr = typeof searchQuery === 'string' ? searchQuery : String(searchQuery || '');
+            if (searchStr.trim()) {
+                params.append('search', searchStr.trim());
+            }
         }
         
         if (filters.categoryName) {
@@ -81,11 +85,17 @@ export default function Product() {
             if (response.success && response.date) {
                 setProductData(response.date);
             } else {
+                // Əgər response.success false-dursa, backend-dən gələn mesajı göstər
+                const errorMessage = response.message || t('error_fetching_text');
+                if (response.success === false) {
+                    Alert.error(t('error_fetching'), errorMessage);
+                }
                 setProductData([]);
             }
         } catch (error) {
             console.error('Error fetching products:', error);
-            Alert.error(t('error_fetching'), t('error_fetching_text'));
+            const errorMessage = error.response?.data?.message || error.message || t('error_fetching_text');
+            Alert.error(t('error_fetching'), errorMessage);
             setProductData([]);
         } finally {
             setLoading(false);
@@ -275,9 +285,10 @@ export default function Product() {
                 searchFields={['name', 'barcode', 'description']}
                 searchPlaceholder={t('search_by_name_barcode') || 'Ad, barkod və ya təsvirə görə axtar...'}
                 filterOptions={useMemo(() => {
-                    const categoryNames = categories.map(cat => cat.name);
+                    // categoryName üçün object array hazırla (SearchDropdown üçün)
+                    const categoryObjects = categories.map(cat => ({ id: cat.name, name: cat.name }));
                     return {
-                        categoryName: categoryNames,
+                        categoryName: categoryObjects, // Object array
                         stockStatus: [
                             t('in_stock') || 'Stokda var',
                             t('low_stock') || 'Az stok',

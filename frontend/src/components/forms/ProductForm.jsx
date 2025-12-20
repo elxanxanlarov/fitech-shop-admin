@@ -6,6 +6,7 @@ import Alert from '../ui/Alert';
 import { MdInventory, MdDescription, MdImage, MdAttachMoney, MdLocalOffer, MdQrCode, MdStorage, MdCloudUpload, MdAdd, MdRemove, MdEdit } from 'react-icons/md';
 import { productApi, uploadApi, categoryApi, subCategoryApi, stockApi } from '../../api';
 import { createInputChangeHandler } from '../../utils/validation';
+import SearchDropdown from '../ui/SearchDropdown';
 
 export default function ProductForm() {
     const navigate = useNavigate();
@@ -740,46 +741,34 @@ export default function ProductForm() {
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                {t('category') || 'Kateqoriya'}
-                            </label>
-                            <select
+                            <SearchDropdown
+                                label={t('category') || 'Kateqoriya'}
+                                options={categories}
                                 value={formData.categoryId}
-                                onChange={(e) => handleCategoryChange(e.target.value)}
+                                onChange={(value) => handleCategoryChange(value)}
+                                placeholder={t('select_category') || 'Kateqoriya seçin'}
                                 disabled={isLoading || loadingCategories}
-                                className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.categoryId ? 'border-red-500' : 'border-gray-300'
-                                    }`}
-                            >
-                                <option value="">{t('select_category') || 'Kateqoriya seçin'}</option>
-                                {categories.map(category => (
-                                    <option key={category.id} value={category.id}>
-                                        {category.name}
-                                    </option>
-                                ))}
-                            </select>
+                                error={!!errors.categoryId}
+                                searchFields={['name']}
+                                className="w-full"
+                            />
                             {errors.categoryId && (
                                 <p className="mt-1 text-sm text-red-600">{errors.categoryId}</p>
                             )}
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                {t('subcategory') || 'Alt Kateqoriya'}
-                            </label>
-                            <select
+                            <SearchDropdown
+                                label={t('subcategory') || 'Alt Kateqoriya'}
+                                options={subCategories}
                                 value={formData.subCategoryId}
-                                onChange={(e) => handleInputChange('subCategoryId', e.target.value)}
+                                onChange={(value) => handleInputChange('subCategoryId', value)}
+                                placeholder={t('select_subcategory') || 'Alt kateqoriya seçin'}
                                 disabled={isLoading || !formData.categoryId || loadingCategories}
-                                className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.subCategoryId ? 'border-red-500' : 'border-gray-300'
-                                    } ${!formData.categoryId ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                            >
-                                <option value="">{t('select_subcategory') || 'Alt kateqoriya seçin'}</option>
-                                {subCategories.map(subCategory => (
-                                    <option key={subCategory.id} value={subCategory.id}>
-                                        {subCategory.name}
-                                    </option>
-                                ))}
-                            </select>
+                                error={!!errors.subCategoryId}
+                                searchFields={['name']}
+                                className="w-full"
+                            />
                             {errors.subCategoryId && (
                                 <p className="mt-1 text-sm text-red-600">{errors.subCategoryId}</p>
                             )}

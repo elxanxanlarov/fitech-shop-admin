@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import EmptyState from './EmptyState';
 import LoadingSpinner from './LoadingSpinner';
 import { useClickOutside } from '../../hooks';
+import SearchDropdown from './SearchDropdown';
 import {
   Search,
   Filter,
@@ -453,7 +454,9 @@ export default function TableTamplate({
           <div className="flex flex-col lg:flex-row gap-3 items-start lg:items-center">
             {/* Search Input */}
             {showSearch && (() => {
-              const currentSearchValue = onSearchChange && searchValue !== undefined && searchValue !== null ? searchValue : (searchTerm || '');
+              // Ensure currentSearchValue is always a string
+              const searchVal = onSearchChange && searchValue !== undefined && searchValue !== null ? searchValue : (searchTerm || '');
+              const currentSearchValue = typeof searchVal === 'string' ? searchVal : String(searchVal || '');
               const hasValue = currentSearchValue.trim().length > 0;
               
               const handleClear = () => {
@@ -488,7 +491,8 @@ export default function TableTamplate({
                       }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && onSearchSubmit) {
-                          onSearchSubmit();
+                          // Pass currentSearchValue when Enter is pressed
+                          onSearchSubmit(currentSearchValue);
                         }
                       }}
                       className={`w-full ${hasValue ? 'pl-10 pr-10' : 'pl-10 pr-4'} py-2.5 border border-gray-300 rounded-lg bg-white transition-colors`}
@@ -507,10 +511,15 @@ export default function TableTamplate({
               );
             })()}
             {showSearch && onSearchSubmit && (() => {
-              const currentSearchValue = onSearchChange && searchValue !== undefined && searchValue !== null ? searchValue : (searchTerm || '');
+              // Ensure currentSearchValue is always a string
+              const searchVal = onSearchChange && searchValue !== undefined && searchValue !== null ? searchValue : (searchTerm || '');
+              const currentSearchValue = typeof searchVal === 'string' ? searchVal : String(searchVal || '');
               return (
                 <button
-                  onClick={onSearchSubmit}
+                  onClick={() => {
+                    // Pass currentSearchValue as parameter to onSearchSubmit
+                    onSearchSubmit(currentSearchValue);
+                  }}
                   disabled={!currentSearchValue.trim()}
                   className={`px-4 py-2.5 rounded-lg font-medium transition-colors whitespace-nowrap ${
                     currentSearchValue.trim()
@@ -659,41 +668,70 @@ export default function TableTamplate({
                           return null;
                         }
 
+                        // Check if options is an array of objects (for SearchDropdown) or strings (for select)
+                        const isObjectArray = options.length > 0 && typeof options[0] === 'object' && options[0] !== null;
+
                         return (
                           <div key={key} className="w-full">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              {getLabel(key)}
-                            </label>
-                            <select
-                              value={filters[key] || ''}
-                              onChange={(e) => {
-                                const newFilters = { ...filters, [key]: e.target.value };
-                                setFilters(newFilters);
-                                if (onFilterChange) {
-                                  onFilterChange(newFilters);
-                                }
-                              }}
-                              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-sm text-gray-900 transition-colors appearance-none cursor-pointer"
-                              style={{
-                                minHeight: '42px',
-                                backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
-                                backgroundPosition: 'right 0.5rem center',
-                                backgroundRepeat: 'no-repeat',
-                                backgroundSize: '1.5em 1.5em',
-                                paddingRight: '2.5rem'
-                              }}
-                            >
-                              <option value="" className="text-gray-500">{t('all') || 'Hamısı'}</option>
-                              {options.map((option, index) => (
-                                <option
-                                  key={`${option}-${index}`}
-                                  value={option}
-                                  className="text-gray-900 py-1"
+                            {isObjectArray && key === 'categoryName' ? (
+                              // Use SearchDropdown for categoryName
+                              <SearchDropdown
+                                label={getLabel(key)}
+                                options={options}
+                                value={filters[key] || ''}
+                                onChange={(value) => {
+                                  const newFilters = { ...filters, [key]: value };
+                                  setFilters(newFilters);
+                                  if (onFilterChange) {
+                                    onFilterChange(newFilters);
+                                  }
+                                }}
+                                placeholder={t('all') || 'Hamısı'}
+                                searchFields={['name']}
+                                className="w-full"
+                              />
+                            ) : (
+                              // Use select for other filters
+                              <>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  {getLabel(key)}
+                                </label>
+                                <select
+                                  value={filters[key] || ''}
+                                  onChange={(e) => {
+                                    const newFilters = { ...filters, [key]: e.target.value };
+                                    setFilters(newFilters);
+                                    if (onFilterChange) {
+                                      onFilterChange(newFilters);
+                                    }
+                                  }}
+                                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-sm text-gray-900 transition-colors appearance-none cursor-pointer"
+                                  style={{
+                                    minHeight: '42px',
+                                    backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                                    backgroundPosition: 'right 0.5rem center',
+                                    backgroundRepeat: 'no-repeat',
+                                    backgroundSize: '1.5em 1.5em',
+                                    paddingRight: '2.5rem'
+                                  }}
                                 >
-                                  {option}
-                                </option>
-                              ))}
-                            </select>
+                                  <option value="" className="text-gray-500">{t('all') || 'Hamısı'}</option>
+                                  {options.map((option, index) => {
+                                    const optionValue = isObjectArray ? (option.id || option.value || option.name) : option;
+                                    const optionLabel = isObjectArray ? (option.name || option.label || optionValue) : option;
+                                    return (
+                                      <option
+                                        key={`${optionValue}-${index}`}
+                                        value={optionValue}
+                                        className="text-gray-900 py-1"
+                                      >
+                                        {optionLabel}
+                                      </option>
+                                    );
+                                  })}
+                                </select>
+                              </>
+                            )}
                           </div>
                         );
                       })}

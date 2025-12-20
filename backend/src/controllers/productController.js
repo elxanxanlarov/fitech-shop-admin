@@ -58,10 +58,10 @@ export const getAllProducts = async (req, res) => {
             }
         } else {
             // Stock range filter (only if stockStatus is not set)
-            if (minStock !== undefined || maxStock !== undefined) {
-                where.stock = {};
-                if (minStock !== undefined) where.stock.gte = parseInt(minStock);
-                if (maxStock !== undefined) where.stock.lte = parseInt(maxStock);
+        if (minStock !== undefined || maxStock !== undefined) {
+            where.stock = {};
+            if (minStock !== undefined) where.stock.gte = parseInt(minStock);
+            if (maxStock !== undefined) where.stock.lte = parseInt(maxStock);
             }
         }
 
@@ -86,12 +86,22 @@ export const getAllProducts = async (req, res) => {
 
         // Search
         // Note: MySQL default collation is case-insensitive, so mode is not needed
-        if (search) {
-            where.OR = [
-                { name: { contains: search } },
-                { barcode: { contains: search } },
-                { description: { contains: search } }
+        if (search && search.trim()) {
+            const searchTerm = search.trim();
+            const searchConditions = [
+                { name: { contains: searchTerm } },
+                { barcode: { contains: searchTerm } }
             ];
+            
+            // Description field null ola bilər, ona görə də null check edirik
+            searchConditions.push({
+                AND: [
+                    { description: { not: null } },
+                    { description: { contains: searchTerm } }
+                ]
+            });
+            
+            where.OR = searchConditions;
         }
 
         const products = await prisma.product.findMany({
@@ -129,9 +139,15 @@ export const getAllProducts = async (req, res) => {
         });
     } catch (error) {
         console.error("getAllProducts error", error);
+        console.error("Error details:", {
+            message: error.message,
+            stack: error.stack,
+            query: req.query
+        });
         return res.status(500).json({
             success: false,
-            message: "Məhsul siyahısı alınarkən xəta baş verdi"
+            message: "Məhsul siyahısı alınarkən xəta baş verdi",
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 };
