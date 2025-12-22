@@ -64,6 +64,7 @@ export default function TableTamplate({
   const [selectedRows, setSelectedRows] = useState([]);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [filters, setFilters] = useState({});
+  const [tempFilters, setTempFilters] = useState({}); // Temporary filters for dropdown
   const [dateRange, setDateRange] = useState(() => {
     // If server-side pagination with date range value, use it, otherwise default
     if (serverSidePagination && dateRangeValue && (dateRangeValue.start || dateRangeValue.end)) {
@@ -80,6 +81,13 @@ export default function TableTamplate({
     return serverSidePagination && datePresetValue ? datePresetValue : 'today';
   });
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+
+  // Initialize tempFilters when dropdown opens
+  useEffect(() => {
+    if (showFilterDropdown) {
+      setTempFilters(filters);
+    }
+  }, [showFilterDropdown]);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [columnWidths, setColumnWidths] = useState({});
@@ -621,7 +629,7 @@ export default function TableTamplate({
                 </button>
 
                 {showFilterDropdown && (
-                  <div className="absolute right-0 lg:right-0 mt-2 w-96 bg-white border border-gray-200 rounded-lg shadow-xl z-50 overflow-visible">
+                  <div className="absolute right-0 lg:right-0 mt-2 w-[50vw] min-w-[400px] max-w-[600px] bg-white border border-gray-200 rounded-lg shadow-xl z-50 overflow-visible">
                     <div className="p-6 pb-4 border-b border-gray-200">
                       <h3 className="text-lg font-semibold text-gray-900">{t('filters')}</h3>
                       <p className="text-xs text-gray-500 mt-1">{t('filter_description') || 'Məhsulları filtrləyin'}</p>
@@ -651,100 +659,150 @@ export default function TableTamplate({
                       )}
 
                       {/* Column Filters */}
-                      {Object.entries(filterOptions).map(([key, options]) => {
-                        // Get label translation
-                        const getLabel = (filterKey) => {
-                          const labels = {
-                            categoryName: tProduct('category') || t('category') || 'Kateqoriya',
-                            stockStatus: tProduct('stock_status') || 'Stok Statusu',
-                            isActive: tProduct('status') || t('status') || 'Status',
-                            isOfficial: tProduct('official_status') || 'Rəsmi Status'
+                      <div className="grid grid-cols-2 gap-4">
+                        {Object.entries(filterOptions).map(([key, options]) => {
+                          // Get label translation
+                          const getLabel = (filterKey) => {
+                            const labels = {
+                              categoryName: tProduct('category') || t('category') || 'Kateqoriya',
+                              stockStatus: tProduct('stock_status') || 'Stok Statusu',
+                              isActive: tProduct('status') || t('status') || 'Status',
+                              isOfficial: tProduct('official_status') || 'Rəsmi Status',
+                              minPurchasePrice: tProduct('min_purchase_price') || 'Min Alış Qiyməti',
+                              maxPurchasePrice: tProduct('max_purchase_price') || 'Max Alış Qiyməti',
+                              minSalePrice: tProduct('min_sale_price') || 'Min Satış Qiyməti',
+                              maxSalePrice: tProduct('max_sale_price') || 'Max Satış Qiyməti'
+                            };
+                            return labels[filterKey] || filterKey.charAt(0).toUpperCase() + filterKey.slice(1);
                           };
-                          return labels[filterKey] || filterKey.charAt(0).toUpperCase() + filterKey.slice(1);
-                        };
 
-                        // Skip empty filter options
-                        if (!options || options.length === 0) {
-                          return null;
-                        }
+                          // Handle number input for price range filters
+                          if (options === 'number') {
+                            const handleNumberChange = (e) => {
+                              const value = e.target.value;
+                              
+                              // Boş ola bilər
+                              if (value === '' || value === null || value === undefined) {
+                                setTempFilters({ ...tempFilters, [key]: undefined });
+                                return;
+                              }
+                              
+                              // Yalnız rəqəm və onluq nöqtə yazıla bilər
+                              const isValidNumber = /^\d*\.?\d*$/.test(value);
+                              if (!isValidNumber) {
+                                return; // Yalnız rəqəm və onluq nöqtə yazıla bilər
+                              }
+                              
+                              setTempFilters({ ...tempFilters, [key]: value || undefined });
+                            };
 
-                        // Check if options is an array of objects (for SearchDropdown) or strings (for select)
-                        const isObjectArray = options.length > 0 && typeof options[0] === 'object' && options[0] !== null;
-
-                        return (
-                          <div key={key} className="w-full">
-                            {isObjectArray && key === 'categoryName' ? (
-                              // Use SearchDropdown for categoryName
-                              <SearchDropdown
-                                label={getLabel(key)}
-                                options={options}
-                                value={filters[key] || ''}
-                                onChange={(value) => {
-                                  const newFilters = { ...filters, [key]: value };
-                                  setFilters(newFilters);
-                                  if (onFilterChange) {
-                                    onFilterChange(newFilters);
-                                  }
-                                }}
-                                placeholder={t('all') || 'Hamısı'}
-                                searchFields={['name']}
-                                className="w-full"
-                              />
-                            ) : (
-                              // Use select for other filters
-                              <>
+                            return (
+                              <div key={key} className="space-y-1">
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
                                   {getLabel(key)}
                                 </label>
-                                <select
-                                  value={filters[key] || ''}
-                                  onChange={(e) => {
-                                    const newFilters = { ...filters, [key]: e.target.value };
-                                    setFilters(newFilters);
-                                    if (onFilterChange) {
-                                      onFilterChange(newFilters);
-                                    }
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={tempFilters[key] || ''}
+                                  onChange={handleNumberChange}
+                                  placeholder={getLabel(key)}
+                                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                />
+                              </div>
+                            );
+                          }
+
+                          // Skip empty filter options
+                          if (!options || options.length === 0) {
+                            return null;
+                          }
+
+                          // Check if options is an array of objects (for SearchDropdown) or strings (for select)
+                          const isObjectArray = options.length > 0 && typeof options[0] === 'object' && options[0] !== null;
+
+                          return (
+                            <div key={key} className="space-y-1">
+                              {isObjectArray && key === 'categoryName' ? (
+                                // Use SearchDropdown for categoryName
+                                <SearchDropdown
+                                  label={getLabel(key)}
+                                  options={options}
+                                  value={tempFilters[key] || ''}
+                                  onChange={(value) => {
+                                    setTempFilters({ ...tempFilters, [key]: value });
                                   }}
-                                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-sm text-gray-900 transition-colors appearance-none cursor-pointer"
-                                  style={{
-                                    minHeight: '42px',
-                                    backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
-                                    backgroundPosition: 'right 0.5rem center',
-                                    backgroundRepeat: 'no-repeat',
-                                    backgroundSize: '1.5em 1.5em',
-                                    paddingRight: '2.5rem'
-                                  }}
-                                >
-                                  <option value="" className="text-gray-500">{t('all') || 'Hamısı'}</option>
-                                  {options.map((option, index) => {
-                                    const optionValue = isObjectArray ? (option.id || option.value || option.name) : option;
-                                    const optionLabel = isObjectArray ? (option.name || option.label || optionValue) : option;
-                                    return (
-                                      <option
-                                        key={`${optionValue}-${index}`}
-                                        value={optionValue}
-                                        className="text-gray-900 py-1"
-                                      >
-                                        {optionLabel}
-                                      </option>
-                                    );
-                                  })}
-                                </select>
-                              </>
-                            )}
-                          </div>
-                        );
-                      })}
+                                  placeholder={t('all') || 'Hamısı'}
+                                  searchFields={['name']}
+                                  className="w-full"
+                                />
+                              ) : (
+                                // Use select for other filters
+                                <>
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    {getLabel(key)}
+                                  </label>
+                                  <select
+                                    value={tempFilters[key] || ''}
+                                    onChange={(e) => {
+                                      setTempFilters({ ...tempFilters, [key]: e.target.value });
+                                    }}
+                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-sm text-gray-900 transition-colors appearance-none cursor-pointer"
+                                    style={{
+                                      minHeight: '42px',
+                                      backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                                      backgroundPosition: 'right 0.5rem center',
+                                      backgroundRepeat: 'no-repeat',
+                                      backgroundSize: '1.5em 1.5em',
+                                      paddingRight: '2.5rem'
+                                    }}
+                                  >
+                                    <option value="" className="text-gray-500">{t('all') || 'Hamısı'}</option>
+                                    {options.map((option, index) => {
+                                      const optionValue = isObjectArray ? (option.id || option.value || option.name) : option;
+                                      const optionLabel = isObjectArray ? (option.name || option.label || optionValue) : option;
+                                      return (
+                                        <option
+                                          key={`${optionValue}-${index}`}
+                                          value={optionValue}
+                                          className="text-gray-900 py-1"
+                                        >
+                                          {optionLabel}
+                                        </option>
+                                      );
+                                    })}
+                                  </select>
+                                </>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
 
                       <div className="flex gap-3 pt-5 border-t border-gray-200">
                         <button
-                          onClick={clearFilters}
+                          onClick={() => {
+                            setTempFilters({});
+                            setFilters({});
+                            if (onFilterChange) {
+                              onFilterChange({});
+                            }
+                            if (onClearFilters) {
+                              onClearFilters();
+                            }
+                          }}
                           className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
                         >
                           {t('clear_all')}
                         </button>
                         <button
-                          onClick={() => setShowFilterDropdown(false)}
+                          onClick={() => {
+                            setFilters(tempFilters);
+                            if (onFilterChange) {
+                              onFilterChange(tempFilters);
+                            }
+                            setShowFilterDropdown(false);
+                          }}
                           className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors shadow-sm"
                         >
                           {t('apply')}

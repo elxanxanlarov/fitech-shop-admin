@@ -33,6 +33,8 @@ import azExpense from "./locales/az/expense.json";
 import enExpense from "./locales/en/expense.json";
 import azCashHandover from "./locales/az/cashHandover.json";
 import enCashHandover from "./locales/en/cashHandover.json";
+import azInvoiceName from "./locales/az/invoice_name.json";
+import enInvoiceName from "./locales/en/invoice_name.json";
 
 const resources = {
   az: {
@@ -51,6 +53,7 @@ const resources = {
     category: azCategory,
     expense: azExpense,
     cashHandover: azCashHandover,
+    invoice_name: azInvoiceName,
   },
   en: {
     translation: enTranslation,
@@ -68,6 +71,7 @@ const resources = {
     category: enCategory,
     expense: enExpense,
     cashHandover: enCashHandover,
+    invoice_name: enInvoiceName,
   },
 };
 
@@ -79,7 +83,7 @@ i18n
     supportedLngs: ["az", "en"],
     fallbackLng: "az",
     defaultNS: "translation",
-    ns: ["translation", "admin-panel", "staff", "auth", "sidebar", "alert", "product", "sale", "statistics", "activityLog", "settings", "role", "category", "expense", "cashHandover"],
+    ns: ["translation", "admin-panel", "staff", "auth", "sidebar", "alert", "product", "sale", "statistics", "activityLog", "settings", "role", "category", "expense", "cashHandover", "invoice_name"],
     debug: false,
     interpolation: {
       escapeValue: false,

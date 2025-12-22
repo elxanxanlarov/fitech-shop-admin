@@ -1,0 +1,21 @@
+{
+  "title": "Invoice Name Mapping",
+  "description": "Map product display names with invoice names",
+  "select_product": "Select Product",
+  "select_product_text": "Please select a product",
+  "search_product": "Search product...",
+  "selected_product": "Selected Product",
+  "name": "Name",
+  "barcode": "Barcode",
+  "category": "Category",
+  "invoice_name": "Invoice Name",
+  "invoice_name_placeholder": "Enter the original name from invoice",
+  "invoice_name_hint": "This is the original name from the invoice. You can leave it empty.",
+  "save": "Save",
+  "saving": "Saving...",
+  "reset": "Reset",
+  "save_success": "Invoice name saved successfully",
+  "info_title": "Info:",
+  "info_text": "On this page you can map product display names with original invoice names. Invoice name can be empty."
+}
+

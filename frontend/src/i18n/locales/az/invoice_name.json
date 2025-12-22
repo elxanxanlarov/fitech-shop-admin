@@ -1,0 +1,21 @@
+{
+  "title": "Qaimə Adları Uyğunlaşdırılması",
+  "description": "Məhsulların vitrindəki adı ilə qaimədəki adını uyğunlaşdırın",
+  "select_product": "Məhsul Seçin",
+  "select_product_text": "Zəhmət olmasa məhsul seçin",
+  "search_product": "Məhsul axtarın...",
+  "selected_product": "Seçilmiş Məhsul",
+  "name": "Ad",
+  "barcode": "Barcode",
+  "category": "Kateqoriya",
+  "invoice_name": "Qaimə Adı",
+  "invoice_name_placeholder": "Qaimədə gələn orijinal adı daxil edin",
+  "invoice_name_hint": "Bu ad qaimədə gələn orijinal adıdır. Boş buraxa bilərsiniz.",
+  "save": "Saxla",
+  "saving": "Saxlanılır...",
+  "reset": "Sıfırla",
+  "save_success": "Qaimə adı uğurla saxlanıldı",
+  "info_title": "Məlumat:",
+  "info_text": "Bu səhifədə məhsulların vitrindəki adı ilə qaimədə gələn orijinal adını uyğunlaşdıra bilərsiniz. Qaimə adı boş ola bilər."
+}
+

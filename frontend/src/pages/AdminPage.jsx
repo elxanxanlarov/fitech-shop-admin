@@ -22,6 +22,7 @@ import CashHandoverForm from "../components/forms/CashHandoverForm.jsx"
 import Profile from "../components/panel/Profile.jsx"
 import CreditPayments from "../components/panel/CreditPayments.jsx"
 import CreditTermManagement from "../components/panel/CreditTermManagement.jsx"
+import InvoiceNameMapping from "../components/panel/InvoiceNameMapping.jsx"
 
 
 export default function AdminPanel() {
@@ -54,6 +55,7 @@ export default function AdminPanel() {
             {slug === "expenses" && <Expenses />}
             {slug === "cash-handover" && <CashHandover />}
             {slug === "credit-payments" && <CreditPayments />}
+            {slug === "invoice-name-mapping" && <InvoiceNameMapping />}
             {slug === "profile" && <Profile />}
         </div>
     )

@@ -20,7 +20,11 @@ export const getAllProducts = async (req, res) => {
             isOfficial,
             search,
             deleteType,
-            includeDeleted
+            includeDeleted,
+            minPurchasePrice,
+            maxPurchasePrice,
+            minSalePrice,
+            maxSalePrice
         } = req.query;
 
         const where = {};
@@ -96,12 +100,34 @@ export const getAllProducts = async (req, res) => {
             }
         }
 
+        // Price range filters
+        if (minPurchasePrice !== undefined || maxPurchasePrice !== undefined) {
+            where.purchasePrice = {};
+            if (minPurchasePrice !== undefined) {
+                where.purchasePrice.gte = new Prisma.Decimal(minPurchasePrice);
+            }
+            if (maxPurchasePrice !== undefined) {
+                where.purchasePrice.lte = new Prisma.Decimal(maxPurchasePrice);
+            }
+        }
+
+        if (minSalePrice !== undefined || maxSalePrice !== undefined) {
+            where.salePrice = {};
+            if (minSalePrice !== undefined) {
+                where.salePrice.gte = new Prisma.Decimal(minSalePrice);
+            }
+            if (maxSalePrice !== undefined) {
+                where.salePrice.lte = new Prisma.Decimal(maxSalePrice);
+            }
+        }
+
         // Search
         // Note: MySQL default collation is case-insensitive, so mode is not needed
         if (search && search.trim()) {
             const searchTerm = search.trim();
             const searchConditions = [
                 { name: { contains: searchTerm } },
+                { invoiceName: { contains: searchTerm } },
                 { barcode: { contains: searchTerm } }
             ];
             
@@ -199,6 +225,7 @@ export const createProduct = async (req, res) => {
     try {
         const {
             name,
+            invoiceName,
             description,
             imageUrl,
             purchasePrice,
@@ -254,6 +281,7 @@ export const createProduct = async (req, res) => {
         const newProduct = await prisma.product.create({
             data: {
                 name: name.trim(),
+                invoiceName: invoiceName?.trim() || null,
                 description: description?.trim() || null,
                 imageUrl: imageUrl?.trim() || null,
                 purchasePrice: purchasePriceDecimal,
@@ -332,7 +360,8 @@ export const updateProduct = async (req, res) => {
             isOfficial,
             categoryId,
             subCategoryId,
-            deleteType
+            deleteType,
+            invoiceName
         } = req.body;
 
         const existingProduct = await prisma.product.findUnique({
@@ -582,8 +611,12 @@ export const importProductsFromExcel = async (req, res) => {
 
             // Map to standard column names - check for Azerbaijani first
             // Name
-            if ((normalized === 'ad' || normalized.startsWith('ad')) && !normalized.includes('qiymət') && !normalized.includes('qiymat')) {
+            if ((normalized === 'ad' || normalized.startsWith('ad')) && !normalized.includes('qiymət') && !normalized.includes('qiymat') && !normalized.includes('qaimə') && !normalized.includes('qayime')) {
                 if (!columnMap['name']) columnMap['name'] = index;
+            }
+            // Invoice Name (Qaimə Adı)
+            else if ((normalized.includes('qaimə') || normalized.includes('qayime') || normalized.includes('invoice')) && (normalized.includes('ad') || normalized.includes('name'))) {
+                if (!columnMap['invoice_name']) columnMap['invoice_name'] = index;
             }
             // Purchase Price - check if contains "alış" and "qiymət"
             else if (normalized.includes('alış') && (normalized.includes('qiymət') || normalized.includes('qiymat'))) {
@@ -638,6 +671,8 @@ export const importProductsFromExcel = async (req, res) => {
             // English column names
             else if (normalized === 'name') {
                 if (!columnMap['name']) columnMap['name'] = index;
+            } else if (normalized === 'invoice_name' || normalized === 'invoicename') {
+                if (!columnMap['invoice_name']) columnMap['invoice_name'] = index;
             } else if (normalized === 'purchase_price' || normalized === 'purchaseprice') {
                 if (!columnMap['purchase_price']) columnMap['purchase_price'] = index;
             } else if (normalized === 'sale_price' || normalized === 'saleprice') {
@@ -689,6 +724,7 @@ export const importProductsFromExcel = async (req, res) => {
             try {
                 // Get values from normalized row
                 const name = row.name ? String(row.name).trim() : '';
+                const invoiceName = row.invoice_name || row.invoiceName ? String(row.invoice_name || row.invoiceName).trim() : null;
                 const purchasePriceStr = row.purchase_price !== null && row.purchase_price !== undefined && row.purchase_price !== '' ? String(row.purchase_price) : '';
                 const salePriceStr = row.sale_price !== null && row.sale_price !== undefined && row.sale_price !== '' ? String(row.sale_price) : '';
                 const stockStr = row.stock !== null && row.stock !== undefined && row.stock !== '' ? String(row.stock) : '';
@@ -775,6 +811,7 @@ export const importProductsFromExcel = async (req, res) => {
                 const product = await prisma.product.create({
                     data: {
                         name: name,
+                        invoiceName: invoiceName || null,
                         description: description,
                         purchasePrice: new Prisma.Decimal(purchasePrice),
                         salePrice: new Prisma.Decimal(salePrice),

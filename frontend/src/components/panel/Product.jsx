@@ -71,6 +71,20 @@ export default function Product() {
             params.append('isOfficial', filters.isOfficial);
         }
         
+        // Price range filters
+        if (filters.minPurchasePrice) {
+            params.append('minPurchasePrice', filters.minPurchasePrice);
+        }
+        if (filters.maxPurchasePrice) {
+            params.append('maxPurchasePrice', filters.maxPurchasePrice);
+        }
+        if (filters.minSalePrice) {
+            params.append('minSalePrice', filters.minSalePrice);
+        }
+        if (filters.maxSalePrice) {
+            params.append('maxSalePrice', filters.maxSalePrice);
+        }
+        
         const queryString = params.toString();
         return queryString ? `?${queryString}` : '';
     }, []);
@@ -319,7 +333,12 @@ export default function Product() {
                         isOfficial: [
                             t('official') || 'Rəsmi',
                             t('unofficial') || 'Qeyri-rəsmi'
-                        ]
+                        ],
+                        // Price range filters
+                        minPurchasePrice: 'number',
+                        maxPurchasePrice: 'number',
+                        minSalePrice: 'number',
+                        maxSalePrice: 'number'
                     };
                 }, [categories, t])}
                 onEdit={handleEdit}

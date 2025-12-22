@@ -1,4 +1,4 @@
-import { MdPeople, MdBarChart, MdAccessTime, MdSettings, MdShoppingCart, MdPointOfSale, MdAttachMoney, MdAccountBalanceWallet } from 'react-icons/md'
+import { MdPeople, MdBarChart, MdAccessTime, MdSettings, MdShoppingCart, MdPointOfSale, MdAttachMoney, MdAccountBalanceWallet, MdDescription } from 'react-icons/md'
 export const AdminSidebarData = [
   {
     title: 'staff_management',
@@ -9,6 +9,11 @@ export const AdminSidebarData = [
     title: 'product_management',
     path: '/admin/products',
     icon: <MdShoppingCart />,
+  },
+  {
+    title: 'invoice_name_mapping',
+    path: '/admin/invoice-name-mapping',
+    icon: <MdDescription />,
   },
   {
     title: 'sale_management',

@@ -59,7 +59,9 @@ model SubCategory {
 
 model Product {
   id              String   @id @default(uuid())
-  name            String
+
+  name            String   // Vitrindəki ad (display name)
+  invoiceName    String?  // Qaimədə gələn orijinal ad
   description     String?
   imageUrl        String?       // Məhsul şəkli
   purchasePrice   Decimal @db.Decimal(10,2) // Alış qiyməti
