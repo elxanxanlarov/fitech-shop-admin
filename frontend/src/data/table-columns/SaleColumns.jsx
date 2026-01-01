@@ -69,21 +69,22 @@ export const getSaleColumns = (t, language = 'az') => [
             
             return (
                 <div className="flex flex-col space-y-1">
-                    <div className="flex items-center space-x-2">
-                        <ShoppingCart className="w-4 h-4 text-gray-400" />
-                        <span className="text-sm font-medium text-gray-900">
-                            {items.length} {t('product') || 'məhsul'}
-                        </span>
-                    </div>
                     {items.length > 0 && (
-                        <div className="text-xs text-gray-600 pl-6 space-y-0.5">
+                        <div className="space-y-2">
                             {items.slice(0, 3).map((saleItem, idx) => (
-                                <div key={idx}>
-                                    {saleItem.product?.name || 'Məhsul'}: {formatQuantity(saleItem)}
+                                <div key={idx} className="flex flex-col">
+                                    <span className="text-sm font-medium text-gray-900">
+                                        {saleItem.product?.name || 'Məhsul'}
+                                    </span>
+                                    <span className="text-xs text-gray-600 mt-0.5">
+                                        {formatQuantity(saleItem)}
+                                    </span>
                                 </div>
                             ))}
                             {items.length > 3 && (
-                                <div className="text-gray-500">+ {items.length - 3} digər...</div>
+                                <div className="text-xs text-gray-500 mt-1">
+                                    + {items.length - 3} digər məhsul...
+                                </div>
                             )}
                         </div>
                     )}
