@@ -34,7 +34,7 @@ export default function SaleForm() {
     });
 
     const [selectedProducts, setSelectedProducts] = useState([
-        { productId: '', quantity: '', salePrice: '', discountAmount: '' }
+        { productId: '', quantity: '', salePrice: '', discountAmount: '', boxes: '', pieces: '' }
     ]);
 
     const [products, setProducts] = useState([]);
@@ -178,16 +178,44 @@ export default function SaleForm() {
             if (!item.productId) {
                 newErrors[`product_${index}`] = t('product_required') || 'Məhsul seçilməlidir';
             }
-            // Quantity boş ola bilməz və 0-dan böyük olmalıdır
-            if (!item.quantity || item.quantity === '' || item.quantity === null || item.quantity === undefined) {
-                newErrors[`quantity_${index}`] = t('quantity_required') || 'Miqdar tələb olunur';
-            } else if (parseInt(item.quantity) <= 0) {
-                newErrors[`quantity_${index}`] = t('quantity_cannot_be_zero') || 'Miqdar 0 ola bilməz';
+            
+            const product = products.find(p => p.id === item.productId);
+            
+            // Qutu/Paket tipindədirsə, qutu və ya açıq ədəd doldurulmalıdır
+            if (product && product.unitType !== 'PIECE' && product.piecesPerBox) {
+                const boxesNum = parseInt(item.boxes || 0) || 0;
+                const piecesNum = parseInt(item.pieces || 0) || 0;
+                const totalQuantity = (boxesNum * product.piecesPerBox) + piecesNum;
+                
+                if (totalQuantity <= 0) {
+                    newErrors[`quantity_${index}`] = t('quantity_required') || 'Qutu və ya açıq ədəd daxil edilməlidir';
+                } else {
+                    // Stok yoxla
+                    const availableStock = calculateProductStock(product);
+                    if (totalQuantity > availableStock) {
+                        newErrors[`quantity_${index}`] = t('quantity_exceeds_stock', { stock: availableStock }) || `Mövcud stok: ${availableStock}`;
+                    }
+                    
+                    // Açıq ədəd piecesPerBox-dan çox ola bilməz
+                    if (piecesNum >= product.piecesPerBox) {
+                        newErrors[`quantity_${index}`] = `Açıq ${product.unitType === 'BOX' ? 'ədəd' : product.unitType === 'METER' ? 'metr' : product.unitType === 'LITER' ? 'litr' : 'kq'} maksimum ${product.piecesPerBox - 1} ola bilər`;
+                    }
+                }
             } else {
-                // Stok yoxla
-                const product = products.find(p => p.id === item.productId);
-                if (product && parseInt(item.quantity) > product.stock) {
-                    newErrors[`quantity_${index}`] = t('quantity_exceeds_stock', { stock: product.stock }) || `Mövcud stok: ${product.stock}`;
+                // Ədəd tipindədirsə, quantity tələb olunur
+                if (!item.quantity || item.quantity === '' || item.quantity === null || item.quantity === undefined) {
+                    newErrors[`quantity_${index}`] = t('quantity_required') || 'Miqdar tələb olunur';
+                } else if (parseInt(item.quantity) <= 0) {
+                    newErrors[`quantity_${index}`] = t('quantity_cannot_be_zero') || 'Miqdar 0 ola bilməz';
+                } else {
+                    // Stok yoxla
+                    if (product) {
+                        const availableStock = calculateProductStock(product);
+                        const requestedQuantity = parseInt(item.quantity);
+                        if (requestedQuantity > availableStock) {
+                            newErrors[`quantity_${index}`] = t('quantity_exceeds_stock', { stock: availableStock }) || `Mövcud stok: ${availableStock}`;
+                        }
+                    }
                 }
             }
         });
@@ -229,10 +257,18 @@ export default function SaleForm() {
                 } else {
                     newProducts[index].discountAmount = '';
                 }
+                
+                // Qutu/ədəd input-larını sıfırla
+                newProducts[index].boxes = '';
+                newProducts[index].pieces = '';
+                newProducts[index].quantity = '';
             }
         } else {
             newProducts[index].salePrice = '';
             newProducts[index].discountAmount = '';
+            newProducts[index].boxes = '';
+            newProducts[index].pieces = '';
+            newProducts[index].quantity = '';
         }
         
         setSelectedProducts(newProducts);
@@ -284,6 +320,166 @@ export default function SaleForm() {
         newProducts[index].quantity = quantity; // Formatlanmamış dəyəri saxla
         setSelectedProducts(newProducts);
 
+        // Error-u sil
+        if (errors[`quantity_${index}`]) {
+            setErrors(prev => {
+                const newErrors = { ...prev };
+                delete newErrors[`quantity_${index}`];
+                return newErrors;
+            });
+        }
+    };
+
+    const handleBoxesChange = (index, boxes) => {
+        const newProducts = [...selectedProducts];
+        const product = products.find(p => p.id === newProducts[index].productId);
+        
+        if (!product || product.unitType === 'PIECE') {
+            return; // Yalnız qutu/paket tipində məhsullar üçün
+        }
+        
+        // Yalnız rəqəm yazıla bilər
+        if (boxes === '' || boxes === null || boxes === undefined) {
+            newProducts[index].boxes = '';
+            newProducts[index].quantity = newProducts[index].pieces || '';
+            setSelectedProducts(newProducts);
+            // Clear error
+            if (errors[`quantity_${index}`]) {
+                setErrors(prev => {
+                    const newErrors = { ...prev };
+                    delete newErrors[`quantity_${index}`];
+                    return newErrors;
+                });
+            }
+            return;
+        }
+        
+        const isValidNumber = /^\d*$/.test(boxes);
+        if (!isValidNumber) {
+            return;
+        }
+        
+        const boxesNum = parseInt(boxes) || 0;
+        const piecesNum = parseInt(newProducts[index].pieces || 0) || 0;
+        const piecesPerBox = product.piecesPerBox || 1;
+        
+        // Ümumi quantity hesabla
+        const totalQuantity = (boxesNum * piecesPerBox) + piecesNum;
+        
+        // Stok yoxla
+        const availableStock = calculateProductStock(product);
+        if (totalQuantity > availableStock) {
+            setErrors(prev => ({
+                ...prev,
+                [`quantity_${index}`]: t('quantity_exceeds_stock', { stock: availableStock }) || `Mövcud stok: ${availableStock}`
+            }));
+            return;
+        }
+        
+        // Tam qutuların maksimum sayını yoxla
+        const maxBoxes = Math.floor(availableStock / piecesPerBox);
+        if (boxesNum > maxBoxes) {
+            setErrors(prev => ({
+                ...prev,
+                [`quantity_${index}`]: `Maksimum ${maxBoxes} tam ${product.unitType === 'BOX' ? 'qutu' : 'paket'} seçə bilərsiniz`
+            }));
+            return;
+        }
+        
+        newProducts[index].boxes = boxes;
+        newProducts[index].quantity = totalQuantity > 0 ? totalQuantity.toString() : '';
+        
+        setSelectedProducts(newProducts);
+        
+        // Error-u sil
+        if (errors[`quantity_${index}`]) {
+            setErrors(prev => {
+                const newErrors = { ...prev };
+                delete newErrors[`quantity_${index}`];
+                return newErrors;
+            });
+        }
+    };
+
+    const handlePiecesChange = (index, pieces) => {
+        const newProducts = [...selectedProducts];
+        const product = products.find(p => p.id === newProducts[index].productId);
+        
+        if (!product || product.unitType === 'PIECE') {
+            return; // Yalnız qutu/paket tipində məhsullar üçün
+        }
+        
+        // Yalnız rəqəm yazıla bilər
+        if (pieces === '' || pieces === null || pieces === undefined) {
+            newProducts[index].pieces = '';
+            const boxesNum = parseInt(newProducts[index].boxes || 0) || 0;
+            const piecesPerBox = product.piecesPerBox || 1;
+            newProducts[index].quantity = boxesNum > 0 ? (boxesNum * piecesPerBox).toString() : '';
+            setSelectedProducts(newProducts);
+            // Clear error
+            if (errors[`quantity_${index}`]) {
+                setErrors(prev => {
+                    const newErrors = { ...prev };
+                    delete newErrors[`quantity_${index}`];
+                    return newErrors;
+                });
+            }
+            return;
+        }
+        
+        const isValidNumber = /^\d*$/.test(pieces);
+        if (!isValidNumber) {
+            return;
+        }
+        
+        let piecesNum = parseInt(pieces) || 0;
+        const boxesNum = parseInt(newProducts[index].boxes || 0) || 0;
+        const piecesPerBox = product.piecesPerBox || 1;
+        
+        // Açıq ədəd piecesPerBox-dan çox ola bilməz
+        if (piecesNum > piecesPerBox - 1) {
+            // Maksimum piecesPerBox - 1 ola bilər
+            setErrors(prev => ({
+                ...prev,
+                [`quantity_${index}`]: `Açıq ${product.unitType === 'BOX' ? 'ədəd' : product.unitType === 'METER' ? 'metr' : product.unitType === 'LITER' ? 'litr' : 'kq'} maksimum ${piecesPerBox - 1} ola bilər`
+            }));
+            return;
+        }
+        
+        // Ümumi quantity hesabla
+        const totalQuantity = (boxesNum * piecesPerBox) + piecesNum;
+        
+        // Stok yoxla
+        const availableStock = calculateProductStock(product);
+        if (totalQuantity > availableStock) {
+            setErrors(prev => ({
+                ...prev,
+                [`quantity_${index}`]: t('quantity_exceeds_stock', { stock: availableStock }) || `Mövcud stok: ${availableStock}`
+            }));
+            return;
+        }
+        
+        // Əgər tam qutular varsa, açıq ədəd yoxlaması
+        const availableFullBoxes = product.fullBoxes || 0;
+        const availableOpenedQuantity = product.openedBoxQuantity || 0;
+        
+        // Əgər tam qutular varsa, açıq ədəd yoxlaması
+        if (boxesNum > 0 && piecesNum > availableOpenedQuantity) {
+            // Tam qutulardan istifadə edərkən, açıq ədəd maksimum availableOpenedQuantity ola bilər
+            if (piecesNum > availableOpenedQuantity) {
+                setErrors(prev => ({
+                    ...prev,
+                    [`quantity_${index}`]: `Maksimum ${availableOpenedQuantity} açıq ${product.unitType === 'BOX' ? 'ədəd' : product.unitType === 'METER' ? 'metr' : product.unitType === 'LITER' ? 'litr' : 'kq'} var`
+                }));
+                return;
+            }
+        }
+        
+        newProducts[index].pieces = pieces;
+        newProducts[index].quantity = totalQuantity > 0 ? totalQuantity.toString() : '';
+        
+        setSelectedProducts(newProducts);
+        
         // Error-u sil
         if (errors[`quantity_${index}`]) {
             setErrors(prev => {
@@ -414,7 +610,7 @@ export default function SaleForm() {
     };
 
     const addProductRow = () => {
-        setSelectedProducts([...selectedProducts, { productId: '', quantity: '', salePrice: '', discountAmount: '' }]);
+        setSelectedProducts([...selectedProducts, { productId: '', quantity: '', salePrice: '', discountAmount: '', boxes: '', pieces: '' }]);
     };
 
     const removeProductRow = (index) => {
@@ -432,6 +628,67 @@ export default function SaleForm() {
         }
     };
 
+    // Helper: Məhsulun stokunu hesabla (qutu/ədəd məntiqinə uyğun)
+    const calculateProductStock = (product) => {
+        if (!product) return 0;
+        const unitType = product.unitType || 'PIECE';
+        const fullBoxes = product.fullBoxes || 0;
+        const piecesPerBox = product.piecesPerBox;
+        const openedBoxQuantity = product.openedBoxQuantity || 0;
+
+        if (unitType === 'PIECE') {
+            return product.stock || 0;
+        }
+
+        if (piecesPerBox && piecesPerBox > 0) {
+            return (fullBoxes * piecesPerBox) + openedBoxQuantity;
+        }
+
+        return product.stock || 0;
+    };
+
+    // Helper: Məhsulun qiymətini hesabla (qutu/ədəd məntiqinə uyğun) - Backend-dəki calculateProductPrice ilə uyğundur
+    const calculateProductPrice = (product, quantity, customSalePrice) => {
+        if (!product || !quantity) return 0;
+        
+        const unitType = product.unitType || 'PIECE';
+        const piecesPerBox = product.piecesPerBox || 1;
+        
+        // Qiymət təyin et
+        let finalSalePrice;
+        if (customSalePrice && customSalePrice !== '' && !isNaN(parseFloat(customSalePrice))) {
+            finalSalePrice = parseFloat(customSalePrice);
+        } else {
+            finalSalePrice = product.hasDiscount && product.discountPrice
+                ? parseFloat(product.discountPrice)
+                : parseFloat(product.salePrice);
+        }
+        
+        // Ədəd tipindədirsə, sadəcə ədəd qiyməti
+        if (unitType === 'PIECE') {
+            return finalSalePrice * quantity;
+        }
+        
+        const boxPrice = product.boxPrice ? parseFloat(product.boxPrice) : null;
+        
+        // Qutu/Litr/Metr/Kiloqram üçün
+        // Əgər boxPrice varsa və quantity tam qutudursa, boxPrice istifadə et
+        if (boxPrice && piecesPerBox && quantity >= piecesPerBox && quantity % piecesPerBox === 0) {
+            const boxes = quantity / piecesPerBox;
+            return boxPrice * boxes;
+        }
+        
+        // Qarışıq: tam qutular + açıq ədədlər
+        if (piecesPerBox && boxPrice) {
+            const boxes = Math.floor(quantity / piecesPerBox);
+            const pieces = quantity % piecesPerBox;
+            return (boxPrice * boxes) + (finalSalePrice * pieces);
+        }
+        
+        // Default: ədəd qiyməti
+        return finalSalePrice * quantity;
+    };
+
     const getProductPrice = (productId, customSalePrice) => {
         // Əgər custom sale price varsa, onu istifadə et
         if (customSalePrice && customSalePrice !== '' && !isNaN(parseFloat(customSalePrice))) {
@@ -446,9 +703,13 @@ export default function SaleForm() {
     const calculateTotal = () => {
         return selectedProducts.reduce((total, item) => {
             if (item.productId && item.quantity && item.quantity !== '') {
-                const price = getProductPrice(item.productId, item.salePrice);
+                const product = products.find(p => p.id === item.productId);
+                if (!product) return total;
+                
                 const qty = parseInt(item.quantity) || 0;
-                return total + (price * qty);
+                // Qutu/ədəd məntiqinə uyğun qiymət hesabla
+                const price = calculateProductPrice(product, qty, item.salePrice);
+                return total + price;
             }
             return total;
         }, 0);
@@ -550,9 +811,93 @@ export default function SaleForm() {
             newItems[existingIndex].quantity = qty;
             setReturnItems(newItems);
         } else {
-            setReturnItems([...returnItems, { saleItemId, quantity: qty }]);
+            setReturnItems([...returnItems, { saleItemId, quantity: qty, boxes: '', pieces: '' }]);
         }
 
+        // Clear error
+        if (returnErrors[saleItemId]) {
+            setReturnErrors(prev => {
+                const newErrors = { ...prev };
+                delete newErrors[saleItemId];
+                return newErrors;
+            });
+        }
+    };
+
+    const handleReturnBoxesChange = (saleItemId, boxes) => {
+        const saleItem = saleItems.find(si => si.id === saleItemId);
+        if (!saleItem || !saleItem.product) return;
+        
+        const product = saleItem.product;
+        if (product.unitType === 'PIECE' || !product.piecesPerBox) return;
+        
+        const boxesNum = boxes === '' ? 0 : parseInt(boxes) || 0;
+        const returnItem = returnItems.find(ri => ri.saleItemId === saleItemId);
+        const piecesNum = returnItem?.pieces ? parseInt(returnItem.pieces) : 0;
+        const piecesPerBox = product.piecesPerBox;
+        
+        const totalQuantity = (boxesNum * piecesPerBox) + piecesNum;
+        
+        if (totalQuantity === 0) {
+            setReturnItems(prev => prev.filter(item => item.saleItemId !== saleItemId));
+            return;
+        }
+        
+        const existingIndex = returnItems.findIndex(item => item.saleItemId === saleItemId);
+        if (existingIndex >= 0) {
+            const newItems = [...returnItems];
+            newItems[existingIndex].boxes = boxes;
+            newItems[existingIndex].quantity = totalQuantity;
+            setReturnItems(newItems);
+        } else {
+            setReturnItems([...returnItems, { saleItemId, quantity: totalQuantity, boxes, pieces: piecesNum.toString() }]);
+        }
+        
+        // Clear error
+        if (returnErrors[saleItemId]) {
+            setReturnErrors(prev => {
+                const newErrors = { ...prev };
+                delete newErrors[saleItemId];
+                return newErrors;
+            });
+        }
+    };
+
+    const handleReturnPiecesChange = (saleItemId, pieces) => {
+        const saleItem = saleItems.find(si => si.id === saleItemId);
+        if (!saleItem || !saleItem.product) return;
+        
+        const product = saleItem.product;
+        if (product.unitType === 'PIECE' || !product.piecesPerBox) return;
+        
+        const piecesNum = pieces === '' ? 0 : parseInt(pieces) || 0;
+        const piecesPerBox = product.piecesPerBox;
+        
+        // Açıq ədəd piecesPerBox-dan çox ola bilməz
+        if (piecesNum > piecesPerBox - 1) {
+            return;
+        }
+        
+        const returnItem = returnItems.find(ri => ri.saleItemId === saleItemId);
+        const boxesNum = returnItem?.boxes ? parseInt(returnItem.boxes) : 0;
+        
+        const totalQuantity = (boxesNum * piecesPerBox) + piecesNum;
+        
+        if (totalQuantity === 0) {
+            setReturnItems(prev => prev.filter(item => item.saleItemId !== saleItemId));
+            return;
+        }
+        
+        const existingIndex = returnItems.findIndex(item => item.saleItemId === saleItemId);
+        if (existingIndex >= 0) {
+            const newItems = [...returnItems];
+            newItems[existingIndex].pieces = pieces;
+            newItems[existingIndex].quantity = totalQuantity;
+            setReturnItems(newItems);
+        } else {
+            setReturnItems([...returnItems, { saleItemId, quantity: totalQuantity, boxes: boxesNum.toString(), pieces }]);
+        }
+        
         // Clear error
         if (returnErrors[saleItemId]) {
             setReturnErrors(prev => {
@@ -969,14 +1314,15 @@ export default function SaleForm() {
                         {selectedProducts.map((item, index) => {
                             const selectedProduct = products.find(p => p.id === item.productId);
                             const qty = item.quantity && item.quantity !== '' ? parseInt(item.quantity) : 0;
-                            const itemTotal = selectedProduct ? getProductPrice(item.productId, item.salePrice) * qty : 0;
+                            const itemTotal = selectedProduct ? calculateProductPrice(selectedProduct, qty, item.salePrice) : 0;
                             const defaultPrice = selectedProduct ? getProductPrice(selectedProduct.id) : 0;
+                            const availableStock = selectedProduct ? calculateProductStock(selectedProduct) : 0;
 
                             return (
                                 <div key={index} className="border border-gray-200 rounded-lg p-4">
                                     <div className="flex items-start gap-4">
-                                        <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                            <div className="lg:col-span-2">
+                                        <div className={`flex-1 grid grid-cols-1 md:grid-cols-2 ${selectedProduct && selectedProduct.unitType !== 'PIECE' && selectedProduct.piecesPerBox ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-4`}>
+                                            <div className={selectedProduct && selectedProduct.unitType !== 'PIECE' && selectedProduct.piecesPerBox ? 'lg:col-span-2' : 'lg:col-span-2'}>
                                                 <SearchDropdown
                                                     options={products}
                                                     value={item.productId}
@@ -985,23 +1331,57 @@ export default function SaleForm() {
                                                     disabled={isLoading || loadingProducts || isEditMode}
                                                     error={!!errors[`product_${index}`]}
                                                     label={`${t('product') || 'Məhsul'} ${index + 1}`}
-                                                    getOptionLabel={(product) => `${product.name} - ${parseFloat(product.salePrice).toFixed(2)} ₼${product.hasDiscount && product.discountPrice ? ` (${parseFloat(product.discountPrice).toFixed(2)} ₼)` : ''} (Stok: ${product.stock})`}
+                                                    getOptionLabel={(product) => {
+                                                        const stock = calculateProductStock(product);
+                                                        const unitLabel = 
+                                                            product.unitType === 'BOX' ? 'ədəd' :
+                                                            product.unitType === 'METER' ? 'metr' :
+                                                            product.unitType === 'LITER' ? 'litr' :
+                                                            product.unitType === 'KILOGRAM' ? 'kq' :
+                                                            'ədəd';
+                                                        let stockDisplay;
+                                                        if (product.unitType === 'PIECE') {
+                                                            stockDisplay = `${stock} ədəd`;
+                                                        } else if (product.piecesPerBox) {
+                                                            stockDisplay = `${product.fullBoxes || 0} tam ${product.unitType === 'BOX' ? 'qutu' : 'paket'} + ${product.openedBoxQuantity || 0} açıq (${stock} ${unitLabel})`;
+                                                        } else {
+                                                            stockDisplay = `${stock} ${unitLabel}`;
+                                                        }
+                                                        return `${product.name} - ${parseFloat(product.salePrice).toFixed(2)} ₼${product.hasDiscount && product.discountPrice ? ` (${parseFloat(product.discountPrice).toFixed(2)} ₼)` : ''} (Stok: ${stockDisplay})`;
+                                                    }}
                                                     getOptionValue={(product) => product.id}
                                                     searchFields={['name', 'barcode']}
-                                                    renderOption={(product) => (
-                                                        <div>
-                                                            <div className="font-medium text-base">{product.name}</div>
-                                                            <div className="text-sm text-gray-500">
-                                                                {parseFloat(product.salePrice).toFixed(2)} ₼
-                                                                {product.hasDiscount && product.discountPrice && (
-                                                                    <span className="text-green-600 ml-1">
-                                                                        ({parseFloat(product.discountPrice).toFixed(2)} ₼)
-                                                                    </span>
-                                                                )}
-                                                                <span className="ml-2">Stok: {product.stock}</span>
+                                                    renderOption={(product) => {
+                                                        const stock = calculateProductStock(product);
+                                                        const unitLabel = 
+                                                            product.unitType === 'BOX' ? 'ədəd' :
+                                                            product.unitType === 'METER' ? 'metr' :
+                                                            product.unitType === 'LITER' ? 'litr' :
+                                                            product.unitType === 'KILOGRAM' ? 'kq' :
+                                                            'ədəd';
+                                                        let stockDisplay;
+                                                        if (product.unitType === 'PIECE') {
+                                                            stockDisplay = `${stock} ədəd`;
+                                                        } else if (product.piecesPerBox) {
+                                                            stockDisplay = `${product.fullBoxes || 0} tam ${product.unitType === 'BOX' ? 'qutu' : 'paket'} + ${product.openedBoxQuantity || 0} açıq (${stock} ${unitLabel})`;
+                                                        } else {
+                                                            stockDisplay = `${stock} ${unitLabel}`;
+                                                        }
+                                                        return (
+                                                            <div>
+                                                                <div className="font-medium text-base">{product.name}</div>
+                                                                <div className="text-sm text-gray-500">
+                                                                    {parseFloat(product.salePrice).toFixed(2)} ₼
+                                                                    {product.hasDiscount && product.discountPrice && (
+                                                                        <span className="text-green-600 ml-1">
+                                                                            ({parseFloat(product.discountPrice).toFixed(2)} ₼)
+                                                                        </span>
+                                                                    )}
+                                                                    <span className="ml-2">Stok: {stockDisplay}</span>
+                                                                </div>
                                                             </div>
-                                                        </div>
-                                                    )}
+                                                        );
+                                                    }}
                                                     className="text-base"
                                                 />
                                                 {errors[`product_${index}`] && (
@@ -1009,35 +1389,118 @@ export default function SaleForm() {
                                                 )}
                                             </div>
 
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    {t('quantity') || 'Miqdar'}
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    value={item.quantity || ''}
-                                                    onChange={(e) => handleQuantityChange(index, e.target.value)}
-                                                    onKeyPress={(e) => {
-                                                        // Yalnız rəqəm yazıla bilər
-                                                        const char = String.fromCharCode(e.which);
-                                                        if (!/[0-9]/.test(char)) {
-                                                            e.preventDefault();
-                                                        }
-                                                    }}
-                                                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                                                        errors[`quantity_${index}`] ? 'border-red-500' : 'border-gray-300'
-                                                    } ${isEditMode ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                                                    disabled={isLoading || !item.productId || isEditMode}
-                                                />
-                                                {errors[`quantity_${index}`] && (
-                                                    <p className="mt-1 text-sm text-red-600">{errors[`quantity_${index}`]}</p>
-                                                )}
-                                                {selectedProduct && (
-                                                    <p className="mt-1 text-xs text-gray-500">
-                                                        {t('available_stock') || 'Mövcud stok'}: {selectedProduct.stock}
-                                                    </p>
-                                                )}
-                                            </div>
+                                            {/* Miqdar input-ları - Qutu/Paket və ya Ədəd */}
+                                            {selectedProduct && selectedProduct.unitType !== 'PIECE' && selectedProduct.piecesPerBox ? (
+                                                <>
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                            {selectedProduct.unitType === 'BOX' ? 'Qutu' : 'Paket'}
+                                                        </label>
+                                                        <input
+                                                            type="text"
+                                                            value={item.boxes || ''}
+                                                            onChange={(e) => handleBoxesChange(index, e.target.value)}
+                                                            onKeyPress={(e) => {
+                                                                const char = String.fromCharCode(e.which);
+                                                                if (!/[0-9]/.test(char)) {
+                                                                    e.preventDefault();
+                                                                }
+                                                            }}
+                                                            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                                                                errors[`quantity_${index}`] ? 'border-red-500' : 'border-gray-300'
+                                                            } ${isEditMode ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                                            disabled={isLoading || !item.productId || isEditMode}
+                                                            placeholder="0"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                            Açıq {selectedProduct.unitType === 'BOX' ? 'Ədəd' : 
+                                                                   selectedProduct.unitType === 'METER' ? 'Metr' :
+                                                                   selectedProduct.unitType === 'LITER' ? 'Litr' :
+                                                                   selectedProduct.unitType === 'KILOGRAM' ? 'Kiloqram' : 'Ədəd'}
+                                                            <span className="text-xs text-gray-500 ml-1">
+                                                                (Max: {selectedProduct.piecesPerBox - 1})
+                                                            </span>
+                                                        </label>
+                                                        <input
+                                                            type="text"
+                                                            value={item.pieces || ''}
+                                                            onChange={(e) => handlePiecesChange(index, e.target.value)}
+                                                            onKeyPress={(e) => {
+                                                                const char = String.fromCharCode(e.which);
+                                                                if (!/[0-9]/.test(char)) {
+                                                                    e.preventDefault();
+                                                                }
+                                                            }}
+                                                            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                                                                errors[`quantity_${index}`] ? 'border-red-500' : 'border-gray-300'
+                                                            } ${isEditMode ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                                            disabled={isLoading || !item.productId || isEditMode}
+                                                            placeholder="0"
+                                                            maxLength={selectedProduct.piecesPerBox ? String(selectedProduct.piecesPerBox - 1).length : undefined}
+                                                        />
+                                                        {errors[`quantity_${index}`] && (
+                                                            <p className="mt-1 text-sm text-red-600">{errors[`quantity_${index}`]}</p>
+                                                        )}
+                                                        {selectedProduct && (
+                                                            <p className="mt-1 text-xs text-gray-500">
+                                                                {(() => {
+                                                                    const unitLabel = 
+                                                                        selectedProduct.unitType === 'BOX' ? 'qutu' :
+                                                                        selectedProduct.unitType === 'METER' ? 'metr' :
+                                                                        selectedProduct.unitType === 'LITER' ? 'litr' :
+                                                                        selectedProduct.unitType === 'KILOGRAM' ? 'kq' :
+                                                                        'ədəd';
+                                                                    const stockDisplay = `${selectedProduct.fullBoxes || 0} tam ${selectedProduct.unitType === 'BOX' ? 'qutu' : 'paket'} + ${selectedProduct.openedBoxQuantity || 0} açıq (${availableStock} ${unitLabel})`;
+                                                                    return `${t('available_stock') || 'Mövcud stok'}: ${stockDisplay}`;
+                                                                })()}
+                                                            </p>
+                                                        )}
+                                                        {item.quantity && parseInt(item.quantity) > 0 && (
+                                                            <p className="mt-1 text-xs text-blue-600 font-medium">
+                                                                Ümumi: {item.quantity} {selectedProduct.unitType === 'BOX' ? 'ədəd' : 
+                                                                                           selectedProduct.unitType === 'METER' ? 'metr' :
+                                                                                           selectedProduct.unitType === 'LITER' ? 'litr' :
+                                                                                           selectedProduct.unitType === 'KILOGRAM' ? 'kq' : 'ədəd'}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                        {t('quantity') || 'Miqdar'}
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={item.quantity || ''}
+                                                        onChange={(e) => handleQuantityChange(index, e.target.value)}
+                                                        onKeyPress={(e) => {
+                                                            // Yalnız rəqəm yazıla bilər
+                                                            const char = String.fromCharCode(e.which);
+                                                            if (!/[0-9]/.test(char)) {
+                                                                e.preventDefault();
+                                                            }
+                                                        }}
+                                                        className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                                                            errors[`quantity_${index}`] ? 'border-red-500' : 'border-gray-300'
+                                                        } ${isEditMode ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                                        disabled={isLoading || !item.productId || isEditMode}
+                                                    />
+                                                    {errors[`quantity_${index}`] && (
+                                                        <p className="mt-1 text-sm text-red-600">{errors[`quantity_${index}`]}</p>
+                                                    )}
+                                                    {selectedProduct && (
+                                                        <p className="mt-1 text-xs text-gray-500">
+                                                            {t('available_stock') || 'Mövcud stok'}: {availableStock} {selectedProduct.unitType === 'BOX' ? 'qutu' : 
+                                                                                                                               selectedProduct.unitType === 'METER' ? 'metr' :
+                                                                                                                               selectedProduct.unitType === 'LITER' ? 'litr' :
+                                                                                                                               selectedProduct.unitType === 'KILOGRAM' ? 'kq' : 'ədəd'}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            )}
 
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1045,7 +1508,16 @@ export default function SaleForm() {
                                                 </label>
                                                 <input
                                                     type="text"
-                                                    value={item.salePrice || ''}
+                                                    value={(() => {
+                                                        if (!selectedProduct) return '';
+                                                        // Əgər qutu/paket tipindədirsə və boxPrice varsa, qutu qiymətini göstər
+                                                        if (selectedProduct.unitType !== 'PIECE' && selectedProduct.boxPrice && selectedProduct.piecesPerBox) {
+                                                            const boxPrice = parseFloat(selectedProduct.boxPrice);
+                                                            const piecePrice = parseFloat(selectedProduct.salePrice);
+                                                            return `${piecePrice.toFixed(2)} (${boxPrice.toFixed(2)} qutu)`;
+                                                        }
+                                                        return item.salePrice || defaultPrice.toFixed(2);
+                                                    })()}
                                                     readOnly
                                                     className={`w-full px-4 py-2 border rounded-lg bg-gray-100 cursor-not-allowed ${
                                                         errors[`salePrice_${index}`] ? 'border-red-500' : 'border-gray-300'
@@ -1058,7 +1530,18 @@ export default function SaleForm() {
                                                 )}
                                                 {selectedProduct && (
                                                     <p className="mt-1 text-xs text-gray-500">
-                                                        {t('default_price') || 'Standart'}: {defaultPrice.toFixed(2)} ₼
+                                                        {(() => {
+                                                            const unitLabel = 
+                                                                selectedProduct.unitType === 'BOX' ? 'qutu' :
+                                                                selectedProduct.unitType === 'METER' ? 'metr' :
+                                                                selectedProduct.unitType === 'LITER' ? 'litr' :
+                                                                selectedProduct.unitType === 'KILOGRAM' ? 'kq' :
+                                                                'ədəd';
+                                                            const priceInfo = selectedProduct.unitType !== 'PIECE' && selectedProduct.boxPrice && selectedProduct.piecesPerBox
+                                                                ? `${defaultPrice.toFixed(2)} ₼/${unitLabel} (${parseFloat(selectedProduct.boxPrice).toFixed(2)} ₼/${selectedProduct.piecesPerBox} ${unitLabel})`
+                                                                : `${defaultPrice.toFixed(2)} ₼/${unitLabel}`;
+                                                            return `${t('default_price') || 'Standart'}: ${priceInfo}`;
+                                                        })()}
                                                     </p>
                                                 )}
                                             </div>
@@ -1173,34 +1656,122 @@ export default function SaleForm() {
                                         const availableQty = getAvailableReturnQuantity(saleItem);
                                         const returnItem = returnItems.find(ri => ri.saleItemId === saleItem.id);
                                         const returnQty = returnItem?.quantity || 0;
+                                        const product = saleItem.product || {};
+                                        const isBoxType = product.unitType && product.unitType !== 'PIECE' && product.piecesPerBox;
 
                                         if (availableQty <= 0) return null;
 
+                                        // Qutu/ədəd məlumatlarını formatla
+                                        const formatQuantity = (quantity) => {
+                                            if (!isBoxType || !product.piecesPerBox) {
+                                                return `${quantity} ədəd`;
+                                            }
+                                            const boxes = Math.floor(quantity / product.piecesPerBox);
+                                            const pieces = quantity % product.piecesPerBox;
+                                            const unitLabel = product.unitType === 'BOX' ? 'qutu' : 
+                                                             product.unitType === 'METER' ? 'metr' : 
+                                                             product.unitType === 'LITER' ? 'litr' : 
+                                                             product.unitType === 'KILOGRAM' ? 'kq' : 'ədəd';
+                                            
+                                            if (boxes > 0 && pieces > 0) {
+                                                return `${boxes} ${product.unitType === 'BOX' ? 'qutu' : 'paket'} + ${pieces} açıq (${quantity} ${unitLabel})`;
+                                            } else if (boxes > 0) {
+                                                return `${boxes} ${product.unitType === 'BOX' ? 'qutu' : 'paket'} (${quantity} ${unitLabel})`;
+                                            } else if (pieces > 0) {
+                                                return `${pieces} açıq (${quantity} ${unitLabel})`;
+                                            }
+                                            return `${quantity} ${unitLabel}`;
+                                        };
+
                                         return (
                                             <div key={saleItem.id} className="border border-gray-200 rounded-lg p-4">
-                                                <div className="flex items-center justify-between mb-2">
+                                                <div className="flex items-start justify-between mb-2">
                                                     <div className="flex-1">
                                                         <p className="text-sm font-medium text-gray-900">
-                                                            {saleItem.product?.name || '-'}
+                                                            {product.name || '-'}
                                                         </p>
-                                                        <p className="text-xs text-gray-500">
-                                                            {t('sold_quantity') || 'Satılan'}: {saleItem.quantity} | 
-                                                            {t('available_to_return') || 'Qaytarıla bilən'}: {availableQty}
+                                                        <p className="text-xs text-gray-500 mt-1">
+                                                            {t('sold_quantity') || 'Satılan'}: {formatQuantity(saleItem.quantity)} | 
+                                                            {t('available_to_return') || 'Qaytarıla bilən'}: {formatQuantity(availableQty)}
                                                         </p>
                                                     </div>
-                                                    <div className="flex items-center gap-3">
-                                                        <label className="text-sm text-gray-700">
-                                                            {t('return_quantity') || 'Qaytarma miqdarı'}:
-                                                        </label>
-                                                        <input
-                                                            type="text"
-                                                            value={returnQty}
-                                                            onChange={(e) => handleReturnItemChange(saleItem.id, e.target.value)}
-                                                            className={`w-24 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 ${
-                                                                returnErrors[saleItem.id] ? 'border-red-500' : 'border-gray-300'
-                                                            }`}
-                                                            disabled={isReturnLoading}
-                                                        />
+                                                    <div className="flex flex-col gap-2 ml-4">
+                                                        {isBoxType ? (
+                                                            <>
+                                                                <div className="flex items-center gap-2">
+                                                                    <label className="text-xs text-gray-700 whitespace-nowrap">
+                                                                        {product.unitType === 'BOX' ? 'Qutu' : 'Paket'}:
+                                                                    </label>
+                                                                    <input
+                                                                        type="text"
+                                                                        value={returnItem?.boxes || ''}
+                                                                        onChange={(e) => handleReturnBoxesChange(saleItem.id, e.target.value)}
+                                                                        onKeyPress={(e) => {
+                                                                            const char = String.fromCharCode(e.which);
+                                                                            if (!/[0-9]/.test(char)) {
+                                                                                e.preventDefault();
+                                                                            }
+                                                                        }}
+                                                                        className={`w-20 px-2 py-1 text-sm border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 ${
+                                                                            returnErrors[saleItem.id] ? 'border-red-500' : 'border-gray-300'
+                                                                        }`}
+                                                                        disabled={isReturnLoading}
+                                                                        placeholder="0"
+                                                                    />
+                                                                </div>
+                                                                <div className="flex items-center gap-2">
+                                                                    <label className="text-xs text-gray-700 whitespace-nowrap">
+                                                                        Açıq {product.unitType === 'BOX' ? 'Ədəd' : 
+                                                                              product.unitType === 'METER' ? 'Metr' :
+                                                                              product.unitType === 'LITER' ? 'Litr' :
+                                                                              product.unitType === 'KILOGRAM' ? 'Kq' : 'Ədəd'}:
+                                                                    </label>
+                                                                    <input
+                                                                        type="text"
+                                                                        value={returnItem?.pieces || ''}
+                                                                        onChange={(e) => handleReturnPiecesChange(saleItem.id, e.target.value)}
+                                                                        onKeyPress={(e) => {
+                                                                            const char = String.fromCharCode(e.which);
+                                                                            if (!/[0-9]/.test(char)) {
+                                                                                e.preventDefault();
+                                                                            }
+                                                                        }}
+                                                                        className={`w-20 px-2 py-1 text-sm border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 ${
+                                                                            returnErrors[saleItem.id] ? 'border-red-500' : 'border-gray-300'
+                                                                        }`}
+                                                                        disabled={isReturnLoading}
+                                                                        placeholder="0"
+                                                                        maxLength={product.piecesPerBox ? String(product.piecesPerBox - 1).length : undefined}
+                                                                    />
+                                                                </div>
+                                                                {returnQty > 0 && (
+                                                                    <p className="text-xs text-red-600 font-medium">
+                                                                        Ümumi: {formatQuantity(returnQty)}
+                                                                    </p>
+                                                                )}
+                                                            </>
+                                                        ) : (
+                                                            <div className="flex items-center gap-2">
+                                                                <label className="text-xs text-gray-700 whitespace-nowrap">
+                                                                    {t('return_quantity') || 'Qaytarma miqdarı'}:
+                                                                </label>
+                                                                <input
+                                                                    type="text"
+                                                                    value={returnQty}
+                                                                    onChange={(e) => handleReturnItemChange(saleItem.id, e.target.value)}
+                                                                    onKeyPress={(e) => {
+                                                                        const char = String.fromCharCode(e.which);
+                                                                        if (!/[0-9]/.test(char)) {
+                                                                            e.preventDefault();
+                                                                        }
+                                                                    }}
+                                                                    className={`w-24 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 ${
+                                                                        returnErrors[saleItem.id] ? 'border-red-500' : 'border-gray-300'
+                                                                    }`}
+                                                                    disabled={isReturnLoading}
+                                                                />
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
                                                 {returnErrors[saleItem.id] && (

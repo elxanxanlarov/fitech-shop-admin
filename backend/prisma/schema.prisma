@@ -14,6 +14,14 @@ enum DeleteType {
   ARCHIVED    // Arxivləşdirilib
 }
 
+enum UnitType {
+  PIECE       // Ədəd
+  BOX         // Qutu
+  LITER       // Litr
+  METER       // Metr
+  KILOGRAM    // Kiloqram
+}
+
 model Role {
   id        String   @id @default(uuid())
   name      String   @unique
@@ -71,8 +79,15 @@ model Product {
   discountPrice   Decimal? @db.Decimal(10,2) // Endirim qiyməti
   discountPercent Int?                       // Endirim faizi
 
+  // Ölçü vahidi və qutu məlumatları
+  unitType        UnitType @default(PIECE) // Ölçü vahidi (ədəd, qutu, litr, metr, kq)
+  piecesPerBox    Int?     // Hər qutuda/paketdə neçə ədəd/litr/metr (qutu, litr, metr üçün mütləqdir)
+  openedBoxQuantity Int    @default(0) // Açıq qutu/paketdə neçə ədəd/litr/metr qalan
+  boxPrice        Decimal? @db.Decimal(10,2) // Qutu/paket qiyməti (əgər ədəd qiymətindən fərqlidirsə)
+
   barcode         String?   @unique
-  stock           Int       @default(0)
+  stock           Int       @default(0) // Ümumi stok (tam qutular * piecesPerBox + openedBoxQuantity)
+  fullBoxes       Int       @default(0) // Tam qutuların/paketlərin sayı
   isActive        Boolean   @default(true)
   isOfficial      Boolean   @default(false) // Rəsmi və ya qeyri-rəsmi
   deleteType      DeleteType @default(NONE) // Silinmə tipi

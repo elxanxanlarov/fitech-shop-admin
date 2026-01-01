@@ -44,5 +44,17 @@ export const productApi = {
     });
     return response.data;
   },
+
+  // Get product sales
+  getSales: async (productId) => {
+    const response = await api.get(`/product/${productId}/sales`);
+    return response.data;
+  },
+
+  // Get product returns
+  getReturns: async (productId) => {
+    const response = await api.get(`/product/${productId}/returns`);
+    return response.data;
+  },
 };
 

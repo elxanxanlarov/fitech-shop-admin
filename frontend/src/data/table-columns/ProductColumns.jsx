@@ -105,10 +105,63 @@ export const getProductColumns = (t, language = 'az') => [
         }
     },
     {
+        key: 'unitType',
+        label: t('unit_type') || 'Ölçü Vahidi',
+        render: (value, item) => {
+            const unitType = value || item.unitType || 'PIECE';
+            const unitTypeLabels = {
+                'PIECE': t('unit_type_piece') || 'Ədəd',
+                'BOX': t('unit_type_box') || 'Qutu',
+                'LITER': t('unit_type_liter') || 'Litr',
+                'METER': t('unit_type_meter') || 'Metr',
+                'KILOGRAM': t('unit_type_kilogram') || 'Kiloqram'
+            };
+            return (
+                <span className="inline-flex px-2 py-1 text-xs font-medium text-gray-700 bg-gray-100 rounded">
+                    {unitTypeLabels[unitType] || unitType}
+                </span>
+            );
+        }
+    },
+    {
         key: 'stock',
         label: t('stock'),
-        render: (value) => {
+        render: (value, item) => {
             const stock = parseInt(value || 0);
+            const unitType = item.unitType || 'PIECE';
+            const fullBoxes = item.fullBoxes || 0;
+            const openedBoxQuantity = item.openedBoxQuantity || 0;
+            const piecesPerBox = item.piecesPerBox;
+
+            // Əgər qutu tipindədirsə, detallı məlumat göstər
+            if (unitType !== 'PIECE' && piecesPerBox && piecesPerBox > 0) {
+                const unitTypeLabels = {
+                    'BOX': t('unit_type_piece') || 'ədəd',
+                    'LITER': t('unit_type_liter') || 'litr',
+                    'METER': t('unit_type_meter') || 'metr',
+                    'KILOGRAM': t('unit_type_kilogram') || 'kq'
+                };
+                return (
+                    <div className="flex flex-col">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            stock > 10 ? 'bg-green-100 text-green-800' :
+                            stock > 0 ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-red-100 text-red-800'
+                        }`}>
+                            {stock} {unitTypeLabels[unitType] || unitType}
+                        </span>
+                        {fullBoxes > 0 || openedBoxQuantity > 0 ? (
+                            <span className="text-xs text-gray-500 mt-1">
+                                {fullBoxes > 0 && `${fullBoxes} ${t('unit_type_box') || 'qutu'}`}
+                                {fullBoxes > 0 && openedBoxQuantity > 0 && ' + '}
+                                {openedBoxQuantity > 0 && `${openedBoxQuantity} açıq`}
+                            </span>
+                        ) : null}
+                    </div>
+                );
+            }
+
+            // Ədəd üçün sadə göstərici
             return (
                 <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                     stock > 10 ? 'bg-green-100 text-green-800' :

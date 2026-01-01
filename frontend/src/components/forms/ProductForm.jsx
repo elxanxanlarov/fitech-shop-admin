@@ -3,10 +3,11 @@ import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Input from '../ui/Input';
 import Alert from '../ui/Alert';
-import { MdInventory, MdDescription, MdImage, MdAttachMoney, MdLocalOffer, MdQrCode, MdStorage, MdCloudUpload, MdAdd, MdRemove, MdEdit } from 'react-icons/md';
+import { MdInventory, MdDescription, MdImage, MdAttachMoney, MdLocalOffer, MdQrCode, MdStorage, MdCloudUpload, MdAdd, MdRemove, MdEdit, MdHistory } from 'react-icons/md';
 import { productApi, uploadApi, categoryApi, subCategoryApi, stockApi } from '../../api';
 import { createInputChangeHandler } from '../../utils/validation';
 import SearchDropdown from '../ui/SearchDropdown';
+import ProductStockHistoryModal from '../modals/ProductStockHistoryModal';
 
 export default function ProductForm() {
     const navigate = useNavigate();
@@ -36,7 +37,12 @@ export default function ProductForm() {
         isActive: true,
         isOfficial: false,
         categoryId: '',
-        subCategoryId: ''
+        subCategoryId: '',
+        unitType: 'PIECE',
+        piecesPerBox: '',
+        openedBoxQuantity: 0,
+        boxPrice: '',
+        fullBoxes: 0
     });
 
     const [errors, setErrors] = useState({});
@@ -50,10 +56,13 @@ export default function ProductForm() {
     const [showStockManagement, setShowStockManagement] = useState(false);
     const [stockMovementType, setStockMovementType] = useState('IN');
     const [stockQuantity, setStockQuantity] = useState('');
+    const [stockBoxes, setStockBoxes] = useState('');
+    const [stockPieces, setStockPieces] = useState('');
     const [stockNote, setStockNote] = useState('');
     const [stockMovements, setStockMovements] = useState([]);
     const [loadingStockMovements, setLoadingStockMovements] = useState(false);
     const [processingStock, setProcessingStock] = useState(false);
+    const [showStockHistoryModal, setShowStockHistoryModal] = useState(false);
 
     // Fetch product data (if edit mode)
     useEffect(() => {
@@ -80,7 +89,12 @@ export default function ProductForm() {
                             isActive: product.isActive !== undefined ? product.isActive : true,
                             isOfficial: product.isOfficial !== undefined ? product.isOfficial : false,
                             categoryId: product.categoryId || '',
-                            subCategoryId: product.subCategoryId || ''
+                            subCategoryId: product.subCategoryId || '',
+                            unitType: product.unitType || 'PIECE',
+                            piecesPerBox: product.piecesPerBox?.toString() || '',
+                            openedBoxQuantity: product.openedBoxQuantity || 0,
+                            boxPrice: product.boxPrice?.toString() || '',
+                            fullBoxes: product.fullBoxes || 0
                         };
                         setFormData(initialData);
                         setInitialFormData(initialData);
@@ -200,7 +214,6 @@ export default function ProductForm() {
                 fetchSubCategories(categoryIdFromQuery);
             }
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [categoryIdFromQuery, isEditMode]);
 
     useEffect(() => {
@@ -251,9 +264,33 @@ export default function ProductForm() {
             return;
         }
 
-        if (!stockQuantity || parseInt(stockQuantity) <= 0) {
-            Alert.error(tAlert('error') || 'Xəta!', t('quantity_required') || 'Miqdar tələb olunur və 0-dan böyük olmalıdır');
-            return;
+        // Calculate quantity based on unit type
+        let finalQuantity = 0;
+        const unitType = formData.unitType || 'PIECE';
+        const piecesPerBox = formData.piecesPerBox || 1;
+
+        if (unitType === 'PIECE') {
+            if (!stockQuantity || parseInt(stockQuantity) <= 0) {
+                Alert.error(tAlert('error') || 'Xəta!', t('quantity_required') || 'Miqdar tələb olunur və 0-dan böyük olmalıdır');
+                return;
+            }
+            finalQuantity = parseInt(stockQuantity);
+        } else {
+            // For BOX, LITER, METER, KILOGRAM - use boxes and pieces
+            const boxes = parseInt(stockBoxes) || 0;
+            const pieces = parseInt(stockPieces) || 0;
+            
+            if (boxes === 0 && pieces === 0) {
+                Alert.error(tAlert('error') || 'Xəta!', t('quantity_required') || 'Miqdar tələb olunur və 0-dan böyük olmalıdır');
+                return;
+            }
+
+            if (pieces >= piecesPerBox) {
+                Alert.error(tAlert('error') || 'Xəta!', `Açıq miqdar ${piecesPerBox}-dən az olmalıdır`);
+                return;
+            }
+
+            finalQuantity = (boxes * piecesPerBox) + pieces;
         }
 
         setProcessingStock(true);
@@ -261,7 +298,7 @@ export default function ProductForm() {
             await stockApi.create({
                 productId: id,
                 type: stockMovementType,
-                quantity: parseInt(stockQuantity),
+                quantity: finalQuantity,
                 note: stockNote.trim() || null
             });
 
@@ -271,7 +308,9 @@ export default function ProductForm() {
                 const updatedProduct = productResponse.date;
                 setFormData(prev => ({
                     ...prev,
-                    stock: updatedProduct.stock
+                    stock: updatedProduct.stock,
+                    fullBoxes: updatedProduct.fullBoxes || 0,
+                    openedBoxQuantity: updatedProduct.openedBoxQuantity || 0
                 }));
             }
 
@@ -280,6 +319,8 @@ export default function ProductForm() {
 
             // Reset form
             setStockQuantity('');
+            setStockBoxes('');
+            setStockPieces('');
             setStockNote('');
             setShowStockManagement(false);
 
@@ -403,6 +444,15 @@ export default function ProductForm() {
             newErrors.stock = t('stock_invalid') || 'Stok mənfi ola bilməz';
         }
 
+        // UnitType və qutu məlumatları validation
+        const unitType = formData.unitType || 'PIECE';
+        if (['BOX', 'LITER', 'METER', 'KILOGRAM'].includes(unitType)) {
+            const piecesPerBox = formData.piecesPerBox ? parseInt(formData.piecesPerBox) : null;
+            if (!piecesPerBox || piecesPerBox <= 0) {
+                newErrors.piecesPerBox = t('pieces_per_box_required') || 'Qutu/Litr/Metr/Kiloqram tipi üçün hər qutu/paketdəki miqdar tələb olunur';
+            }
+        }
+
         // Edit modunda şəkil yoxdursa, fayl tələb olunur
 
         setErrors(newErrors);
@@ -450,7 +500,7 @@ export default function ProductForm() {
     };
 
     // Number field-lar üçün validation
-    const numberFields = ['purchasePrice', 'salePrice', 'discountPrice', 'discountPercent', 'stock'];
+    const numberFields = ['purchasePrice', 'salePrice', 'discountPrice', 'discountPercent', 'stock', 'piecesPerBox', 'openedBoxQuantity', 'boxPrice', 'fullBoxes'];
 
     // Custom handler for discount calculations
     const customDiscountHandler = (field, value) => {
@@ -551,6 +601,27 @@ export default function ProductForm() {
                 }
             }
         }
+
+        // Qutu qiyməti avtomatik hesabla (salePrice və piecesPerBox dəyişdikdə)
+        if ((field === 'salePrice' || field === 'piecesPerBox' || field === 'unitType') && formData.unitType !== 'PIECE') {
+            const salePrice = field === 'salePrice' ? parseFloat(value) : parseFloat(formData.salePrice || 0);
+            const piecesPerBox = field === 'piecesPerBox' ? parseInt(value) : (field === 'unitType' ? parseInt(formData.piecesPerBox || 0) : parseInt(formData.piecesPerBox || 0));
+
+            // Həmişə avtomatik hesabla
+            if (salePrice > 0 && piecesPerBox > 0) {
+                const calculatedBoxPrice = (salePrice * piecesPerBox).toFixed(2);
+                setFormData(prev => ({
+                    ...prev,
+                    boxPrice: calculatedBoxPrice
+                }));
+            } else {
+                // Əgər məlumat yoxdursa, boxPrice-u təmizlə
+                setFormData(prev => ({
+                    ...prev,
+                    boxPrice: ''
+                }));
+            }
+        }
     };
 
     const handleInputChange = createInputChangeHandler(
@@ -581,7 +652,12 @@ export default function ProductForm() {
             isActive: formData.isActive !== undefined ? formData.isActive : true,
             isOfficial: formData.isOfficial !== undefined ? formData.isOfficial : false,
             categoryId: formData.categoryId || '',
-            subCategoryId: formData.subCategoryId || ''
+            subCategoryId: formData.subCategoryId || '',
+            unitType: formData.unitType || 'PIECE',
+            piecesPerBox: formData.piecesPerBox?.toString() || '',
+            openedBoxQuantity: formData.openedBoxQuantity || 0,
+            boxPrice: formData.boxPrice?.toString() || '',
+            fullBoxes: formData.fullBoxes || 0
         };
 
         const initial = {
@@ -643,6 +719,30 @@ export default function ProductForm() {
 
             // If no image file in edit mode, show error
 
+            // Stock hesablaması (qutu/ədəd məntiqinə uyğun)
+            let calculatedStock = parseInt(formData.stock) || 0;
+            let calculatedFullBoxes = parseInt(formData.fullBoxes) || 0;
+            let calculatedOpenedBoxQuantity = parseInt(formData.openedBoxQuantity) || 0;
+            const piecesPerBox = formData.piecesPerBox ? parseInt(formData.piecesPerBox) : null;
+
+            // Əgər qutu tipindədirsə və stok verilibsə, fullBoxes və openedBoxQuantity hesabla
+            if (piecesPerBox && piecesPerBox > 0 && formData.stock) {
+                calculatedFullBoxes = Math.floor(calculatedStock / piecesPerBox);
+                calculatedOpenedBoxQuantity = calculatedStock % piecesPerBox;
+            } else if (piecesPerBox && piecesPerBox > 0 && (formData.fullBoxes !== undefined || formData.openedBoxQuantity !== undefined)) {
+                // fullBoxes və ya openedBoxQuantity verilibsə, stock hesabla
+                calculatedStock = (calculatedFullBoxes * piecesPerBox) + calculatedOpenedBoxQuantity;
+            }
+
+            // Qutu qiymətini avtomatik hesabla
+            let calculatedBoxPrice = null;
+            if (formData.unitType !== 'PIECE' && piecesPerBox && piecesPerBox > 0) {
+                const salePrice = parseFloat(formData.salePrice) || 0;
+                if (salePrice > 0) {
+                    calculatedBoxPrice = salePrice * piecesPerBox;
+                }
+            }
+
             const payload = {
                 name: formData.name.trim(),
                 description: formData.description?.trim() || null,
@@ -653,7 +753,12 @@ export default function ProductForm() {
                 discountPrice: formData.hasDiscount && formData.discountPrice ? parseFloat(formData.discountPrice) : null,
                 discountPercent: formData.hasDiscount && formData.discountPercent ? parseInt(formData.discountPercent) : null,
                 barcode: formData.barcode?.trim() || null,
-                stock: parseInt(formData.stock) || 0,
+                unitType: formData.unitType || 'PIECE',
+                piecesPerBox: piecesPerBox || null,
+                openedBoxQuantity: calculatedOpenedBoxQuantity,
+                boxPrice: calculatedBoxPrice,
+                fullBoxes: calculatedFullBoxes,
+                stock: calculatedStock,
                 isActive: formData.isActive,
                 isOfficial: formData.isOfficial,
                 categoryId:
@@ -922,6 +1027,238 @@ export default function ProductForm() {
                     )}
                 </div>
 
+                {/* Unit Type Information */}
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                    <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3 mb-4">
+                        <MdInventory className="inline w-5 h-5 mr-2" />
+                        {t('unit_info') || 'Ölçü Vahidi Məlumatları'}
+                    </h3>
+                    <p className="text-sm text-gray-600 mb-4">
+                        {t('unit_info_description') || 'Məhsulun ölçü vahidini və qutu/paket məlumatlarını təyin edin'}
+                    </p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                {t('unit_type') || 'Ölçü Vahidi'} <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                                value={formData.unitType || 'PIECE'}
+                                onChange={(e) => {
+                                    handleInputChange('unitType', e.target.value);
+                                    // Əgər PIECE seçilibsə, piecesPerBox-u təmizlə
+                                    if (e.target.value === 'PIECE') {
+                                        handleInputChange('piecesPerBox', '');
+                                        handleInputChange('openedBoxQuantity', 0);
+                                        handleInputChange('fullBoxes', 0);
+                                        handleInputChange('boxPrice', '');
+                                    } else {
+                                        // Qutu tipindədirsə, boxPrice avtomatik hesabla
+                                        const salePrice = parseFloat(formData.salePrice) || 0;
+                                        const piecesPerBox = parseInt(formData.piecesPerBox) || 0;
+                                        if (salePrice > 0 && piecesPerBox > 0 && (!formData.boxPrice || formData.boxPrice === '')) {
+                                            const calculatedBoxPrice = (salePrice * piecesPerBox).toFixed(2);
+                                            handleInputChange('boxPrice', calculatedBoxPrice);
+                                        }
+                                    }
+                                }}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                disabled={isLoading}
+                            >
+                                <option value="PIECE">{t('unit_type_piece') || 'Ədəd'}</option>
+                                <option value="BOX">{t('unit_type_box') || 'Qutu'}</option>
+                                <option value="LITER">{t('unit_type_liter') || 'Litr'}</option>
+                                <option value="METER">{t('unit_type_meter') || 'Metr'}</option>
+                                <option value="KILOGRAM">{t('unit_type_kilogram') || 'Kiloqram'}</option>
+                            </select>
+                            {errors.unitType && (
+                                <p className="mt-1 text-sm text-red-600">{errors.unitType}</p>
+                            )}
+                        </div>
+
+                        {formData.unitType !== 'PIECE' && (
+                            <>
+                                <div>
+                                    <Input
+                                        label={
+                                            formData.unitType === 'BOX' ? (t('pieces_per_box_box') || 'Hər Qutuda Neçə Ədəd') :
+                                            formData.unitType === 'METER' ? (t('pieces_per_box_meter') || 'Hər Paketdə Neçə Metr') :
+                                            formData.unitType === 'LITER' ? (t('pieces_per_box_liter') || 'Hər Paketdə Neçə Litr') :
+                                            formData.unitType === 'KILOGRAM' ? (t('pieces_per_box_kilogram') || 'Hər Paketdə Neçə Kiloqram') :
+                                            (t('pieces_per_box') || 'Hər Qutu/Paketdəki Miqdar')
+                                        }
+                                        type="text"
+                                        value={formData.piecesPerBox}
+                                        onChange={(e) => handleInputChange('piecesPerBox', e.target.value)}
+                                        error={errors.piecesPerBox}
+                                        placeholder={
+                                            formData.unitType === 'BOX' ? (t('pieces_per_box_box_placeholder') || 'Məs: 12 (hər qutuda 12 ədəd)') :
+                                            formData.unitType === 'METER' ? (t('pieces_per_box_meter_placeholder') || 'Məs: 500 (hər paketdə 500 metr)') :
+                                            formData.unitType === 'LITER' ? (t('pieces_per_box_liter_placeholder') || 'Məs: 5 (hər paketdə 5 litr)') :
+                                            formData.unitType === 'KILOGRAM' ? (t('pieces_per_box_kilogram_placeholder') || 'Məs: 25 (hər paketdə 25 kq)') :
+                                            (t('pieces_per_box_placeholder') || 'Məs: 12 (hər qutuda 12 ədəd)')
+                                        }
+                                        icon={<MdStorage />}
+                                        required
+                                    />
+                                </div>
+
+                                <div>
+                                    <Input
+                                        label={
+                                            formData.unitType === 'BOX' ? (t('full_boxes_box') || 'Tam Qutular') :
+                                            (t('full_boxes_meter') || 'Tam Paketlər')
+                                        }
+                                        type="text"
+                                        value={formData.fullBoxes}
+                                        onChange={(e) => {
+                                            handleInputChange('fullBoxes', e.target.value);
+                                            // Stock-u yenilə
+                                            const piecesPerBox = parseInt(formData.piecesPerBox) || 0;
+                                            const openedBoxQuantity = parseInt(formData.openedBoxQuantity) || 0;
+                                            const fullBoxes = parseInt(e.target.value) || 0;
+                                            if (piecesPerBox > 0) {
+                                                const calculatedStock = (fullBoxes * piecesPerBox) + openedBoxQuantity;
+                                                handleInputChange('stock', calculatedStock);
+                                            }
+                                        }}
+                                        error={errors.fullBoxes}
+                                        placeholder={
+                                            formData.unitType === 'BOX' ? (t('full_boxes_placeholder') || 'Tam qutuların sayı') :
+                                            (t('full_boxes_placeholder') || 'Tam paketlərin sayı')
+                                        }
+                                        icon={<MdStorage />}
+                                        disabled={isEditMode && !showStockManagement}
+                                    />
+                                </div>
+
+                                <div>
+                                    <Input
+                                        label={
+                                            formData.unitType === 'BOX' ? (t('opened_box_quantity_box') || 'Açıq Ədəd (Qutu Daxilində Olmayan)') :
+                                            formData.unitType === 'METER' ? (t('opened_box_quantity_meter') || 'Açıq Metr (Paket Daxilində Olmayan)') :
+                                            formData.unitType === 'LITER' ? (t('opened_box_quantity_liter') || 'Açıq Litr (Paket Daxilində Olmayan)') :
+                                            formData.unitType === 'KILOGRAM' ? (t('opened_box_quantity_kilogram') || 'Açıq Kiloqram (Paket Daxilində Olmayan)') :
+                                            (t('opened_box_quantity') || 'Açıq Məhsul (Qutu Daxilində Olmayan)')
+                                        }
+                                        type="text"
+                                        value={formData.openedBoxQuantity}
+                                        onChange={(e) => {
+                                            handleInputChange('openedBoxQuantity', e.target.value);
+                                            // Stock-u yenilə
+                                            const piecesPerBox = parseInt(formData.piecesPerBox) || 0;
+                                            const openedBoxQuantity = parseInt(e.target.value) || 0;
+                                            const fullBoxes = parseInt(formData.fullBoxes) || 0;
+                                            if (piecesPerBox > 0) {
+                                                const calculatedStock = (fullBoxes * piecesPerBox) + openedBoxQuantity;
+                                                handleInputChange('stock', calculatedStock);
+                                            }
+                                        }}
+                                        error={errors.openedBoxQuantity}
+                                        placeholder={
+                                            formData.unitType === 'BOX' ? (t('opened_box_quantity_box_placeholder') || 'Məs: 5 (qutu daxilində olmayan 5 ədəd)') :
+                                            formData.unitType === 'METER' ? (t('opened_box_quantity_meter_placeholder') || 'Məs: 40 (paket daxilində olmayan 40 metr)') :
+                                            formData.unitType === 'LITER' ? (t('opened_box_quantity_liter_placeholder') || 'Məs: 2 (paket daxilində olmayan 2 litr)') :
+                                            formData.unitType === 'KILOGRAM' ? (t('opened_box_quantity_kilogram_placeholder') || 'Məs: 3 (paket daxilində olmayan 3 kq)') :
+                                            (t('opened_box_quantity_placeholder') || 'Məs: 5 (qutu daxilində olmayan 5 ədəd)')
+                                        }
+                                        icon={<MdStorage />}
+                                        disabled={isEditMode && !showStockManagement}
+                                    />
+                                </div>
+
+                                <div>
+                                    <Input
+                                        label={
+                                            formData.unitType === 'BOX' ? (t('box_price_box') || 'Qutu Qiyməti') :
+                                            (t('box_price_meter') || 'Paket Qiyməti')
+                                        }
+                                        type="text"
+                                        value={(() => {
+                                            const salePrice = parseFloat(formData.salePrice) || 0;
+                                            const piecesPerBox = parseInt(formData.piecesPerBox) || 0;
+                                            if (salePrice > 0 && piecesPerBox > 0) {
+                                                // Avtomatik hesabla: salePrice * piecesPerBox
+                                                const autoBoxPrice = (salePrice * piecesPerBox).toFixed(2);
+                                                return autoBoxPrice;
+                                            }
+                                            return formData.boxPrice || '';
+                                        })()}
+                                        onChange={() => {
+                                            // Dəyişdirmək olmaz, disabled-dir
+                                        }}
+                                        error={errors.boxPrice}
+                                        placeholder={t('box_price_placeholder') || 'Avtomatik hesablanacaq'}
+                                        icon={<MdAttachMoney />}
+                                        disabled={true}
+                                    />
+                                    <p className="mt-1 text-xs text-gray-500">
+                                        {formData.unitType === 'BOX' 
+                                            ? (t('box_price_info') || 'Qutu qiyməti ədəd qiymətindən avtomatik hesablanır (Satış Qiyməti × Hər Qutudakı Miqdar)')
+                                            : formData.unitType === 'METER' 
+                                            ? (t('box_price_info_meter') || 'Paket qiyməti metr qiymətindən avtomatik hesablanır (Satış Qiyməti × Hər Paketdəki Metr)')
+                                            : formData.unitType === 'LITER' 
+                                            ? (t('box_price_info_liter') || 'Paket qiyməti litr qiymətindən avtomatik hesablanır (Satış Qiyməti × Hər Paketdəki Litr)')
+                                            : formData.unitType === 'KILOGRAM' 
+                                            ? (t('box_price_info_kilogram') || 'Paket qiyməti kiloqram qiymətindən avtomatik hesablanır (Satış Qiyməti × Hər Paketdəki Kiloqram)')
+                                            : (t('box_price_info') || 'Paket qiyməti ədəd qiymətindən avtomatik hesablanır (Satış Qiyməti × Hər Paketdəki Miqdar)')
+                                        }
+                                    </p>
+                                </div>
+                            </>
+                        )}
+
+                        {/* Hesablanmış Stok Input */}
+                        <div className="md:col-span-2">
+                            <Input
+                                label={t('calculated_stock') || 'Hesablanmış Stok'}
+                                type="text"
+                                value={(() => {
+                                    if (formData.unitType !== 'PIECE' && formData.piecesPerBox && parseInt(formData.piecesPerBox) > 0) {
+                                        const piecesPerBox = parseInt(formData.piecesPerBox) || 0;
+                                        const fullBoxes = parseInt(formData.fullBoxes) || 0;
+                                        const openedBoxQuantity = parseInt(formData.openedBoxQuantity) || 0;
+                                        return (fullBoxes * piecesPerBox) + openedBoxQuantity;
+                                    }
+                                    return formData.stock || 0;
+                                })()}
+                                onChange={(e) => {
+                                    // Əgər ədəd tipindədirsə, stock-u düzəlt
+                                    if (formData.unitType === 'PIECE') {
+                                        handleInputChange('stock', e.target.value);
+                                    }
+                                }}
+                                error={errors.stock}
+                                placeholder="0"
+                                icon={<MdStorage />}
+                                disabled={
+                                    isEditMode || 
+                                    (formData.unitType !== 'PIECE' && formData.piecesPerBox && parseInt(formData.piecesPerBox) > 0)
+                                }
+                            />
+                            {formData.unitType !== 'PIECE' && formData.piecesPerBox && parseInt(formData.piecesPerBox) > 0 && (
+                                <p className="mt-1 text-xs text-gray-500">
+                                    {formData.unitType === 'BOX' 
+                                        ? (t('stock_calculation_info_box') || 'Stok tam qutular və açıq ədədlər üzərindən avtomatik hesablanır')
+                                        : formData.unitType === 'METER' 
+                                        ? (t('stock_calculation_info_meter') || 'Stok tam paketlər və açıq metrlər üzərindən avtomatik hesablanır')
+                                        : formData.unitType === 'LITER' 
+                                        ? (t('stock_calculation_info_liter') || 'Stok tam paketlər və açıq litrlər üzərindən avtomatik hesablanır')
+                                        : formData.unitType === 'KILOGRAM' 
+                                        ? (t('stock_calculation_info_kilogram') || 'Stok tam paketlər və açıq kiloqramlar üzərindən avtomatik hesablanır')
+                                        : (t('stock_calculation_info') || 'Stok tam qutular və açıq məhsullar üzərindən avtomatik hesablanır')
+                                    }
+                                </p>
+                            )}
+                            {formData.unitType === 'PIECE' && isEditMode && (
+                                <p className="mt-1 text-xs text-gray-500">
+                                    {t('stock_managed_by_movements') || 'Stok hərəkətləri ilə idarə olunur'}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
                 {/* Stock and Status */}
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                     <div className="flex items-center justify-between mb-4">
@@ -941,23 +1278,6 @@ export default function ProductForm() {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                        <div>
-                            <Input
-                                label={t('stock')}
-                                type="text"
-                                value={formData.stock}
-                                onChange={(e) => handleInputChange('stock', e.target.value)}
-                                error={errors.stock}
-                                placeholder="0"
-                                icon={<MdStorage />}
-                                disabled={isEditMode}
-                            />
-                            {isEditMode && (
-                                <p className="mt-1 text-xs text-gray-500">
-                                    {t('stock_managed_by_movements') || 'Stok hərəkətləri ilə idarə olunur'}
-                                </p>
-                            )}
-                        </div>
 
                         <div>
                             <label className="flex items-center gap-3 cursor-pointer">
@@ -1003,79 +1323,160 @@ export default function ProductForm() {
 
                             {/* Stock Movement Form */}
                             <div className="bg-gray-50 rounded-lg p-4 mb-4">
-                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            {t('movement_type') || 'Hərəkət Növü'}
-                                        </label>
-                                        <select
-                                            value={stockMovementType}
-                                            onChange={(e) => setStockMovementType(e.target.value)}
-                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                        >
-                                            <option value="IN">{t('stock_in') || 'Stok Girişi'}</option>
-                                            <option value="OUT">{t('stock_out') || 'Stok Çıxışı'}</option>
-                                            <option value="ADJUSTMENT">{t('stock_adjustment') || 'Stok Düzəlişi'}</option>
-                                        </select>
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                {t('movement_type') || 'Hərəkət Növü'}
+                                            </label>
+                                            <select
+                                                value={stockMovementType}
+                                                onChange={(e) => setStockMovementType(e.target.value)}
+                                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            >
+                                                <option value="IN">{t('stock_in') || 'Stok Girişi'}</option>
+                                                <option value="OUT">{t('stock_out') || 'Stok Çıxışı'}</option>
+                                                <option value="ADJUSTMENT">{t('stock_adjustment') || 'Stok Düzəlişi'}</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                {t('note') || 'Qeyd'} ({t('optional') || 'İstəyə bağlı'})
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={stockNote}
+                                                onChange={(e) => setStockNote(e.target.value)}
+                                                placeholder={t('note_placeholder') || 'Qeyd daxil edin...'}
+                                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            />
+                                        </div>
+                                        <div className="flex items-end">
+                                            <button
+                                                type="button"
+                                                onClick={handleStockMovement}
+                                                disabled={processingStock || ((formData.unitType === 'PIECE' || !formData.unitType) ? !stockQuantity : (!stockBoxes && !stockPieces))}
+                                                className="w-full px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                                            >
+                                                {processingStock ? (
+                                                    <>
+                                                        <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24">
+                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                        </svg>
+                                                        {t('processing') || 'İşlənir...'}
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        {stockMovementType === 'IN' && <MdAdd className="w-4 h-4" />}
+                                                        {stockMovementType === 'OUT' && <MdRemove className="w-4 h-4" />}
+                                                        {stockMovementType === 'ADJUSTMENT' && <MdEdit className="w-4 h-4" />}
+                                                        {t('apply') || 'Tətbiq Et'}
+                                                    </>
+                                                )}
+                                            </button>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            {t('quantity') || 'Miqdar'}
-                                        </label>
-                                        <input
-                                            type="number"
-                                            value={stockQuantity}
-                                            onChange={(e) => setStockQuantity(e.target.value)}
-                                            placeholder="0"
-                                            min="1"
-                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            {t('note') || 'Qeyd'} ({t('optional') || 'İstəyə bağlı'})
-                                        </label>
-                                        <input
+                                    
+                                    {/* Quantity Input - Based on Unit Type */}
+                                    {(formData.unitType === 'PIECE' || !formData.unitType) ? (
+                                        <Input
                                             type="text"
-                                            value={stockNote}
-                                            onChange={(e) => setStockNote(e.target.value)}
-                                            placeholder={t('note_placeholder') || 'Qeyd daxil edin...'}
-                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            name="stockQuantity"
+                                            label={`${t('quantity') || 'Miqdar'} (ədəd)`}
+                                            value={stockQuantity}
+                                            onChange={(e) => {
+                                                const value = e.target.value;
+                                                // Only allow positive integers
+                                                if (value === '' || (/^\d+$/.test(value) && parseInt(value) > 0)) {
+                                                    setStockQuantity(value);
+                                                }
+                                            }}
+                                            placeholder="0"
+                                            size="sm"
                                         />
-                                    </div>
-                                    <div className="flex items-end">
-                                        <button
-                                            type="button"
-                                            onClick={handleStockMovement}
-                                            disabled={processingStock || !stockQuantity}
-                                            className="w-full px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
-                                        >
-                                            {processingStock ? (
-                                                <>
-                                                    <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24">
-                                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                                    </svg>
-                                                    {t('processing') || 'İşlənir...'}
-                                                </>
-                                            ) : (
-                                                <>
-                                                    {stockMovementType === 'IN' && <MdAdd className="w-4 h-4" />}
-                                                    {stockMovementType === 'OUT' && <MdRemove className="w-4 h-4" />}
-                                                    {stockMovementType === 'ADJUSTMENT' && <MdEdit className="w-4 h-4" />}
-                                                    {t('apply') || 'Tətbiq Et'}
-                                                </>
-                                            )}
-                                        </button>
-                                    </div>
+                                    ) : (
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                            <Input
+                                                type="text"
+                                                name="stockBoxes"
+                                                label={formData.unitType === 'BOX' ? (t('full_boxes_box') || 'Tam Qutular') :
+                                                       formData.unitType === 'METER' ? (t('full_boxes_meter') || 'Tam Paketlər') :
+                                                       formData.unitType === 'LITER' ? (t('full_boxes_liter') || 'Tam Paketlər') :
+                                                       formData.unitType === 'KILOGRAM' ? (t('full_boxes_kilogram') || 'Tam Paketlər') :
+                                                       'Tam Qutular/Paketlər'}
+                                                value={stockBoxes}
+                                                onChange={(e) => {
+                                                    const value = e.target.value;
+                                                    // Only allow non-negative integers
+                                                    if (value === '' || (/^\d+$/.test(value))) {
+                                                        setStockBoxes(value);
+                                                    }
+                                                }}
+                                                placeholder="0"
+                                                size="sm"
+                                            />
+                                            <Input
+                                                type="text"
+                                                name="stockPieces"
+                                                label={
+                                                    formData.unitType === 'BOX' ? (t('opened_product_quantity_box') || 'Qutu Daxilində Olmayan') :
+                                                    formData.unitType === 'METER' ? (t('opened_product_quantity_meter') || 'Paket Daxilində Olmayan') :
+                                                    formData.unitType === 'LITER' ? (t('opened_product_quantity_liter') || 'Paket Daxilində Olmayan') :
+                                                    formData.unitType === 'KILOGRAM' ? (t('opened_product_quantity_kilogram') || 'Paket Daxilində Olmayan') :
+                                                    'Qutu/Paket Daxilində Olmayan'
+                                                }
+                                                value={stockPieces}
+                                                onChange={(e) => {
+                                                    const value = e.target.value;
+                                                    // Only allow non-negative integers
+                                                    if (value === '' || /^\d+$/.test(value)) {
+                                                        setStockPieces(value);
+                                                    }
+                                                }}
+                                                placeholder="0"
+                                                size="sm"
+                                            />
+                                            <Input
+                                                type="text"
+                                                name="calculatedQuantity"
+                                                label={t('calculated_quantity') || 'Hesablanmış Miqdar'}
+                                                value={(() => {
+                                                    const boxes = parseInt(stockBoxes) || 0;
+                                                    const pieces = parseInt(stockPieces) || 0;
+                                                    const piecesPerBox = formData.piecesPerBox || 1;
+                                                    const total = (boxes * piecesPerBox) + pieces;
+                                                    const unitLabel = formData.unitType === 'BOX' ? 'ədəd' : 
+                                                                     formData.unitType === 'METER' ? 'metr' : 
+                                                                     formData.unitType === 'LITER' ? 'litr' : 
+                                                                     formData.unitType === 'KILOGRAM' ? 'kq' : 'ədəd';
+                                                    return total > 0 ? `${total} ${unitLabel}` : '0 ədəd';
+                                                })()}
+                                                disabled
+                                                size="sm"
+                                            />
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
                             {/* Stock Movements History */}
                             <div>
-                                <h5 className="text-sm font-semibold text-gray-700 mb-3">
-                                    {t('stock_movements_history') || 'Stok Hərəkətləri Tarixçəsi'}
-                                </h5>
+                                <div className="flex items-center justify-between mb-3">
+                                    <h5 className="text-sm font-semibold text-gray-700">
+                                        {t('stock_movements_history') || 'Stok Hərəkətləri Tarixçəsi'}
+                                    </h5>
+                                    {isEditMode && id && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowStockHistoryModal(true)}
+                                            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+                                        >
+                                            <MdHistory className="w-4 h-4" />
+                                            Tam Tarixçə
+                                        </button>
+                                    )}
+                                </div>
                                 {loadingStockMovements ? (
                                     <div className="text-center py-4">
                                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
@@ -1163,6 +1564,16 @@ export default function ProductForm() {
                     </button>
                 </div>
             </form>
+
+            {/* Stock History Modal */}
+            {isEditMode && id && (
+                <ProductStockHistoryModal
+                    isOpen={showStockHistoryModal}
+                    onClose={() => setShowStockHistoryModal(false)}
+                    productId={id}
+                    product={formData}
+                />
+            )}
         </div>
     );
 }

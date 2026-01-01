@@ -96,16 +96,6 @@ export default function Statistics() {
     return parseFloat(amount).toFixed(2);
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('az-AZ', { 
-      year: 'numeric', 
-      month: '2-digit', 
-      day: '2-digit' 
-    });
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -405,16 +395,64 @@ export default function Statistics() {
               </thead>
               <tbody>
                 {topProducts.length > 0 ? (
-                  topProducts.map((item, index) => (
-                    <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="py-3 px-4 text-gray-800">
-                        {item.product ? item.product.name : t('no_data')}
-                      </td>
-                      <td className="py-3 px-4 text-right text-gray-700">{item.totalQuantity}</td>
-                      <td className="py-3 px-4 text-right text-gray-700">{formatCurrency(item.totalRevenue)}</td>
-                      <td className="py-3 px-4 text-right text-green-600 font-medium">{formatCurrency(item.totalProfit)}</td>
-                    </tr>
-                  ))
+                  topProducts.map((item, index) => {
+                    // Qutu/ədəd məlumatlarını formatla
+                    const formatQuantity = () => {
+                      const product = item.product || {};
+                      const quantity = item.totalQuantity || 0;
+                      const unitType = product.unitType || 'PIECE';
+                      const piecesPerBox = product.piecesPerBox;
+                      
+                      // Əgər PIECE tipindədirsə, sadəcə ədəd göstər
+                      if (unitType === 'PIECE') {
+                        return `${quantity} ədəd`;
+                      }
+                      
+                      // Qutu/paket tipindədirsə
+                      if (piecesPerBox && piecesPerBox > 0) {
+                        const boxes = Math.floor(quantity / piecesPerBox);
+                        const pieces = quantity % piecesPerBox;
+                        const unitLabel = unitType === 'BOX' ? 'ədəd' : 
+                                         unitType === 'METER' ? 'metr' : 
+                                         unitType === 'LITER' ? 'litr' : 
+                                         unitType === 'KILOGRAM' ? 'kq' : 'ədəd';
+                        
+                        if (boxes > 0 && pieces > 0) {
+                          return `${boxes} ${unitType === 'BOX' ? 'qutu' : 'paket'} + ${pieces} açıq (${quantity} ${unitLabel})`;
+                        } else if (boxes > 0) {
+                          return `${boxes} ${unitType === 'BOX' ? 'qutu' : 'paket'} (${quantity} ${unitLabel})`;
+                        } else if (pieces > 0) {
+                          return `${pieces} açıq (${quantity} ${unitLabel})`;
+                        }
+                        return `${quantity} ${unitLabel}`;
+                      }
+                      
+                      return `${quantity} ədəd`;
+                    };
+                    
+                    return (
+                      <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="py-3 px-4 text-gray-800">
+                          {item.product ? item.product.name : t('no_data')}
+                        </td>
+                        <td className="py-3 px-4 text-right text-gray-700">
+                          <div className="flex flex-col items-end">
+                            <span>{formatQuantity()}</span>
+                            {item.product?.unitType && item.product.unitType !== 'PIECE' && (
+                              <span className="text-xs text-gray-500">
+                                {item.product.unitType === 'BOX' ? 'Qutu' : 
+                                 item.product.unitType === 'METER' ? 'Metr' : 
+                                 item.product.unitType === 'LITER' ? 'Litr' : 
+                                 item.product.unitType === 'KILOGRAM' ? 'Kiloqram' : ''}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-right text-gray-700">{formatCurrency(item.totalRevenue)}</td>
+                        <td className="py-3 px-4 text-right text-green-600 font-medium">{formatCurrency(item.totalProfit)}</td>
+                      </tr>
+                    );
+                  })
                 ) : (
                   <tr>
                     <td colSpan={4} className="py-8 text-center text-gray-500">{t('no_data')}</td>

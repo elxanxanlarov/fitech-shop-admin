@@ -6,6 +6,16 @@ export const AdminSidebarData = [
     icon: <MdPeople />,
   },
   {
+    title: 'expense_management',
+    path: '/admin/expenses',
+    icon: <MdAttachMoney />,
+  },
+  {
+    title: 'cash_handover_management',
+    path: '/admin/cash-handover',
+    icon: <MdAccountBalanceWallet />,
+  },
+  {
     title: 'product_management',
     path: '/admin/products',
     icon: <MdShoppingCart />,
@@ -19,16 +29,6 @@ export const AdminSidebarData = [
     title: 'sale_management',
     path: '/admin/sales',
     icon: <MdPointOfSale />,
-  },
-  {
-    title: 'expense_management',
-    path: '/admin/expenses',
-    icon: <MdAttachMoney />,
-  },
-  {
-    title: 'cash_handover_management',
-    path: '/admin/cash-handover',
-    icon: <MdAccountBalanceWallet />,
   },
   {
     title: 'activity_log',

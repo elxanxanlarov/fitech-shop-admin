@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { saleApi, receiptApi } from '../../api';
+import { saleApi, receiptApi, returnApi } from '../../api';
 import Alert from '../ui/Alert';
-import { Printer, ArrowLeft, CheckCircle } from 'lucide-react';
+import { Printer, ArrowLeft, CheckCircle, Undo } from 'lucide-react';
 
 export default function Check() {
     const [searchParams] = useSearchParams();
@@ -13,6 +13,7 @@ export default function Check() {
 
     const [sale, setSale] = useState(null);
     const [receipt, setReceipt] = useState(null);
+    const [returns, setReturns] = useState([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -41,16 +42,27 @@ export default function Check() {
                                 setSale(saleResponse.data);
                             }
                         }
-                    } else {
-                        // Qəbz yoxdursa, satış məlumatlarını gətir
-                        const saleResponse = await saleApi.getById(saleId);
-                        if (saleResponse.success && saleResponse.data) {
-                            setSale(saleResponse.data);
                         } else {
-                            Alert.error(t('error') || 'Xəta!', t('sale_not_found') || 'Satış tapılmadı');
-                            navigate('/admin/sales');
+                            // Qəbz yoxdursa, satış məlumatlarını gətir
+                            const saleResponse = await saleApi.getById(saleId);
+                            if (saleResponse.success && saleResponse.data) {
+                                setSale(saleResponse.data);
+                            } else {
+                                Alert.error(t('error') || 'Xəta!', t('sale_not_found') || 'Satış tapılmadı');
+                                navigate('/admin/sales');
+                            }
                         }
-                    }
+                        
+                        // Qaytarma məlumatlarını gətir
+                        try {
+                            const returnsResponse = await returnApi.getBySaleId(saleId);
+                            if (returnsResponse.success && returnsResponse.data) {
+                                setReturns(returnsResponse.data);
+                            }
+                        } catch (returnError) {
+                            console.error('Error fetching returns:', returnError);
+                            // Qaytarma xətası qəbz göstərməyə mane olmasın
+                        }
                 } catch {
                     // Qəbz xətası halında, satış məlumatlarını gətir
                     const saleResponse = await saleApi.getById(saleId);
@@ -106,7 +118,12 @@ export default function Check() {
 
     // Qəbz məlumatları varsa, onları istifadə et
     const displaySale = receipt?.sale || sale;
-    const customerName = `${displaySale.customerName || ''} ${displaySale.customerSurname || ''}`.trim() || t('walk_in_customer') || 'Gəzinti müştərisi';
+    // Qəbz-də müştəri adı varsa, onu istifadə et, yoxsa sale-dəki məlumatları yoxla
+    const receiptCustomerName = receipt?.customerName || receipt?.customerSurname 
+        ? `${receipt.customerName || ''} ${receipt.customerSurname || ''}`.trim()
+        : '';
+    const saleCustomerName = `${displaySale.customerName || ''} ${displaySale.customerSurname || ''}`.trim();
+    const customerName = receiptCustomerName || saleCustomerName || t('no_information') || 'Məlumat yoxdur';
     const receiptNumber = receipt?.receiptNumber || `#${sale.id.substring(0, 8).toUpperCase()}`;
 
     return (
@@ -162,10 +179,10 @@ export default function Check() {
                         <span className="text-gray-600 font-medium">{t('customer') || 'Müştəri'}:</span>
                         <span className="text-gray-900 font-semibold">{customerName}</span>
                     </div>
-                    {displaySale.customerPhone && (
+                    {(receipt?.customerPhone || displaySale.customerPhone) && (
                         <div className="flex justify-between">
                             <span className="text-gray-600 font-medium">{t('phone') || 'Telefon'}:</span>
-                            <span className="text-gray-900">{displaySale.customerPhone}</span>
+                            <span className="text-gray-900">{receipt?.customerPhone || displaySale.customerPhone}</span>
                         </div>
                     )}
                 </div>
@@ -226,6 +243,66 @@ export default function Check() {
                         </div>
                     )}
                 </div>
+
+                {/* Returns Section */}
+                {returns && returns.length > 0 && (
+                    <div className="mb-6 border-t-2 border-gray-300 pt-4">
+                        <div className="flex items-center gap-2 mb-4">
+                            <Undo className="w-5 h-5 text-orange-600" />
+                            <h2 className="text-lg font-semibold text-gray-900">{t('returns') || 'Qaytarmalar'}</h2>
+                        </div>
+                        {returns.map((returnItem, idx) => (
+                            <div key={returnItem.id || idx} className="mb-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                                <div className="space-y-2">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <p className="text-sm font-semibold text-gray-700">
+                                                {t('return_id') || 'Qaytarma ID'}: #{returnItem.id?.substring(0, 8) || '-'}
+                                            </p>
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                {new Date(returnItem.createdAt).toLocaleString('az-AZ', {
+                                                    year: 'numeric',
+                                                    month: 'short',
+                                                    day: 'numeric',
+                                                    hour: '2-digit',
+                                                    minute: '2-digit'
+                                                })}
+                                            </p>
+                                        </div>
+                                        <span className="text-sm font-semibold text-orange-600">
+                                            {parseFloat(returnItem.returnedAmount || returnItem.totalAmount || 0).toFixed(2)} ₼
+                                        </span>
+                                    </div>
+                                    
+                                    {returnItem.items && returnItem.items.length > 0 && (
+                                        <div className="mt-3 pt-3 border-t border-orange-200">
+                                            <p className="text-xs font-semibold text-gray-700 mb-2">{t('returned_items') || 'Qaytarılan Məhsullar'}:</p>
+                                            <div className="space-y-1">
+                                                {returnItem.items.map((item, itemIdx) => (
+                                                    <div key={item.id || itemIdx} className="flex justify-between text-sm">
+                                                        <span className="text-gray-700">
+                                                            {item.product?.name || '-'} × {item.quantity || 0}
+                                                        </span>
+                                                        <span className="text-gray-600 font-medium">
+                                                            {parseFloat(item.totalPrice || 0).toFixed(2)} ₼
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                    
+                                    {returnItem.reason && (
+                                        <div className="mt-2 pt-2 border-t border-orange-200">
+                                            <p className="text-xs font-semibold text-gray-700 mb-1">{t('reason') || 'Səbəb'}:</p>
+                                            <p className="text-xs text-gray-600">{returnItem.reason}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
 
                 {/* Note */}
                 {(displaySale.note || receipt?.note) && (

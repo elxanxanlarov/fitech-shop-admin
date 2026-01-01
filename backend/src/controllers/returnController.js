@@ -1,6 +1,7 @@
 import prisma from "../lib/prisma.js";
 import { Prisma } from "@prisma/client";
 import { createActivityLog } from "./activityLogController.js";
+import { decreaseProductStock, increaseProductStock } from "../utils/productStockHelper.js";
 
 export const getAllReturns = async (req, res) => {
     try {
@@ -190,16 +191,30 @@ export const createReturn = async (req, res) => {
             }
         });
 
-        // Stokları geri qaytar
+        // Stokları geri qaytar (qutu/ədəd məntiqinə uyğun)
         for (const item of returnItems) {
-            await prisma.product.update({
-                where: { id: item.productId },
-                data: {
-                    stock: {
-                        increment: item.quantity
-                    }
-                }
+            const product = await prisma.product.findUnique({
+                where: { id: item.productId }
             });
+
+            if (!product) continue;
+
+            try {
+                // Stok artır (qutu/ədəd məntiqinə uyğun)
+                const newStockData = increaseProductStock(product, item.quantity);
+
+                await prisma.product.update({
+                    where: { id: item.productId },
+                    data: {
+                        stock: newStockData.stock,
+                        fullBoxes: newStockData.fullBoxes,
+                        openedBoxQuantity: newStockData.openedBoxQuantity
+                    }
+                });
+            } catch (stockError) {
+                console.error(`Stok yenilənərkən xəta (${product.name}):`, stockError);
+                // Xətanı log et, amma qaytarmanı ləğv etmə
+            }
         }
 
         // Sale-də isRefunded-i true et
@@ -323,16 +338,27 @@ export const deleteReturn = async (req, res) => {
             return res.status(404).json({ success: false, message: "Qaytarma tapılmadı" });
         }
 
-        // Stokları geri çıxar (qaytarma silinəndə stoklar azalmalıdır)
+        // Stokları geri çıxar (qaytarma silinəndə stoklar azalmalıdır) - qutu/ədəd məntiqinə uyğun
         for (const item of existingReturn.items) {
-            await prisma.product.update({
-                where: { id: item.productId },
-                data: {
-                    stock: {
-                        decrement: item.quantity
+            const product = item.product;
+            if (!product) continue;
+
+            try {
+                // Stok azalt (qutu/ədəd məntiqinə uyğun)
+                const newStockData = decreaseProductStock(product, item.quantity);
+
+                await prisma.product.update({
+                    where: { id: item.productId },
+                    data: {
+                        stock: newStockData.stock,
+                        fullBoxes: newStockData.fullBoxes,
+                        openedBoxQuantity: newStockData.openedBoxQuantity
                     }
-                }
-            });
+                });
+            } catch (stockError) {
+                console.error(`Stok yenilənərkən xəta (${product.name}):`, stockError);
+                // Xətanı log et, amma qaytarmanı ləğv etmə
+            }
         }
 
         await prisma.saleReturn.delete({ where: { id } });

@@ -1,2 +1,5 @@
 @import "tailwindcss";
 
+input , select, textarea {
+    outline: none;
+}

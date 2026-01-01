@@ -1,5 +1,6 @@
 import prisma from "../lib/prisma.js";
 import { createActivityLog } from "./activityLogController.js";
+import { increaseProductStock, decreaseProductStock, calculateProductStock } from "../utils/productStockHelper.js";
 
 // Get all stock movements
 export const getAllStockMovements = async (req, res) => {
@@ -127,28 +128,54 @@ export const createStockMovement = async (req, res) => {
             });
         }
 
-        const previousStock = product.stock;
-        let newStock = previousStock;
+        const previousStock = calculateProductStock(product);
+        let newStockData = {
+            stock: previousStock,
+            fullBoxes: product.fullBoxes || 0,
+            openedBoxQuantity: product.openedBoxQuantity || 0
+        };
 
-        // Calculate new stock based on type
-        if (type === 'IN') {
-            newStock = previousStock + Math.abs(quantityNum);
-        } else if (type === 'OUT') {
-            newStock = previousStock - Math.abs(quantityNum);
-            if (newStock < 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: `Stokda kifayət qədər məhsul yoxdur. Mövcud stok: ${previousStock}`,
-                });
+        // Calculate new stock based on type (qutu/ədəd məntiqinə uyğun)
+        try {
+            if (type === 'IN') {
+                // Stok artır (qutu/ədəd məntiqinə uyğun)
+                newStockData = increaseProductStock(product, Math.abs(quantityNum));
+            } else if (type === 'OUT') {
+                // Stok azalt (qutu/ədəd məntiqinə uyğun)
+                newStockData = decreaseProductStock(product, Math.abs(quantityNum));
+            } else if (type === 'ADJUSTMENT') {
+                // Stok tənzimləməsi - tam stock-u set et
+                const targetStock = quantityNum;
+                if (targetStock < 0) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Stok mənfi ola bilməz",
+                    });
+                }
+
+                // Əgər qutu tipindədirsə, fullBoxes və openedBoxQuantity hesabla
+                const unitType = product.unitType || 'PIECE';
+                const piecesPerBox = product.piecesPerBox;
+
+                if (unitType !== 'PIECE' && piecesPerBox && piecesPerBox > 0) {
+                    newStockData = {
+                        stock: targetStock,
+                        fullBoxes: Math.floor(targetStock / piecesPerBox),
+                        openedBoxQuantity: targetStock % piecesPerBox
+                    };
+                } else {
+                    newStockData = {
+                        stock: targetStock,
+                        fullBoxes: 0,
+                        openedBoxQuantity: 0
+                    };
+                }
             }
-        } else if (type === 'ADJUSTMENT') {
-            newStock = quantityNum;
-            if (newStock < 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Stok mənfi ola bilməz",
-                });
-            }
+        } catch (stockError) {
+            return res.status(400).json({
+                success: false,
+                message: stockError.message || `Stokda kifayət qədər məhsul yoxdur. Mövcud stok: ${previousStock}`,
+            });
         }
 
         // Create stock movement
@@ -156,18 +183,22 @@ export const createStockMovement = async (req, res) => {
             data: {
                 productId: productId,
                 type: type,
-                quantity: type === 'ADJUSTMENT' ? (newStock - previousStock) : quantityNum,
+                quantity: type === 'ADJUSTMENT' ? (newStockData.stock - previousStock) : quantityNum,
                 previousStock: previousStock,
-                newStock: newStock,
+                newStock: newStockData.stock,
                 note: note?.trim() || null,
                 staffId: req.staffId || null
             }
         });
 
-        // Update product stock
+        // Update product stock (qutu/ədəd məntiqinə uyğun)
         await prisma.product.update({
             where: { id: productId },
-            data: { stock: newStock }
+            data: {
+                stock: newStockData.stock,
+                fullBoxes: newStockData.fullBoxes,
+                openedBoxQuantity: newStockData.openedBoxQuantity
+            }
         });
 
         // Activity log
@@ -223,10 +254,30 @@ export const deleteStockMovement = async (req, res) => {
             });
         }
 
-        // Revert stock
+        // Revert stock (qutu/ədəd məntiqinə uyğun)
+        // Bu funksiya sadəcə əvvəlki stock-u restore edir, amma qutu məntiqini nəzərə almır
+        // Əslində deleteStockMovement mürəkkəbdir, çünki qutu məlumatlarını da geri qaytarmalıdır
+        // Sadə həll: əvvəlki stock-dan fullBoxes və openedBoxQuantity hesabla
+        const product = movement.product;
+        const previousStock = movement.previousStock;
+        const unitType = product.unitType || 'PIECE';
+        const piecesPerBox = product.piecesPerBox;
+
+        let revertData = {
+            stock: previousStock
+        };
+
+        if (unitType !== 'PIECE' && piecesPerBox && piecesPerBox > 0) {
+            revertData.fullBoxes = Math.floor(previousStock / piecesPerBox);
+            revertData.openedBoxQuantity = previousStock % piecesPerBox;
+        } else {
+            revertData.fullBoxes = 0;
+            revertData.openedBoxQuantity = 0;
+        }
+
         await prisma.product.update({
             where: { id: movement.productId },
-            data: { stock: movement.previousStock }
+            data: revertData
         });
 
         // Delete movement

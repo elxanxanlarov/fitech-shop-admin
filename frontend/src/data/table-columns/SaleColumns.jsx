@@ -31,13 +31,62 @@ export const getSaleColumns = (t, language = 'az') => [
         label: t('items') || 'Məhsullar',
         render: (value, item) => {
             const items = item.items || [];
-            const totalItems = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
+            const totalItems = items.reduce((sum, saleItem) => sum + (saleItem.quantity || 0), 0);
+            
+            // Qutu/ədəd məlumatlarını formatla
+            const formatQuantity = (saleItem) => {
+                const product = saleItem.product || {};
+                const quantity = saleItem.quantity || 0;
+                const unitType = product.unitType || 'PIECE';
+                const piecesPerBox = product.piecesPerBox;
+                
+                // Əgər PIECE tipindədirsə, sadəcə ədəd göstər
+                if (unitType === 'PIECE') {
+                    return `${quantity} ədəd`;
+                }
+                
+                // Qutu/paket tipindədirsə
+                if (piecesPerBox && piecesPerBox > 0) {
+                    const boxes = Math.floor(quantity / piecesPerBox);
+                    const pieces = quantity % piecesPerBox;
+                    const unitLabel = unitType === 'BOX' ? 'ədəd' : 
+                                     unitType === 'METER' ? 'metr' : 
+                                     unitType === 'LITER' ? 'litr' : 
+                                     unitType === 'KILOGRAM' ? 'kq' : 'ədəd';
+                    
+                    if (boxes > 0 && pieces > 0) {
+                        return `${boxes} ${unitType === 'BOX' ? 'qutu' : 'paket'} + ${pieces} açıq (${quantity} ${unitLabel})`;
+                    } else if (boxes > 0) {
+                        return `${boxes} ${unitType === 'BOX' ? 'qutu' : 'paket'} (${quantity} ${unitLabel})`;
+                    } else if (pieces > 0) {
+                        return `${pieces} açıq (${quantity} ${unitLabel})`;
+                    }
+                    return `${quantity} ${unitLabel}`;
+                }
+                
+                return `${quantity} ədəd`;
+            };
+            
             return (
-                <div className="flex items-center space-x-2">
-                    <ShoppingCart className="w-4 h-4 text-gray-400" />
-                    <span className="text-sm text-gray-900">
-                        {items.length} {t('product') || 'məhsul'} ({totalItems} {t('quantity') || 'ədəd'})
-                    </span>
+                <div className="flex flex-col space-y-1">
+                    <div className="flex items-center space-x-2">
+                        <ShoppingCart className="w-4 h-4 text-gray-400" />
+                        <span className="text-sm font-medium text-gray-900">
+                            {items.length} {t('product') || 'məhsul'}
+                        </span>
+                    </div>
+                    {items.length > 0 && (
+                        <div className="text-xs text-gray-600 pl-6 space-y-0.5">
+                            {items.slice(0, 3).map((saleItem, idx) => (
+                                <div key={idx}>
+                                    {saleItem.product?.name || 'Məhsul'}: {formatQuantity(saleItem)}
+                                </div>
+                            ))}
+                            {items.length > 3 && (
+                                <div className="text-gray-500">+ {items.length - 3} digər...</div>
+                            )}
+                        </div>
+                    )}
                 </div>
             );
         }

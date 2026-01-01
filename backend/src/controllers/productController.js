@@ -5,6 +5,7 @@ import XLSX from "xlsx";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { calculateProductStock, decreaseProductStock, increaseProductStock } from "../utils/productStockHelper.js";
 
 // In productController.js
 export const getAllProducts = async (req, res) => {
@@ -239,6 +240,11 @@ export const createProduct = async (req, res) => {
             isOfficial,
             categoryId,
             subCategoryId,
+            unitType,
+            piecesPerBox,
+            openedBoxQuantity,
+            boxPrice,
+            fullBoxes
         } = req.body;
         if (!name || !purchasePrice || !salePrice) {
             return res.status(400).json({
@@ -278,6 +284,35 @@ export const createProduct = async (req, res) => {
             finalDiscountPercent = Math.round(ratio.sub(1).mul(100).toNumber());
         }
 
+        // UnitType və qutu məlumatlarını yoxla
+        const finalUnitType = unitType || 'PIECE';
+        const finalPiecesPerBox = piecesPerBox !== undefined ? parseInt(piecesPerBox) : null;
+        const finalOpenedBoxQuantity = openedBoxQuantity !== undefined ? parseInt(openedBoxQuantity) : 0;
+        const finalFullBoxes = fullBoxes !== undefined ? parseInt(fullBoxes) : 0;
+        const finalBoxPrice = boxPrice ? new Prisma.Decimal(boxPrice) : null;
+
+        // Validation: Əgər BOX, LITER, METER və ya KILOGRAM-dırsa, piecesPerBox mütləq olmalıdır
+        if (['BOX', 'LITER', 'METER', 'KILOGRAM'].includes(finalUnitType) && (!finalPiecesPerBox || finalPiecesPerBox <= 0)) {
+            return res.status(400).json({
+                success: false,
+                message: `${finalUnitType} tipi üçün hər qutu/paketdəki miqdar (piecesPerBox) tələb olunur`,
+            });
+        }
+
+        // Stock hesablaması
+        let calculatedStock = stock !== undefined ? parseInt(stock) : 0;
+        let calculatedFullBoxes = finalFullBoxes;
+        let calculatedOpenedBoxQuantity = finalOpenedBoxQuantity;
+
+        // Əgər qutu tipindədirsə və tam stok verilibsə, fullBoxes və openedBoxQuantity-ni hesabla
+        if (finalPiecesPerBox && finalPiecesPerBox > 0 && stock !== undefined) {
+            calculatedFullBoxes = Math.floor(calculatedStock / finalPiecesPerBox);
+            calculatedOpenedBoxQuantity = calculatedStock % finalPiecesPerBox;
+        } else if (finalPiecesPerBox && finalPiecesPerBox > 0 && fullBoxes !== undefined) {
+            // Əgər fullBoxes verilibsə, stock hesabla
+            calculatedStock = (calculatedFullBoxes * finalPiecesPerBox) + calculatedOpenedBoxQuantity;
+        }
+
         const newProduct = await prisma.product.create({
             data: {
                 name: name.trim(),
@@ -290,7 +325,12 @@ export const createProduct = async (req, res) => {
                 discountPrice: finalDiscountPrice,
                 discountPercent: finalDiscountPercent,
                 barcode: barcode?.trim() || null,
-                stock: stock !== undefined ? parseInt(stock) : 0,
+                unitType: finalUnitType,
+                piecesPerBox: finalPiecesPerBox,
+                openedBoxQuantity: finalOpenedBoxQuantity,
+                boxPrice: finalBoxPrice,
+                fullBoxes: calculatedFullBoxes,
+                stock: calculatedStock,
                 isActive: typeof isActive === "boolean" ? isActive : true,
                 isOfficial: typeof isOfficial === "boolean" ? isOfficial : false,
                 categoryId: categoryId || null,
@@ -361,7 +401,12 @@ export const updateProduct = async (req, res) => {
             categoryId,
             subCategoryId,
             deleteType,
-            invoiceName
+            invoiceName,
+            unitType,
+            piecesPerBox,
+            openedBoxQuantity,
+            boxPrice,
+            fullBoxes
         } = req.body;
 
         const existingProduct = await prisma.product.findUnique({
@@ -416,12 +461,45 @@ export const updateProduct = async (req, res) => {
             finalDiscountPercent = Math.round(ratio.sub(1).mul(100).toNumber());
         }
 
+        // UnitType və qutu məlumatlarını hazırla
+        const finalUnitType = unitType !== undefined ? unitType : existingProduct.unitType;
+        let finalPiecesPerBox = piecesPerBox !== undefined ? (piecesPerBox ? parseInt(piecesPerBox) : null) : existingProduct.piecesPerBox;
+        let finalOpenedBoxQuantity = openedBoxQuantity !== undefined ? parseInt(openedBoxQuantity) : existingProduct.openedBoxQuantity;
+        let finalFullBoxes = fullBoxes !== undefined ? parseInt(fullBoxes) : existingProduct.fullBoxes;
+        let finalBoxPrice = boxPrice !== undefined ? (boxPrice ? new Prisma.Decimal(boxPrice) : null) : existingProduct.boxPrice;
+
+        // Validation: Əgər BOX, LITER, METER və ya KILOGRAM-dırsa, piecesPerBox mütləq olmalıdır
+        if (['BOX', 'LITER', 'METER', 'KILOGRAM'].includes(finalUnitType) && (!finalPiecesPerBox || finalPiecesPerBox <= 0)) {
+            return res.status(400).json({
+                success: false,
+                message: `${finalUnitType} tipi üçün hər qutu/paketdəki miqdar (piecesPerBox) tələb olunur`,
+            });
+        }
+
+        // Stock hesablaması
+        let calculatedStock = stock !== undefined ? parseInt(stock) : existingProduct.stock;
+        let calculatedFullBoxes = finalFullBoxes;
+        let calculatedOpenedBoxQuantity = finalOpenedBoxQuantity;
+
+        // Əgər qutu tipindədirsə və stock yenilənibsə, fullBoxes və openedBoxQuantity-ni yenilə
+        if (finalPiecesPerBox && finalPiecesPerBox > 0) {
+            if (stock !== undefined) {
+                // Stock verilibsə, fullBoxes və openedBoxQuantity hesabla
+                calculatedFullBoxes = Math.floor(calculatedStock / finalPiecesPerBox);
+                calculatedOpenedBoxQuantity = calculatedStock % finalPiecesPerBox;
+            } else if (fullBoxes !== undefined || openedBoxQuantity !== undefined) {
+                // fullBoxes və ya openedBoxQuantity verilibsə, stock hesabla
+                calculatedStock = (calculatedFullBoxes * finalPiecesPerBox) + calculatedOpenedBoxQuantity;
+            }
+        }
+
         const updated = await prisma.product.update({
             where: { id },
             data: {
                 name: name !== undefined ? (name?.trim() || null) : undefined,
                 description: description !== undefined ? (description?.trim() || null) : undefined,
                 imageUrl: imageUrl !== undefined ? (imageUrl?.trim() || null) : undefined,
+                invoiceName: invoiceName !== undefined ? (invoiceName?.trim() || null) : undefined,
 
                 purchasePrice: purchasePriceDecimal,
                 salePrice: salePriceDecimal,
@@ -430,8 +508,14 @@ export const updateProduct = async (req, res) => {
                 discountPrice: finalDiscountPrice,
                 discountPercent: finalDiscountPercent,
 
+                unitType: finalUnitType,
+                piecesPerBox: finalPiecesPerBox !== undefined ? finalPiecesPerBox : undefined,
+                openedBoxQuantity: calculatedOpenedBoxQuantity,
+                boxPrice: finalBoxPrice !== undefined ? finalBoxPrice : undefined,
+                fullBoxes: calculatedFullBoxes,
+
                 barcode: barcode !== undefined ? (barcode?.trim() || null) : undefined,
-                stock: stock !== undefined ? parseInt(stock) : undefined,
+                stock: calculatedStock,
                 isActive: typeof isActive === "boolean" ? isActive : undefined,
                 isOfficial: typeof isOfficial === "boolean" ? isOfficial : undefined,
                 deleteType: deleteType !== undefined ? deleteType.toUpperCase() : undefined,
@@ -893,6 +977,102 @@ export const importProductsFromExcel = async (req, res) => {
         return res.status(500).json({
             success: false,
             message: "Excel faylı idxal edilərkən xəta baş verdi: " + error.message,
+        });
+    }
+};
+
+// Məhsul üçün satış məlumatlarını qaytarır
+export const getProductSales = async (req, res) => {
+    try {
+        const { id: productId } = req.params;
+        
+        if (!productId) {
+            return res.status(400).json({
+                success: false,
+                message: "Məhsul ID tələb olunur",
+            });
+        }
+
+        // Məhsulun satış məlumatlarını al
+        const saleItems = await prisma.saleItem.findMany({
+            where: {
+                productId: productId
+            },
+            include: {
+                sale: true,
+                product: {
+                    select: {
+                        id: true,
+                        name: true,
+                        unitType: true,
+                        piecesPerBox: true
+                    }
+                }
+            },
+            orderBy: {
+                sale: {
+                    createdAt: 'desc'
+                }
+            }
+        });
+
+        return res.json({
+            success: true,
+            date: saleItems,
+        });
+    } catch (error) {
+        console.error("getProductSales error", error);
+        return res.status(500).json({
+            success: false,
+            message: "Satış məlumatları alınarkən xəta baş verdi",
+        });
+    }
+};
+
+// Məhsul üçün qaytarma məlumatlarını qaytarır
+export const getProductReturns = async (req, res) => {
+    try {
+        const { id: productId } = req.params;
+        
+        if (!productId) {
+            return res.status(400).json({
+                success: false,
+                message: "Məhsul ID tələb olunur",
+            });
+        }
+
+        // Məhsulun qaytarma məlumatlarını al
+        const returnItems = await prisma.saleReturnItem.findMany({
+            where: {
+                productId: productId
+            },
+            include: {
+                return: true,
+                product: {
+                    select: {
+                        id: true,
+                        name: true,
+                        unitType: true,
+                        piecesPerBox: true
+                    }
+                }
+            },
+            orderBy: {
+                return: {
+                    createdAt: 'desc'
+                }
+            }
+        });
+
+        return res.json({
+            success: true,
+            date: returnItems,
+        });
+    } catch (error) {
+        console.error("getProductReturns error", error);
+        return res.status(500).json({
+            success: false,
+            message: "Qaytarma məlumatları alınarkən xəta baş verdi",
         });
     }
 };

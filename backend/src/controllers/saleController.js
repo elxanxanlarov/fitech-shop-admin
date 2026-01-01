@@ -2,6 +2,7 @@ import prisma from "../lib/prisma.js";
 import { Prisma } from "@prisma/client";
 import { createActivityLog } from "./activityLogController.js";
 import { createReceiptForSale } from "./receiptController.js";
+import { decreaseProductStock, calculateProductPrice, calculateProductStock } from "../utils/productStockHelper.js";
 
 export const getAllSales = async (req, res) => {
     try {
@@ -114,30 +115,36 @@ export const createSale = async (req, res) => {
                 return res.status(400).json({ success: false, message: `Məhsul aktiv deyil: ${product.name}` });
             }
 
-            if (product.stock < quantity) {
-                return res.status(400).json({ success: false, message: `Kifayət qədər stok yoxdur: ${product.name}. Mövcud stok: ${product.stock}` });
+            // Stock yoxla (qutu/ədəd məntiqinə uyğun)
+            const availableStock = calculateProductStock(product);
+            if (availableStock < quantity) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: `Kifayət qədər stok yoxdur: ${product.name}. Mövcud stok: ${availableStock}` 
+                });
             }
 
-            // Qiyməti müəyyən et
-            // Əgər frontend-dən custom price göndərilibsə, onu istifadə et
-            // Əks halda endirim varsa endirim qiyməti, yoxdursa satış qiyməti
-            let pricePerItem;
+            // Qiyməti müəyyən et (qutu/ədəd məntiqinə uyğun)
+            let totalPrice;
             if (customPricePerItem !== undefined && customPricePerItem !== null && !isNaN(parseFloat(customPricePerItem))) {
                 // Custom price verilib, onu istifadə et
-                pricePerItem = new Prisma.Decimal(parseFloat(customPricePerItem));
-                // Custom price mənfi ola bilməz
-                if (pricePerItem.lt(0)) {
+                const customPrice = new Prisma.Decimal(parseFloat(customPricePerItem));
+                if (customPrice.lt(0)) {
                     return res.status(400).json({ success: false, message: `Qiymət mənfi ola bilməz: ${product.name}` });
                 }
+                totalPrice = customPrice.mul(quantity);
             } else {
-                // Standart qiyməti istifadə et
-                pricePerItem = product.hasDiscount && product.discountPrice 
-                    ? product.discountPrice 
-                    : product.salePrice;
+                // Qutu/ədəd məntiqinə uyğun qiymət hesabla
+                const calculatedPrice = calculateProductPrice(product, quantity);
+                totalPrice = new Prisma.Decimal(calculatedPrice);
             }
 
-            const totalPrice = pricePerItem.mul(quantity);
-            const purchasePriceTotal = product.purchasePrice.mul(quantity);
+            // pricePerItem-i hesabla (statistika üçün)
+            const pricePerItem = totalPrice.div(quantity);
+
+            // Purchase price hesabla
+            const purchasePricePerItem = product.purchasePrice;
+            const purchasePriceTotal = purchasePricePerItem.mul(quantity);
             const profit = totalPrice.sub(purchasePriceTotal);
 
             totalAmount = totalAmount.add(totalPrice);
@@ -225,16 +232,30 @@ export const createSale = async (req, res) => {
             }
         });
 
-        // Stokları yenilə
-        for (const item of items) {
-            await prisma.product.update({
-                where: { id: item.productId },
-                data: {
-                    stock: {
-                        decrement: parseInt(item.quantity)
-                    }
-                }
+        // Stokları yenilə (qutu/ədəd məntiqinə uyğun)
+        for (const item of saleItems) {
+            const product = await prisma.product.findUnique({
+                where: { id: item.productId }
             });
+
+            if (!product) continue;
+
+            try {
+                // Stok azalt (qutu/ədəd məntiqinə uyğun)
+                const newStockData = decreaseProductStock(product, item.quantity);
+
+                await prisma.product.update({
+                    where: { id: item.productId },
+                    data: {
+                        stock: newStockData.stock,
+                        fullBoxes: newStockData.fullBoxes,
+                        openedBoxQuantity: newStockData.openedBoxQuantity
+                    }
+                });
+            } catch (stockError) {
+                console.error(`Stok yenilənərkən xəta (${product.name}):`, stockError);
+                // Xətanı log et, amma satışı ləğv etmə
+            }
         }
 
         // Qəbz yarat

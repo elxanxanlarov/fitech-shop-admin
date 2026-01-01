@@ -6,6 +6,8 @@ import {
   updateProduct,
   deleteProduct,
   importProductsFromExcel,
+  getProductSales,
+  getProductReturns,
 } from "../controllers/productController.js";
 import { authenticateToken } from "../middleware/authMiddleware.js";
 import multer from "multer";
@@ -53,8 +55,10 @@ const excelUpload = multer({
     }
 });
 
-router.get("/", getAllProducts);        
-router.get("/:id", getProductById);    
+router.get("/", getAllProducts);
+router.get("/:id/sales", getProductSales);
+router.get("/:id/returns", getProductReturns);
+router.get("/:id", getProductById);
 router.post("/", createProduct);
 router.post("/import", excelUpload.single('file'), importProductsFromExcel);
 router.put("/:id", updateProduct);      
