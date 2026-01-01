@@ -2,7 +2,7 @@ import prisma from "../lib/prisma.js";
 import { Prisma } from "@prisma/client";
 import { createActivityLog } from "./activityLogController.js";
 import { createReceiptForSale } from "./receiptController.js";
-import { decreaseProductStock, calculateProductPrice, calculateProductStock } from "../utils/productStockHelper.js";
+import { decreaseProductStock, increaseProductStock, calculateProductPrice, calculateProductStock } from "../utils/productStockHelper.js";
 
 export const getAllSales = async (req, res) => {
     try {
@@ -414,17 +414,28 @@ export const deleteSale = async (req, res) => {
         // DeleteType-a görə silmə
         if (validDeleteType === 'HARD') {
             // Hard delete - stokları geri qaytar və tamamilə sil
-            // Stokları geri qaytar
-            for (const item of existingSale.items) {
-                await prisma.product.update({
-                    where: { id: item.productId },
-                    data: {
-                        stock: {
-                            increment: item.quantity
+            // Qaytarmaları yüklə (qalan miqdarı hesablamaq üçün)
+            const saleReturns = await prisma.saleReturn.findMany({
+                where: { saleId: id },
+                include: {
+                    items: {
+                        include: {
+                            saleItem: true
                         }
                     }
+                }
+            });
+
+            // Hər bir sale item üçün qaytarılan miqdarı hesabla
+            const returnedQuantities = new Map();
+            saleReturns.forEach(saleReturn => {
+                saleReturn.items.forEach(returnItem => {
+                    const saleItemId = returnItem.saleItemId;
+                    const returnedQty = returnItem.quantity || 0;
+                    const currentReturned = returnedQuantities.get(saleItemId) || 0;
+                    returnedQuantities.set(saleItemId, currentReturned + returnedQty);
                 });
-            }
+            });
 
             // Remove related records that reference Sale to avoid foreign key constraint errors
             try {
@@ -437,7 +448,7 @@ export const deleteSale = async (req, res) => {
                 }
 
                 // 2) Find SaleReturn records for this sale and delete their items
-                const saleReturns = await prisma.saleReturn.findMany({ where: { saleId: id } });
+                // QAYTARMALARI SİL (lakin stokları azaltma, çünki biz sonra qalan miqdarı geri qaytaracağıq)
                 const returnIds = saleReturns.map(r => r.id);
                 if (returnIds.length > 0) {
                     console.log(`Deleting SaleReturnItem by returnId count: ${returnIds.length}`);
@@ -446,7 +457,41 @@ export const deleteSale = async (req, res) => {
                     await prisma.saleReturn.deleteMany({ where: { id: { in: returnIds } } });
                 }
 
-                // 3) Delete SaleItem records for this sale
+                // 3) İndi stokları geri qaytar (yalnız qalan miqdarı)
+                // Qaytarma silindiyi üçün artıq qaytarma miqdarı stokda deyil
+                // Biz yalnız qalan (satış - qaytarma) miqdarı geri qaytarmalıyıq
+                for (const item of existingSale.items) {
+                    const returnedQty = returnedQuantities.get(item.id) || 0;
+                    const remainingQty = item.quantity - returnedQty; // Qalan miqdar
+                    
+                    // Əgər qalan miqdar varsa, yalnız onu geri qaytar
+                    if (remainingQty > 0) {
+                        const product = await prisma.product.findUnique({
+                            where: { id: item.productId }
+                        });
+
+                        if (product) {
+                            try {
+                                // Stok artır (qutu/ədəd məntiqinə uyğun)
+                                const newStockData = increaseProductStock(product, remainingQty);
+
+                                await prisma.product.update({
+                                    where: { id: item.productId },
+                                    data: {
+                                        stock: newStockData.stock,
+                                        fullBoxes: newStockData.fullBoxes,
+                                        openedBoxQuantity: newStockData.openedBoxQuantity
+                                    }
+                                });
+                            } catch (stockError) {
+                                console.error(`Stok yenilənərkən xəta (${product.name}):`, stockError);
+                                // Xətanı log et, amma silməni dayandırma
+                            }
+                        }
+                    }
+                }
+
+                // 4) Delete SaleItem records for this sale
                 if (saleItemIds.length > 0) {
                     console.log(`Deleting SaleItem records count: ${saleItemIds.length}`);
                     await prisma.saleItem.deleteMany({ where: { id: { in: saleItemIds } } });

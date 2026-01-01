@@ -76,6 +76,10 @@ export default function ActivityLogDetail() {
         return 'bg-blue-100 text-blue-800';
       case 'DELETE':
         return 'bg-red-100 text-red-800';
+      case 'SOFT_DELETE':
+        return 'bg-orange-100 text-orange-800';
+      case 'HARD_DELETE':
+        return 'bg-red-100 text-red-800';
       case 'LOGIN':
         return 'bg-purple-100 text-purple-800';
       case 'LOGOUT':

@@ -169,6 +169,10 @@ export default function ActivityLog() {
         return 'bg-blue-100 text-blue-800';
       case 'DELETE':
         return 'bg-red-100 text-red-800';
+      case 'SOFT_DELETE':
+        return 'bg-orange-100 text-orange-800';
+      case 'HARD_DELETE':
+        return 'bg-red-100 text-red-800';
       case 'LOGIN':
         return 'bg-purple-100 text-purple-800';
       case 'LOGOUT':
@@ -258,7 +262,14 @@ export default function ActivityLog() {
                 <option value="Product">{t('entity_types.Product')}</option>
                 <option value="Sale">{t('entity_types.Sale')}</option>
                 <option value="SaleReturn">{t('entity_types.SaleReturn')}</option>
+                <option value="Category">{t('entity_types.Category')}</option>
+                <option value="SubCategory">{t('entity_types.SubCategory')}</option>
+                <option value="Expense">{t('entity_types.Expense')}</option>
+                <option value="CashHandover">{t('entity_types.CashHandover')}</option>
+                <option value="Role">{t('entity_types.Role')}</option>
                 <option value="Auth">{t('entity_types.Auth')}</option>
+                <option value="StockMovement">{t('entity_types.StockMovement')}</option>
+                <option value="CreditPayment">{t('entity_types.CreditPayment')}</option>
               </select>
             </div>
 
@@ -276,6 +287,8 @@ export default function ActivityLog() {
                 <option value="CREATE">{t('actions.CREATE')}</option>
                 <option value="UPDATE">{t('actions.UPDATE')}</option>
                 <option value="DELETE">{t('actions.DELETE')}</option>
+                <option value="SOFT_DELETE">{t('actions.SOFT_DELETE')}</option>
+                <option value="HARD_DELETE">{t('actions.HARD_DELETE')}</option>
                 <option value="LOGIN">{t('actions.LOGIN')}</option>
                 <option value="LOGOUT">{t('actions.LOGOUT')}</option>
                 <option value="SALE">{t('actions.SALE')}</option>

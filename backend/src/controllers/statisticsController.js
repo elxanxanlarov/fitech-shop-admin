@@ -16,26 +16,43 @@ export const getOverallStatistics = async (req, res) => {
             dateFilter = { createdAt: { gte: start, lte: end } };
         }
 
+        // Yalnız silinməyən satışları nəzərə al
+        const salesFilter = { deleteType: 'NONE', ...dateFilter };
+
         // ================= TOTAL SALES =================
-        const totalSales = await prisma.sale.count({ where: dateFilter });
+        const totalSales = await prisma.sale.count({ where: salesFilter });
 
         const salesAggregation = await prisma.sale.aggregate({
-            where: dateFilter,
+            where: salesFilter,
             _sum: { totalAmount: true, profitAmount: true }
         });
 
         // ================= TOTAL RETURNS =================
-        const totalReturns = await prisma.saleReturn.count({ where: dateFilter });
+        // Yalnız silinməmiş satışlara aid qaytarmaları göstər
+        const returnsFilter = {
+            ...dateFilter,
+            sale: {
+                deleteType: 'NONE'
+            }
+        };
+        
+        const totalReturns = await prisma.saleReturn.count({ where: returnsFilter });
 
         const returnsAggregation = await prisma.saleReturn.aggregate({
-            where: dateFilter,
+            where: returnsFilter,
             _sum: { returnedAmount: true }
         });
 
         // Qaytarma zamanı itirilən qazancı hesabla (SaleReturnItem-dəki loss-ların cəmi)
+        // Yalnız silinməmiş satışlara aid qaytarmaları nəzərə al
         const returnItemsLoss = await prisma.saleReturnItem.aggregate({
             where: {
-                return: dateFilter
+                return: {
+                    ...dateFilter,
+                    sale: {
+                        deleteType: 'NONE'
+                    }
+                }
             },
             _sum: {
                 loss: true
@@ -85,13 +102,13 @@ export const getOverallStatistics = async (req, res) => {
         });
 
         // ================= CREDITS =================
-        const creditSalesFilter = { isCredit: true, isRefunded: false, ...dateFilter };
+        const creditSalesFilter = { isCredit: true, isRefunded: false, deleteType: 'NONE', ...dateFilter };
         const totalCreditSales = await prisma.sale.count({ where: creditSalesFilter });
         const creditSalesAggregation = await prisma.sale.aggregate({
             where: creditSalesFilter,
             _sum: { creditTotalAmount: true, creditRemainingAmount: true }
         });
-        const activeCredits = await prisma.sale.count({ where: { isCredit: true, isRefunded: false, isCreditPaid: false } });
+        const activeCredits = await prisma.sale.count({ where: { isCredit: true, isRefunded: false, isCreditPaid: false, deleteType: 'NONE' } });
         const totalCreditPaid = (creditSalesAggregation._sum.creditTotalAmount || 0) - (creditSalesAggregation._sum.creditRemainingAmount || 0);
 
         // ================= TODAY STATS =================
@@ -107,16 +124,29 @@ export const getOverallStatistics = async (req, res) => {
         let todayCreditSalesAggregation = { _sum: { creditTotalAmount: 0, creditRemainingAmount: 0 } };
 
         if (!startDate || !endDate) {
-            todaySales = await prisma.sale.count({ where: { createdAt: { gte: today, lt: tomorrow } } });
-            todaySalesAggregation = await prisma.sale.aggregate({ where: { createdAt: { gte: today, lt: tomorrow } }, _sum: { totalAmount: true, profitAmount: true } });
-            todayReturnsAggregation = await prisma.saleReturn.aggregate({ where: { createdAt: { gte: today, lt: tomorrow } }, _sum: { returnedAmount: true } });
+            const todaySalesFilter = { deleteType: 'NONE', createdAt: { gte: today, lt: tomorrow } };
+            todaySales = await prisma.sale.count({ where: todaySalesFilter });
+            todaySalesAggregation = await prisma.sale.aggregate({ where: todaySalesFilter, _sum: { totalAmount: true, profitAmount: true } });
+            
+            // Bu günkü qaytarmalar - yalnız silinməmiş satışlara aid
+            todayReturnsAggregation = await prisma.saleReturn.aggregate({ 
+                where: { 
+                    createdAt: { gte: today, lt: tomorrow },
+                    sale: {
+                        deleteType: 'NONE'
+                    }
+                }, 
+                _sum: { returnedAmount: true } 
+            });
+            
             todayExpensesAggregation = await prisma.expense.aggregate({ where: { date: { gte: today, lt: tomorrow } }, _sum: { amount: true } });
             todayCashHandoverAggregation = await prisma.cashHandover.aggregate({ where: { date: { gte: today, lt: tomorrow } }, _sum: { amount: true }, _count: true });
-            todayCreditSales = await prisma.sale.count({ where: { isCredit: true, createdAt: { gte: today, lt: tomorrow } } });
-            todayCreditSalesAggregation = await prisma.sale.aggregate({ where: { isCredit: true, createdAt: { gte: today, lt: tomorrow } }, _sum: { creditTotalAmount: true, creditRemainingAmount: true } });
+            const todayCreditFilter = { isCredit: true, deleteType: 'NONE', createdAt: { gte: today, lt: tomorrow } };
+            todayCreditSales = await prisma.sale.count({ where: todayCreditFilter });
+            todayCreditSalesAggregation = await prisma.sale.aggregate({ where: todayCreditFilter, _sum: { creditTotalAmount: true, creditRemainingAmount: true } });
         }
 
-        // Bu günkü qaytarma loss-larını hesabla
+        // Bu günkü qaytarma loss-larını hesabla (yalnız silinməmiş satışlara aid)
         let todayLoss = new Prisma.Decimal(0);
         if (!startDate || !endDate) {
             const todayReturnItemsLoss = await prisma.saleReturnItem.aggregate({
@@ -125,6 +155,9 @@ export const getOverallStatistics = async (req, res) => {
                         createdAt: {
                             gte: today,
                             lt: tomorrow
+                        },
+                        sale: {
+                            deleteType: 'NONE'
                         }
                     }
                 },
@@ -211,10 +244,11 @@ export const getStatisticsByDateRange = async (req, res) => {
         const end = new Date(endDate);
         end.setHours(23, 59, 59, 999);
 
-        // Satışlar
+        // Satışlar (yalnız silinməyən satışlar)
         const sales = await prisma.sale.findMany({
             where: {
                 isRefunded: false,
+                deleteType: 'NONE',
                 createdAt: {
                     gte: start,
                     lte: end
@@ -232,6 +266,7 @@ export const getStatisticsByDateRange = async (req, res) => {
         const salesAggregation = await prisma.sale.aggregate({
             where: {
                 isRefunded: false,
+                deleteType: 'NONE',
                 createdAt: {
                     gte: start,
                     lte: end
@@ -244,12 +279,15 @@ export const getStatisticsByDateRange = async (req, res) => {
             _count: true
         });
 
-        // Qaytarmalar
+        // Qaytarmalar (yalnız silinməmiş satışlara aid)
         const returns = await prisma.saleReturn.findMany({
             where: {
                 createdAt: {
                     gte: start,
                     lte: end
+                },
+                sale: {
+                    deleteType: 'NONE'
                 }
             },
             include: {
@@ -266,6 +304,9 @@ export const getStatisticsByDateRange = async (req, res) => {
                 createdAt: {
                     gte: start,
                     lte: end
+                },
+                sale: {
+                    deleteType: 'NONE'
                 }
             },
             _sum: {
@@ -328,6 +369,7 @@ export const getDailyStatistics = async (req, res) => {
             const salesAggregation = await prisma.sale.aggregate({
                 where: {
                     isRefunded: false,
+                    deleteType: 'NONE',
                     createdAt: {
                         gte: currentDate,
                         lt: nextDate
@@ -345,6 +387,9 @@ export const getDailyStatistics = async (req, res) => {
                     createdAt: {
                         gte: currentDate,
                         lt: nextDate
+                    },
+                    sale: {
+                        deleteType: 'NONE'
                     }
                 },
                 _sum: {
@@ -392,7 +437,8 @@ export const getTopSellingProducts = async (req, res) => {
 
         let whereClause = {
             sale: {
-                isRefunded: false
+                isRefunded: false,
+                deleteType: 'NONE'
             }
         };
 
@@ -460,7 +506,8 @@ export const getStatisticsByPaymentType = async (req, res) => {
         const endDate = req.query.endDate ? new Date(req.query.endDate) : null;
 
         let whereClause = {
-            isRefunded: false
+            isRefunded: false,
+            deleteType: 'NONE'
         };
 
         if (startDate && endDate) {
@@ -547,7 +594,8 @@ export const getCustomerStatistics = async (req, res) => {
         const endDate = req.query.endDate ? new Date(req.query.endDate) : null;
 
         let whereClause = {
-            isRefunded: false
+            isRefunded: false,
+            deleteType: 'NONE'
         };
 
         if (startDate && endDate) {
