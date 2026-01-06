@@ -1,9 +1,11 @@
 @echo off
 
-:: Backend
+:: Backend terminal
 cd /d "%~dp0backend"
-npm run dev >nul 2>&1 &
+start /min "backend" cmd /k "npm run dev"
 
-:: Frontend
+:: Frontend terminal
 cd /d "%~dp0frontend"
-npm run dev >nul 2>&1 &
+start /min "frontend" cmd /k "npm run dev"
+
+timeout /t 5 /nobreak
