@@ -25,6 +25,12 @@ export const productApi = {
     return response.data;
   },
 
+  // Update product stock only
+  updateStock: async (id, stockData) => {
+    const response = await api.put(`/product/${id}/stock`, stockData);
+    return response.data;
+  },
+
   // Delete product
   delete: async (id, deleteType = 'SOFT') => {
     const response = await api.delete(`/product/${id}`, {

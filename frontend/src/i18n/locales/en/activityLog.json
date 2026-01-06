@@ -42,7 +42,9 @@
     "Role": "Role",
     "Auth": "Auth",
     "StockMovement": "Stock Movement",
-    "CreditPayment": "Credit Payment"
+    "CreditPayment": "Credit Payment",
+    "DailySummary": "Daily Summary",
+    "FinalDelivery": "Final Delivery"
   },
   "staff_name": "Staff Name",
   "entity": "Entity",

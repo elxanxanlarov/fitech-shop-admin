@@ -1,1 +1,9 @@
 export { default as useClickOutside } from './useClickOutside';
+export { useProductImage } from './useProductImage';
+export { useProductCategories } from './useProductCategories';
+export { useProductStockManagement } from './useProductStockManagement';
+export { useProductStockUpdate } from './useProductStockUpdate';
+export { useProductFormValidation } from './useProductFormValidation';
+export { useProductFormSubmit } from './useProductFormSubmit';
+export { useProductDiscountHandler } from './useProductDiscountHandler';
+export { useProductFormChangeDetection } from './useProductFormChangeDetection';

@@ -81,36 +81,39 @@ export default function DeletedProductsBell() {
         try {
             setLoading(true);
             const [productsRes, expensesRes, salesRes, categoriesRes, subCategoriesRes, rolesRes] = await Promise.all([
-                productApi.getAll('?deleteType=SOFT').catch(() => ({ success: false, date: [] })),
-                expenseApi.getAll({ deleteType: 'SOFT' }).catch(() => ({ success: false, date: [] })),
-                saleApi.getAll({ deleteType: 'SOFT' }).catch(() => ({ success: false, date: [] })),
+                productApi.getAll('?deleteType=SOFT').catch(() => ({ success: false, data: [] })),
+                expenseApi.getAll({ deleteType: 'SOFT' }).catch(() => ({ success: false, data: [] })),
+                saleApi.getAll({ deleteType: 'SOFT' }).catch(() => ({ success: false, data: [] })),
                 categoryApi.getAll().then(res => {
-                    if (res.success && res.date) {
-                        return { success: true, date: res.date.filter(item => item.deleteType === 'SOFT') };
+                    const list = res.data || res.date || [];
+                    if (res.success && list) {
+                        return { success: true, data: list.filter(item => item.deleteType === 'SOFT') };
                     }
-                    return { success: false, date: [] };
-                }).catch(() => ({ success: false, date: [] })),
+                    return { success: false, data: [] };
+                }).catch(() => ({ success: false, data: [] })),
                 subCategoryApi.getAll().then(res => {
-                    if (res.success && res.date) {
-                        return { success: true, date: res.date.filter(item => item.deleteType === 'SOFT') };
+                    const list = res.data || res.date || [];
+                    if (res.success && list) {
+                        return { success: true, data: list.filter(item => item.deleteType === 'SOFT') };
                     }
-                    return { success: false, date: [] };
-                }).catch(() => ({ success: false, date: [] })),
+                    return { success: false, data: [] };
+                }).catch(() => ({ success: false, data: [] })),
                 roleApi.getAll().then(res => {
-                    if (res.success && res.date) {
-                        return { success: true, date: res.date.filter(item => item.deleteType === 'SOFT') };
+                    const list = res.data || res.date || [];
+                    if (res.success && list) {
+                        return { success: true, data: list.filter(item => item.deleteType === 'SOFT') };
                     }
-                    return { success: false, date: [] };
-                }).catch(() => ({ success: false, date: [] }))
+                    return { success: false, data: [] };
+                }).catch(() => ({ success: false, data: [] }))
             ]);
 
             const allItems = [
-                ...(productsRes.success && productsRes.date ? productsRes.date.map(item => ({ ...item, type: 'Product' })) : []),
-                ...(expensesRes.success && expensesRes.date ? expensesRes.date.map(item => ({ ...item, type: 'Expense' })) : []),
-                ...(salesRes.success && salesRes.date ? salesRes.date.map(item => ({ ...item, type: 'Sale' })) : []),
-                ...(categoriesRes.success && categoriesRes.date ? categoriesRes.date.map(item => ({ ...item, type: 'Category' })) : []),
-                ...(subCategoriesRes.success && subCategoriesRes.date ? subCategoriesRes.date.map(item => ({ ...item, type: 'SubCategory' })) : []),
-                ...(rolesRes.success && rolesRes.date ? rolesRes.date.map(item => ({ ...item, type: 'Role' })) : [])
+                ...(productsRes.success && (productsRes.data || productsRes.date) ? (productsRes.data || productsRes.date).map(item => ({ ...item, type: 'Product' })) : []),
+                ...(expensesRes.success && (expensesRes.data || expensesRes.date) ? (expensesRes.data || expensesRes.date).map(item => ({ ...item, type: 'Expense' })) : []),
+                ...(salesRes.success && (salesRes.data || salesRes.date) ? (salesRes.data || salesRes.date).map(item => ({ ...item, type: 'Sale' })) : []),
+                ...(categoriesRes.success && (categoriesRes.data || categoriesRes.date) ? (categoriesRes.data || categoriesRes.date).map(item => ({ ...item, type: 'Category' })) : []),
+                ...(subCategoriesRes.success && (subCategoriesRes.data || subCategoriesRes.date) ? (subCategoriesRes.data || subCategoriesRes.date).map(item => ({ ...item, type: 'SubCategory' })) : []),
+                ...(rolesRes.success && (rolesRes.data || rolesRes.date) ? (rolesRes.data || rolesRes.date).map(item => ({ ...item, type: 'Role' })) : [])
             ];
 
             setDeletedItems(allItems);

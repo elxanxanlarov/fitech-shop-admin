@@ -20,22 +20,22 @@ export default function ProductStockHistoryModal({ isOpen, onClose, productId, p
     const fetchHistory = async () => {
         setLoading(true);
         try {
-            // Stok hərəkətləri
+            // Stok hərəkətləri (staff məlumatı ilə)
             const stockResponse = await stockApi.getAll(productId);
             if (stockResponse.success) {
-                setStockMovements(stockResponse.data || []);
+                setStockMovements(stockResponse.date || stockResponse.data || []);
             }
 
             // Satışlar - məhsul üçün satış məlumatlarını al
             const salesResponse = await productApi.getSales(productId);
             if (salesResponse.success) {
-                setSales(salesResponse.data || []);
+                setSales(salesResponse.date || salesResponse.data || []);
             }
 
             // Qaytarmalar - məhsul üçün qaytarma məlumatlarını al
             const returnsResponse = await productApi.getReturns(productId);
             if (returnsResponse.success) {
-                setReturns(returnsResponse.data || []);
+                setReturns(returnsResponse.date || returnsResponse.data || []);
             }
         } catch (error) {
             console.error('Error fetching stock history:', error);
@@ -46,13 +46,47 @@ export default function ProductStockHistoryModal({ isOpen, onClose, productId, p
 
     const formatDate = (dateString) => {
         if (!dateString) return '-';
-        return new Date(dateString).toLocaleString('az-AZ', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+        const date = new Date(dateString);
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const itemDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        
+        if (itemDate.getTime() === today.getTime()) {
+            return 'Bu gün ' + date.toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' });
+        } else if (itemDate.getTime() === yesterday.getTime()) {
+            return 'Dünən ' + date.toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' });
+        } else {
+            return date.toLocaleDateString('az-AZ', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+            }) + ' ' + date.toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' });
+        }
+    };
+
+    const formatHistoryMessage = (item) => {
+        const unitLabel = product?.unitType === 'PIECE' || !product?.piecesPerBox ? 'ədəd' :
+                         product?.unitType === 'METER' ? 'metr' :
+                         product?.unitType === 'LITER' ? 'litr' :
+                         product?.unitType === 'KILOGRAM' ? 'kq' : 'ədəd';
+        
+        if (item.historyType === 'movement') {
+            const quantity = Math.abs(item.quantity);
+            if (item.type === 'IN') {
+                return `${quantity} ${unitLabel} məhsul əlavə olundu`;
+            } else if (item.type === 'OUT') {
+                return `${quantity} ${unitLabel} məhsul çıxarıldı`;
+            } else {
+                return `${quantity} ${unitLabel} məhsul düzəliş edildi`;
+            }
+        } else if (item.historyType === 'sale') {
+            return `${item.quantity} ${unitLabel} məhsul satıldı`;
+        } else if (item.historyType === 'return') {
+            return `${item.quantity} ${unitLabel} məhsul qaytarıldı`;
+        }
+        return '';
     };
 
     const formatQuantity = (quantity, unitType, piecesPerBox) => {
@@ -78,9 +112,17 @@ export default function ProductStockHistoryModal({ isOpen, onClose, productId, p
     };
 
     const allHistory = [
-        ...stockMovements.map(m => ({ ...m, type: 'movement', date: m.createdAt })),
-        ...sales.map(s => ({ ...s, type: 'sale', date: s.sale?.createdAt || s.createdAt })),
-        ...returns.map(r => ({ ...r, type: 'return', date: r.return?.createdAt || r.createdAt }))
+        ...stockMovements.map(m => ({ ...m, historyType: 'movement', date: m.createdAt })),
+        ...sales.map(s => ({ 
+            ...s, 
+            historyType: 'sale', 
+            date: s.sale?.createdAt || s.createdAt,
+            sale: s.sale ? { 
+                ...s.sale, 
+                staff: s.sale.staff || s.sale.receipt?.staff 
+            } : s.sale
+        })),
+        ...returns.map(r => ({ ...r, historyType: 'return', date: r.return?.createdAt || r.createdAt }))
     ].sort((a, b) => new Date(b.date) - new Date(a.date));
 
     const calculateTotalStock = () => {
@@ -124,9 +166,9 @@ export default function ProductStockHistoryModal({ isOpen, onClose, productId, p
             isOpen={isOpen}
             onClose={onClose}
             title={`${product?.name || 'Məhsul'} - Stok Tarixçəsi`}
-            className="max-w-6xl"
+            className="w-[80vw] h-[80vh]"
         >
-            <div className="space-y-4">
+            <div className="space-y-4 max-h-[calc(80vh-180px)] overflow-y-auto">
                 {/* Current Stock Display */}
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                     <div className="flex items-center justify-between">
@@ -195,7 +237,7 @@ export default function ProductStockHistoryModal({ isOpen, onClose, productId, p
                     </div>
                 ) : (
                     <div className="space-y-4">
-                        {/* All History */}
+                        {/* All History - Table Format */}
                         {activeTab === 'all' && (
                             <div className="overflow-x-auto">
                                 {allHistory.length === 0 ? (
@@ -209,10 +251,8 @@ export default function ProductStockHistoryModal({ isOpen, onClose, productId, p
                                                 <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Tarix</th>
                                                 <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Növ</th>
                                                 <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Miqdar</th>
-                                                <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Əvvəlki Stok</th>
-                                                <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Yeni Stok</th>
-                                                <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Məbləğ</th>
                                                 <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Qeyd</th>
+                                                <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Kim etdi</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -222,17 +262,17 @@ export default function ProductStockHistoryModal({ isOpen, onClose, productId, p
                                                         {formatDate(item.date || item.createdAt)}
                                                     </td>
                                                     <td className="border border-gray-300 px-4 py-2">
-                                                        {item.type === 'movement' ? (
+                                                        {item.historyType === 'movement' ? (
                                                             <span className={`px-2 py-1 text-xs rounded-full ${
                                                                 item.type === 'IN' ? 'bg-green-100 text-green-800' :
                                                                 item.type === 'OUT' ? 'bg-red-100 text-red-800' :
                                                                 'bg-blue-100 text-blue-800'
                                                             }`}>
-                                                                {item.type === 'IN' ? 'Giriş' :
-                                                                 item.type === 'OUT' ? 'Çıxış' :
+                                                                {item.type === 'IN' ? 'Stok Girişi' :
+                                                                 item.type === 'OUT' ? 'Stok Çıxışı' :
                                                                  'Düzəliş'}
                                                             </span>
-                                                        ) : item.type === 'sale' ? (
+                                                        ) : item.historyType === 'sale' ? (
                                                             <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
                                                                 Satış
                                                             </span>
@@ -241,37 +281,60 @@ export default function ProductStockHistoryModal({ isOpen, onClose, productId, p
                                                                 Qaytarma
                                                             </span>
                                                         )}
-                                                        {item.type === 'sale' && (
-                                                            <div className="text-xs text-gray-500 mt-1">
-                                                                #{(item.sale?.id || item.saleId || '').substring(0, 8) || '-'}
-                                                            </div>
-                                                        )}
-                                                        {item.type === 'return' && (
-                                                            <div className="text-xs text-gray-500 mt-1">
-                                                                #{(item.return?.id || item.returnId || '').substring(0, 8) || '-'}
-                                                            </div>
-                                                        )}
                                                     </td>
                                                     <td className="border border-gray-300 px-4 py-2 text-sm">
-                                                        {formatQuantity(
-                                                            item.type === 'movement' ? Math.abs(item.quantity) : item.quantity,
-                                                            product?.unitType || 'PIECE',
-                                                            product?.piecesPerBox
+                                                        {item.historyType === 'movement' ? (
+                                                            <div>
+                                                                <div className="font-medium">
+                                                                    {formatQuantity(
+                                                                        Math.abs(item.quantity || 0),
+                                                                        product?.unitType || 'PIECE',
+                                                                        product?.piecesPerBox
+                                                                    )}
+                                                                </div>
+                                                                <div className="text-xs text-gray-500 mt-1">
+                                                                    Əvvəlki: {item.previousStock} → Yeni: {item.newStock}
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            formatQuantity(
+                                                                item.quantity || 0,
+                                                                product?.unitType || 'PIECE',
+                                                                product?.piecesPerBox
+                                                            )
+                                                        )}
+                                                        {item.historyType === 'sale' && (
+                                                            <div className="text-xs text-gray-500 mt-1">
+                                                                Məbləğ: {parseFloat(item.totalPrice || 0).toFixed(2)} ₼
+                                                            </div>
+                                                        )}
+                                                        {item.historyType === 'return' && (
+                                                            <div className="text-xs text-gray-500 mt-1">
+                                                                Məbləğ: {parseFloat(item.totalPrice || item.returnedAmount || 0).toFixed(2)} ₼
+                                                            </div>
                                                         )}
                                                     </td>
                                                     <td className="border border-gray-300 px-4 py-2 text-sm text-gray-600">
-                                                        {item.type === 'movement' ? item.previousStock : '-'}
-                                                    </td>
-                                                    <td className="border border-gray-300 px-4 py-2 text-sm font-medium">
-                                                        {item.type === 'movement' ? item.newStock : '-'}
-                                                    </td>
-                                                    <td className="border border-gray-300 px-4 py-2 text-sm font-medium">
-                                                        {item.type === 'sale' ? `${parseFloat(item.totalPrice || 0).toFixed(2)} ₼` :
-                                                         item.type === 'return' ? `${parseFloat(item.totalPrice || item.returnedAmount || 0).toFixed(2)} ₼` :
-                                                         '-'}
+                                                        {item.historyType === 'movement' && item.note ? item.note : '-'}
+                                                        {item.historyType === 'sale' && item.sale?.id && (
+                                                            <span className="text-xs text-gray-500 block mt-1">
+                                                                Satış #{item.sale.id?.substring(0, 8) || item.saleId?.substring(0, 8) || ''}
+                                                            </span>
+                                                        )}
+                                                        {item.historyType === 'return' && item.return?.id && (
+                                                            <span className="text-xs text-gray-500 block mt-1">
+                                                                Qaytarma #{item.return.id?.substring(0, 8) || item.returnId?.substring(0, 8) || ''}
+                                                            </span>
+                                                        )}
                                                     </td>
                                                     <td className="border border-gray-300 px-4 py-2 text-sm text-gray-600">
-                                                        {item.note || item.return?.reason || '-'}
+                                                        {item.historyType === 'movement' && item.staff ? (
+                                                            `${item.staff.name || ''} ${item.staff.surName || ''}`.trim() || '-'
+                                                        ) : item.historyType === 'sale' && item.sale?.staff ? (
+                                                            `${item.sale.staff.name || ''} ${item.sale.staff.surName || ''}`.trim() || '-'
+                                                        ) : (
+                                                            '-'
+                                                        )}
                                                     </td>
                                                 </tr>
                                             ))}
@@ -298,6 +361,7 @@ export default function ProductStockHistoryModal({ isOpen, onClose, productId, p
                                                 <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Əvvəlki Stok</th>
                                                 <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Yeni Stok</th>
                                                 <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Qeyd</th>
+                                                <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Kim etdi</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -312,8 +376,8 @@ export default function ProductStockHistoryModal({ isOpen, onClose, productId, p
                                                             movement.type === 'OUT' ? 'bg-red-100 text-red-800' :
                                                             'bg-blue-100 text-blue-800'
                                                         }`}>
-                                                            {movement.type === 'IN' ? 'Giriş' :
-                                                             movement.type === 'OUT' ? 'Çıxış' :
+                                                            {movement.type === 'IN' ? 'Stok Girişi' :
+                                                             movement.type === 'OUT' ? 'Stok Çıxışı' :
                                                              'Düzəliş'}
                                                         </span>
                                                     </td>
@@ -332,6 +396,13 @@ export default function ProductStockHistoryModal({ isOpen, onClose, productId, p
                                                     </td>
                                                     <td className="border border-gray-300 px-4 py-2 text-sm text-gray-600">
                                                         {movement.note || '-'}
+                                                    </td>
+                                                    <td className="border border-gray-300 px-4 py-2 text-sm text-gray-600">
+                                                        {movement.staff ? (
+                                                            `${movement.staff.name || ''} ${movement.staff.surName || ''}`.trim() || '-'
+                                                        ) : (
+                                                            '-'
+                                                        )}
                                                     </td>
                                                 </tr>
                                             ))}
@@ -357,6 +428,7 @@ export default function ProductStockHistoryModal({ isOpen, onClose, productId, p
                                                 <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Miqdar</th>
                                                 <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Məbləğ</th>
                                                 <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Müştəri</th>
+                                                <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Kim etdi</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -380,8 +452,15 @@ export default function ProductStockHistoryModal({ isOpen, onClose, productId, p
                                                     </td>
                                                     <td className="border border-gray-300 px-4 py-2 text-sm text-gray-600">
                                                         {sale.sale?.customerName || sale.sale?.customerSurname 
-                                                            ? `${sale.sale.customerName || ''} ${sale.sale.customerSurname || ''}`.trim() || 'Gəzinti müştərisi'
-                                                            : 'Gəzinti müştərisi'}
+                                                            ? `${sale.sale.customerName || ''} ${sale.sale.customerSurname || ''}`.trim() || 'Məlumat qeyd olunmayıb'
+                                                            : 'Məlumat qeyd olunmayıb'}
+                                                    </td>
+                                                    <td className="border border-gray-300 px-4 py-2 text-sm text-gray-600">
+                                                        {sale.sale?.staff ? (
+                                                            `${sale.sale.staff.name || ''} ${sale.sale.staff.surName || ''}`.trim() || '-'
+                                                        ) : (
+                                                            '-'
+                                                        )}
                                                     </td>
                                                 </tr>
                                             ))}
@@ -434,8 +513,8 @@ export default function ProductStockHistoryModal({ isOpen, onClose, productId, p
                                                     </td>
                                                     <td className="border border-gray-300 px-4 py-2 text-sm text-gray-600">
                                                         {returnItem.return?.customerName || returnItem.return?.customerSurname 
-                                                            ? `${returnItem.return.customerName || ''} ${returnItem.return.customerSurname || ''}`.trim() || 'Gəzinti müştərisi'
-                                                            : 'Gəzinti müştərisi'}
+                                                            ? `${returnItem.return.customerName || ''} ${returnItem.return.customerSurname || ''}`.trim() || 'Məlumat qeyd olunmayıb'
+                                                            : 'Məlumat qeyd olunmayıb'}
                                                     </td>
                                                 </tr>
                                             ))}

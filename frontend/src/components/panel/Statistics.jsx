@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { statisticsApi } from '../../api';
+import DailySummaryForm from '../forms/DailySummaryForm.jsx';
+import DailySummaryHistory from './DailySummaryHistory.jsx';
 import Alert from '../ui/Alert';
 import { 
   TrendingUp, 
@@ -23,6 +25,8 @@ export default function Statistics() {
   const [topProducts, setTopProducts] = useState([]);
   const [paymentTypeData, setPaymentTypeData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showDailyForm, setShowDailyForm] = useState(false);
+  const [showDailyHistory, setShowDailyHistory] = useState(false);
   
   // Default tarixləri bu günə təyin et
   const getTodayDate = () => {
@@ -108,7 +112,45 @@ export default function Statistics() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold text-gray-800">{t('title')}</h1>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setShowDailyForm(true)}
+            className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700"
+          >
+            {t('create_daily_summary') || 'Günlük yekun yarat'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowDailyHistory(prev => !prev)}
+            className="px-4 py-2 rounded-lg bg-gray-100 text-gray-800 text-sm hover:bg-gray-200"
+          >
+            {t('daily_summary_history') || 'Tarixçə'}
+          </button>
+        </div>
       </div>
+
+      {showDailyForm && (
+        <DailySummaryForm
+          onClose={() => setShowDailyForm(false)}
+          onCreated={() => {
+            // yaradıldıqdan sonra tarixçə açıqdırsa, komponent mount qalıb və özü yenidən fetch edəcək
+          }}
+        />
+      )}
+
+      {showDailyHistory && (
+        <DailySummaryHistory
+          onClose={() => setShowDailyHistory(false)}
+          onSelect={(row) => {
+            const currentUrl = new URL(window.location.href);
+            currentUrl.searchParams.set('dailySummaryId', row.id);
+            window.history.replaceState({}, '', currentUrl.toString());
+            setShowDailyHistory(false);
+            setShowDailyForm(true);
+          }}
+        />
+      )}
 
       {/* Date Range Filter - Page başında */}
       <div className="bg-white rounded-lg shadow-md p-6">

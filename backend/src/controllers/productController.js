@@ -345,7 +345,8 @@ export const createProduct = async (req, res) => {
                 entityType: "Product",
                 entityId: newProduct.id,
                 action: "CREATE",
-                description: `Yeni məhsul yaradıldı: ${newProduct.name}`,
+                // Daha aydın Azərbaycan dilində və məhsul adını önə çıxararaq
+                description: `Yeni məhsul yaradıldı. Məhsulun adı: ${newProduct.name}`,
                 changes: {
                     name: newProduct.name,
                     purchasePrice: newProduct.purchasePrice.toString(),
@@ -493,6 +494,11 @@ export const updateProduct = async (req, res) => {
             }
         }
 
+        // Əvvəlki stok dəyərlərini hesabla
+        const previousStock = calculateProductStock(existingProduct);
+        const newStock = calculatedStock;
+        const stockChanged = (stock !== undefined || fullBoxes !== undefined || openedBoxQuantity !== undefined) && previousStock !== newStock;
+
         const updated = await prisma.product.update({
             where: { id },
             data: {
@@ -538,7 +544,6 @@ export const updateProduct = async (req, res) => {
             }
         });
 
-
         // Activity log yarat
         try {
             const changes = {};
@@ -553,13 +558,52 @@ export const updateProduct = async (req, res) => {
             if (categoryId !== undefined && categoryId !== existingProduct.categoryId) changes.categoryId = { old: existingProduct.categoryId, new: updated.categoryId };
             if (subCategoryId !== undefined && subCategoryId !== existingProduct.subCategoryId) changes.subCategoryId = { old: existingProduct.subCategoryId, new: updated.subCategoryId };
 
+            const changedFields = Object.keys(changes);
+
+            // Azərbaycan dilində sahə adları
+            const fieldLabels = {
+                name: "Məhsulun adı",
+                description: "Təsvir",
+                purchasePrice: "Alış qiyməti",
+                salePrice: "Satış qiyməti",
+                stock: "Stok",
+                isActive: "Aktivlik statusu",
+                hasDiscount: "Endirim statusu",
+                deleteType: "Silinmə tipi",
+                categoryId: "Kateqoriya",
+                subCategoryId: "Alt kateqoriya"
+            };
+
+            const formatValue = (val) => {
+                if (val === null || val === undefined) return "boş";
+                if (typeof val === "boolean") return val ? "bəli" : "xeyr";
+                return String(val);
+            };
+
+            const changedDetails = changedFields.map((key) => {
+                const label = fieldLabels[key] || key;
+                const oldVal = formatValue(changes[key].old);
+                const newVal = formatValue(changes[key].new);
+                return `${label}: "${oldVal}" → "${newVal}"`;
+            });
+
+            const descriptionParts = [
+                `Məhsul yeniləndi. Məhsulun adı: ${updated.name}`
+            ];
+
+            if (changedDetails.length > 0) {
+                descriptionParts.push(`Dəyişən sahələr: ${changedDetails.join(" | ")}`);
+            } else {
+                descriptionParts.push("Dəyişiklik qeydə alınmadı");
+            }
+
             await createActivityLog({
                 staffId: req.staffId || null,
                 entityType: "Product",
                 entityId: updated.id,
                 action: "UPDATE",
-                description: `Məhsul yeniləndi: ${updated.name}`,
-                changes: Object.keys(changes).length > 0 ? changes : null
+                description: descriptionParts.join(" - "),
+                changes: changedFields.length > 0 ? changes : null
             });
         } catch (logError) {
             console.error("Activity log yaradılarkən xəta:", logError);
@@ -584,6 +628,102 @@ export const updateProduct = async (req, res) => {
         return res.status(500).json({
             success: false,
             message: "Məhsul yenilənirkən xəta baş verdi",
+        });
+    }
+};
+
+// Update product stock only (creates stock movement)
+export const updateStock = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { stock, fullBoxes, openedBoxQuantity, note } = req.body;
+
+        const existingProduct = await prisma.product.findUnique({
+            where: { id }
+        });
+
+        if (!existingProduct) {
+            return res.status(404).json({
+                success: false,
+                message: "Məhsul tapılmadı",
+            });
+        }
+
+        const piecesPerBox = existingProduct.piecesPerBox;
+        const unitType = existingProduct.unitType || 'PIECE';
+
+        // Calculate new stock values
+        let calculatedStock = stock !== undefined ? parseInt(stock) : existingProduct.stock;
+        let calculatedFullBoxes = fullBoxes !== undefined ? parseInt(fullBoxes) : existingProduct.fullBoxes;
+        let calculatedOpenedBoxQuantity = openedBoxQuantity !== undefined ? parseInt(openedBoxQuantity) : existingProduct.openedBoxQuantity;
+
+        // If box-type product, calculate based on boxes/pieces
+        if (unitType !== 'PIECE' && piecesPerBox && piecesPerBox > 0) {
+            if (stock !== undefined) {
+                calculatedFullBoxes = Math.floor(calculatedStock / piecesPerBox);
+                calculatedOpenedBoxQuantity = calculatedStock % piecesPerBox;
+            } else if (fullBoxes !== undefined || openedBoxQuantity !== undefined) {
+                calculatedStock = (calculatedFullBoxes * piecesPerBox) + calculatedOpenedBoxQuantity;
+            }
+        }
+
+        // Calculate previous and new stock
+        const previousStock = calculateProductStock(existingProduct);
+        const newStock = calculatedStock;
+        const stockDifference = newStock - previousStock;
+
+        // Only create movement if stock changed
+        if (stockDifference === 0 && 
+            calculatedFullBoxes === existingProduct.fullBoxes && 
+            calculatedOpenedBoxQuantity === existingProduct.openedBoxQuantity) {
+            return res.status(200).json({
+                success: true,
+                message: "Stok dəyişməyib",
+                data: existingProduct
+            });
+        }
+
+        // Update product stock
+        const updated = await prisma.product.update({
+            where: { id },
+            data: {
+                stock: calculatedStock,
+                fullBoxes: calculatedFullBoxes,
+                openedBoxQuantity: calculatedOpenedBoxQuantity
+            }
+        });
+
+        // Create stock movement
+        try {
+            await prisma.stockMovement.create({
+                data: {
+                    productId: id,
+                    type: 'ADJUSTMENT',
+                    quantity: stockDifference,
+                    previousStock: previousStock,
+                    newStock: newStock,
+                    previousFullBoxes: existingProduct.fullBoxes || null,
+                    newFullBoxes: calculatedFullBoxes || null,
+                    previousOpenedBoxQuantity: existingProduct.openedBoxQuantity || null,
+                    newOpenedBoxQuantity: calculatedOpenedBoxQuantity || null,
+                    note: note?.trim() || 'Məhsul formundan stok yeniləməsi',
+                    staffId: req.staffId || null
+                }
+            });
+        } catch (movementError) {
+            console.error("Stock movement yaradılarkən xəta:", movementError);
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Stok uğurla yeniləndi",
+            data: updated
+        });
+    } catch (error) {
+        console.error("updateStock error", error);
+        return res.status(500).json({
+            success: false,
+            message: "Stok yenilənirkən xəta baş verdi",
         });
     }
 };
@@ -999,7 +1139,21 @@ export const getProductSales = async (req, res) => {
                 productId: productId
             },
             include: {
-                sale: true,
+                sale: {
+                    include: {
+                        receipt: {
+                            include: {
+                                staff: {
+                                    select: {
+                                        id: true,
+                                        name: true,
+                                        surName: true
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
                 product: {
                     select: {
                         id: true,
@@ -1013,6 +1167,44 @@ export const getProductSales = async (req, res) => {
                 sale: {
                     createdAt: 'desc'
                 }
+            }
+        });
+
+        // ActivityLog-dan staff məlumatlarını al və sale-lərə əlavə et
+        const saleIds = saleItems.map(item => item.sale.id);
+        const activityLogs = await prisma.activityLog.findMany({
+            where: {
+                entityType: 'Sale',
+                entityId: {
+                    in: saleIds
+                },
+                action: 'CREATE'
+            },
+            include: {
+                staff: {
+                    select: {
+                        id: true,
+                        name: true,
+                        surName: true
+                    }
+                }
+            }
+        });
+
+        // Sale-lərə staff məlumatını əlavə et
+        const staffMap = {};
+        activityLogs.forEach(log => {
+            if (log.entityId && log.staff) {
+                staffMap[log.entityId] = log.staff;
+            }
+        });
+
+        // Receipt-dən də staff məlumatını əlavə et (receipt varsa)
+        saleItems.forEach(item => {
+            if (item.sale.receipt?.staff) {
+                item.sale.staff = item.sale.receipt.staff;
+            } else if (staffMap[item.sale.id]) {
+                item.sale.staff = staffMap[item.sale.id];
             }
         });
 

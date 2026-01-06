@@ -59,7 +59,7 @@
   "back": "Geri",
   "sale_id_required": "Satış ID tələb olunur",
   "sale_not_found": "Satış tapılmadı",
-  "walk_in_customer": "Gəzinti müştərisi",
+  "walk_in_customer": "Məlumat qeyd olunmayıb",
   "no_information": "Məlumat yoxdur",
   "add_success": "Uğurlu!",
   "add_success_text": "Satış uğurla əlavə edildi",
@@ -155,6 +155,19 @@
   "per_month": "hər ay",
   "initial_payment": "Bu ayın ödənişi",
   "initial_payment_hint": "Bu ayın ödənişi avtomatik olaraq qeyd olunacaq",
-  "optional": "İstəyə bağlı"
+  "optional": "İstəyə bağlı",
+  "date_filter": "Tarix Filteri",
+  "date_range": "Tarix Aralığı",
+  "today": "Bu gün",
+  "this_week": "Bu həftə",
+  "this_month": "Bu ay",
+  "custom": "Xüsusi aralıq",
+  "start_date": "Başlanğıc Tarix",
+  "end_date": "Son Tarix",
+  "summary": "Nəticə",
+  "total_sales_count": "Ümumi Satış Sayı",
+  "search_by_product": "Məhsula görə axtarış",
+  "only_superadmin_can_delete": "Yalnız Superadmin satışları silə bilər",
+  "clear_filter": "Filteri təmizlə"
 }
 

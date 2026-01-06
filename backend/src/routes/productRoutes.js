@@ -4,6 +4,7 @@ import {
   getProductById,
   createProduct,
   updateProduct,
+  updateStock,
   deleteProduct,
   importProductsFromExcel,
   getProductSales,
@@ -61,7 +62,8 @@ router.get("/:id/returns", getProductReturns);
 router.get("/:id", getProductById);
 router.post("/", createProduct);
 router.post("/import", excelUpload.single('file'), importProductsFromExcel);
-router.put("/:id", updateProduct);      
+router.put("/:id", updateProduct);
+router.put("/:id/stock", updateStock);
 router.delete("/:id", deleteProduct);  
 
 export default router;

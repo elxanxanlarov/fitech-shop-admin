@@ -109,11 +109,24 @@ export default function ActivityLogDetail() {
   const renderChanges = (changes) => {
     if (!changes) return null;
 
+    // Helper: saleId və oxşar texniki field-ləri gizlət
+    const filterTechnicalKeys = (obj) => {
+      if (!obj || typeof obj !== 'object') return obj;
+      const technicalKeys = ['id', 'saleId', 'entityId', 'productId', 'staffId'];
+      return Object.fromEntries(
+        Object.entries(obj).filter(([key]) => !technicalKeys.includes(key))
+      );
+    };
+
     // Əgər changes obyekti old və new strukturu ilədirsə (UPDATE üçün)
     if (changes.old && changes.new) {
-      const oldData = changes.old;
-      const newData = changes.new;
+      const oldData = filterTechnicalKeys(changes.old);
+      const newData = filterTechnicalKeys(changes.new);
       const allKeys = new Set([...Object.keys(oldData), ...Object.keys(newData)]);
+
+      if (allKeys.size === 0) {
+        return null;
+      }
 
       return (
         <div className="space-y-4">
@@ -172,9 +185,13 @@ export default function ActivityLogDetail() {
 
     // Əgər changes sadə obyektdirsə (CREATE üçün)
     if (typeof changes === 'object' && !Array.isArray(changes)) {
+      const cleaned = filterTechnicalKeys(changes);
+      const entries = Object.entries(cleaned);
+      if (entries.length === 0) return null;
+
       return (
         <div className="space-y-3">
-          {Object.entries(changes).map(([key, value]) => (
+          {entries.map(([key, value]) => (
             <div key={key} className="border-b border-gray-200 pb-3 last:border-b-0">
               <p className="text-sm font-semibold text-gray-700 mb-2 capitalize">
                 {key.replace(/([A-Z])/g, ' $1').trim()}
@@ -189,9 +206,14 @@ export default function ActivityLogDetail() {
     }
 
     // Əgər başqa formatdırsa, JSON kimi göstər
+    const printable =
+      typeof changes === 'object' && !Array.isArray(changes)
+        ? filterTechnicalKeys(changes)
+        : changes;
+
     return (
       <pre className="text-sm text-gray-900 whitespace-pre-wrap font-mono overflow-x-auto">
-        {JSON.stringify(changes, null, 2)}
+        {JSON.stringify(printable, null, 2)}
       </pre>
     );
   };
@@ -293,10 +315,7 @@ export default function ActivityLogDetail() {
                   {t(`entity_types.${log.entityType}`) || log.entityType}
                 </p>
               </div>
-              <div className="md:col-span-2">
-                <p className="text-sm text-gray-600 mb-1">Məlumat ID:</p>
-                <p className="text-base font-mono text-gray-900">{log.entityId}</p>
-              </div>
+              {/* Məlumat ID göstərmə */}
             </div>
           </div>
         </div>

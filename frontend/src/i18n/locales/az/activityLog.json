@@ -42,7 +42,9 @@
     "Role": "Rol",
     "Auth": "Giriş",
     "StockMovement": "Stok Hərəkəti",
-    "CreditPayment": "Kredit Ödənişi"
+    "CreditPayment": "Kredit Ödənişi",
+    "DailySummary": "Günlük yekun",
+    "FinalDelivery": "Yekun təslimat"
   },
   "staff_name": "İşçi adı",
   "entity": "Obyekt",

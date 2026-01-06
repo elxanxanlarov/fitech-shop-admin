@@ -100,6 +100,7 @@ model Product {
   saleItems       SaleItem[]
   returnItems     SaleReturnItem[]
   stockMovements  StockMovement[]
+  finalDeliveryItems FinalDeliveryItem[] // Yekun təslimat məhsulları
 
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -305,6 +306,12 @@ model StockMovement {
   previousStock Int             // Əvvəlki stok
   newStock    Int               // Yeni stok
   
+  // Qutu məlumatları (box-type məhsullar üçün)
+  previousFullBoxes Int?        // Əvvəlki tam qutular
+  newFullBoxes Int?             // Yeni tam qutular
+  previousOpenedBoxQuantity Int? // Əvvəlki açıq qutu miqdarı
+  newOpenedBoxQuantity Int?     // Yeni açıq qutu miqdarı
+  
   note        String?            // Qeyd
   staffId     String?            // Kim etdi
   staff       Staff?             @relation(fields: [staffId], references: [id])
@@ -380,7 +387,67 @@ model Staff {
   cashHandoversGiven    CashHandover[] @relation("HandedOverBy")
   stockMovements         StockMovement[]
   creditPayments         CreditPayment[] // Kredit ödənişləri
+  finalDeliveries        FinalDelivery[] // Yekun təslimatlar
+  dailySummaries         DailySummary[]  // Günlük statistik təslimatlar
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+// Yekun təslimat
+model FinalDelivery {
+  id              String   @id @default(uuid())
+  title           String   // Başlıq (məsələn "Yanvar 6 (2026) - Fevral 15 (2026)")
+  startDate       DateTime // Başlanğıc tarixi
+  endDate         DateTime // Son tarixi
+  note            String?  // Qeyd
+  
+  staffId         String?  // Kim yaratdı
+  staff           Staff?   @relation(fields: [staffId], references: [id])
+  
+  items           FinalDeliveryItem[] // Təslimat məhsulları
+  
+  deleteType      DeleteType @default(NONE) // Silinmə tipi
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// Yekun təslimat məhsulları
+model FinalDeliveryItem {
+  id              String   @id @default(uuid())
+  finalDeliveryId String
+  finalDelivery   FinalDelivery @relation(fields: [finalDeliveryId], references: [id], onDelete: Cascade)
+  
+  productId       String
+  product         Product  @relation(fields: [productId], references: [id])
+  
+  remainingStock  Int      // Qalan stok (tarix aralığının sonunda)
+  stock           Int      // Ümumi stok (tarix aralığının sonunda)
+  fullBoxes       Int      @default(0) // Tam qutular
+  openedBoxQuantity Int    @default(0) // Açıq qutu miqdarı
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// Günlük statistik təslimat (Statistika üçün günlük yekunlar)
+model DailySummary {
+  id              String   @id @default(uuid())
+  date            DateTime           // Hansı günün yekunu
+  totalSalesCount Int                // Gün ərzində neçə satış olub
+  totalProducts   Int                // Neçə fərqli məhsul satılıb
+  totalQuantity   Int                // Ümumi satılan ədəd (cəmi quantity)
+  totalRevenue    Decimal @db.Decimal(10,2) // Ümumi gəlir (satış məbləği)
+  totalPurchase   Decimal @db.Decimal(10,2) // Ümumi alış dəyəri
+  totalProfit     Decimal @db.Decimal(10,2) // Ümumi mənfəət
+  note            String?            // Qeyd (istəyə bağlı)
+
+  staffId         String?            // Kim yaratdı (opsional)
+  staff           Staff?   @relation(fields: [staffId], references: [id])
+
+  deleteType      DeleteType @default(NONE) // Silinmə tipi
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }

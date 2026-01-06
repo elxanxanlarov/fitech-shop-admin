@@ -31,9 +31,9 @@ export default function ModalLayout({
             />
             
             {/* Modal Content */}
-            <div className={`relative bg-white rounded-lg shadow-xl w-full mx-4 max-h-[90vh] overflow-y-auto ${className || 'max-w-md'}`}>
+            <div className={`relative bg-white rounded-lg shadow-xl flex flex-col ${className || 'max-w-md w-full mx-4 max-h-[90vh]'}`}>
                 {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-gray-200">
+                <div className="flex items-center justify-between p-6 border-b border-gray-200 flex-shrink-0">
                     <h2 className="text-xl font-semibold text-gray-900">
                         {title}
                     </h2>
@@ -48,7 +48,7 @@ export default function ModalLayout({
                 </div>
                 
                 {/* Body - Children content */}
-                <div className="p-6">
+                <div className="p-6 flex-1 overflow-y-auto">
                     {children}
                 </div>
             </div>

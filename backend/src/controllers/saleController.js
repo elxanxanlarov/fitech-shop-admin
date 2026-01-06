@@ -6,7 +6,7 @@ import { decreaseProductStock, increaseProductStock, calculateProductPrice, calc
 
 export const getAllSales = async (req, res) => {
     try {
-        const { deleteType, includeDeleted } = req.query;
+        const { deleteType, includeDeleted, startDate, endDate } = req.query;
         
         const where = {};
         
@@ -18,6 +18,23 @@ export const getAllSales = async (req, res) => {
         } else {
             // Default: yalnız silinməyən satışları göstər
             where.deleteType = 'NONE';
+        }
+        
+        // Date filter - tarix aralığına görə filtrlə
+        if (startDate || endDate) {
+            where.createdAt = {};
+            if (startDate) {
+                // Başlanğıc tarix: günün başlanğıcı (00:00:00)
+                const start = new Date(startDate);
+                start.setHours(0, 0, 0, 0);
+                where.createdAt.gte = start;
+            }
+            if (endDate) {
+                // Son tarix: günün sonu (23:59:59)
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                where.createdAt.lte = end;
+            }
         }
         
         const sales = await prisma.sale.findMany({
@@ -33,7 +50,7 @@ export const getAllSales = async (req, res) => {
                 createdAt: 'desc',
             }
         });
-        return res.status(200).json({ success: true, date: sales });
+        return res.status(200).json({ success: true, data: sales });
     } catch (error) {
         console.error("getAllSales error", error);
         return res.status(500).json({ success: false, message: "Satışlar siyahısı alınarkən xəta baş verdi" });
@@ -67,7 +84,7 @@ export const getSaleById = async (req, res) => {
         if (!sale) {
             return res.status(404).json({ success: false, message: "Satış tapılmadı" });
         }
-        return res.json({ success: true, date: sale });
+        return res.status(200).json({ success: true, data: sale });
     } catch (error) {
         console.error("getSaleById error", error);
         return res.status(500).json({ success: false, message: "Satış tapılarkən xəta baş verdi" });
@@ -556,7 +573,7 @@ export const deleteSale = async (req, res) => {
             }
         }
 
-        return res.json({ success: true, message: validDeleteType === 'HARD' ? "Satış tamamilə silindi" : "Satış soft delete edildi", date: existingSale });
+        return res.json({ success: true, message: validDeleteType === 'HARD' ? "Satış tamamilə silindi" : "Satış soft delete edildi", data: existingSale });
     } catch (error) {
         console.error("deleteSale error", error);
         // Return error message for debugging (can be removed in production)

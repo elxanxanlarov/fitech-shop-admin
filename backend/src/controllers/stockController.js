@@ -186,6 +186,10 @@ export const createStockMovement = async (req, res) => {
                 quantity: type === 'ADJUSTMENT' ? (newStockData.stock - previousStock) : quantityNum,
                 previousStock: previousStock,
                 newStock: newStockData.stock,
+                previousFullBoxes: product.fullBoxes || null,
+                newFullBoxes: newStockData.fullBoxes || null,
+                previousOpenedBoxQuantity: product.openedBoxQuantity || null,
+                newOpenedBoxQuantity: newStockData.openedBoxQuantity || null,
                 note: note?.trim() || null,
                 staffId: req.staffId || null
             }

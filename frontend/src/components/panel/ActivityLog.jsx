@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { activityLogApi, staffApi } from '../../api';
+import TableTemplate from '../ui/TableTamplate';
 import Alert from '../ui/Alert';
 import { 
   Filter, 
@@ -22,12 +23,6 @@ export default function ActivityLog() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [staffList, setStaffList] = useState([]);
-  const [pagination, setPagination] = useState({
-    page: 1,
-    limit: 20,
-    total: 0,
-    totalPages: 0
-  });
 
   // Filters
   const [filters, setFilters] = useState({
@@ -39,18 +34,154 @@ export default function ActivityLog() {
   });
   const [showFilters, setShowFilters] = useState(false);
 
+  // Cədvəl sütunları
+  const columns = [
+    {
+      key: 'createdAt',
+      label: t('date'),
+      render: (value) => formatDate(value)
+    },
+    {
+      key: 'action',
+      label: t('action') || 'Əməliyyat',
+      render: (_value, log) => {
+        const actionText = t(`actions.${log.action}`) || log.action || '-';
+        const entityText = t(`entity_types.${log.entityType}`) || log.entityType || '';
+        return entityText ? `${actionText} (${entityText})` : actionText;
+      }
+    },
+    {
+      key: 'entityName',
+      label: t('entity') || 'Məhsulun adı',
+      render: (_value, log) => {
+        // Məhsul üçün description-dan adı çıxarmağa cəhd et
+        if (log.entityType === 'Product' && log.description) {
+          const match = log.description.match(/Məhsulun adı:\s*([^-.]+)/);
+          if (match && match[1]) {
+            return match[1].trim();
+          }
+        }
+        // Əgər məhsul deyilsə və ya tapılmadısa, entity type göstər
+        return t(`entity_types.${log.entityType}`) || log.entityType || '-';
+      }
+    },
+    {
+      key: 'changeSummary',
+      label: t('changes') || 'Dəyişikliklər',
+      render: (_value, log) => {
+        const { changes } = log;
+        if (!changes) return '-';
+
+        // Sahə adları üçün Azərbaycan dilində label-lar
+        const fieldLabels = {
+          name: 'Ad',
+          description: 'Təsvir',
+          purchasePrice: 'Alış qiyməti',
+          salePrice: 'Satış qiyməti',
+          stock: 'Stok',
+          isActive: 'Aktivlik',
+          hasDiscount: 'Endirim',
+          deleteType: 'Silinmə tipi',
+          categoryId: 'Kateqoriya',
+          subCategoryId: 'Alt kateqoriya',
+          customerName: 'Müştəri adı',
+          customerSurname: 'Müştəri soyadı',
+          customerPhone: 'Telefon',
+          paymentType: 'Ödəniş növü',
+          // Satış (Sale)
+          totalAmount: 'Ümumi məbləğ (AZN)',
+          profitAmount: 'Mənfəət (AZN)',
+          itemsCount: 'Məhsul sayı',
+          // Günlük yekun (DailySummary)
+          date: 'Tarix',
+          totalSalesCount: 'Satış sayı',
+          totalProducts: 'Məhsul sayı',
+          totalQuantity: 'Ümumi miqdar',
+          totalRevenue: 'Ümumi gəlir (AZN)',
+          totalPurchase: 'Ümumi alış (AZN)',
+          totalProfit: 'Ümumi mənfəət (AZN)',
+          // Yekun təslimat (FinalDelivery)
+          title: 'Başlıq',
+          startDate: 'Başlanğıc tarixi',
+          endDate: 'Son tarix',
+          itemsCount: 'Məhsul sayı'
+        };
+
+        const formatValue = (key, val) => {
+          if (val === null || val === undefined) return 'boş';
+          if (typeof val === 'boolean') return val ? 'bəli' : 'xeyr';
+          if (
+            ['totalSalesCount', 'totalProducts', 'totalQuantity'].includes(key) &&
+            typeof val === 'number'
+          ) {
+            return val.toString();
+          }
+          if (
+            ['totalRevenue', 'totalPurchase', 'totalProfit', 'totalAmount', 'profitAmount'].includes(key) &&
+            (typeof val === 'number' || typeof val === 'string')
+          ) {
+            const num = Number(val);
+            if (Number.isNaN(num)) return String(val);
+            return num.toFixed(2);
+          }
+          if (['date', 'startDate', 'endDate'].includes(key)) {
+            try {
+              const d = new Date(val);
+              if (!isNaN(d.getTime())) {
+                return d.toLocaleDateString('az-AZ', {
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit',
+                });
+              }
+            } catch {
+              // ignore
+            }
+            return String(val);
+          }
+          return String(val);
+        };
+
+        // Əgər changes sadə obyekt kimidirsə: { field: { old, new }, ... }
+        if (typeof changes === 'object' && !Array.isArray(changes)) {
+          // Texniki field-ləri göstərmə (id, saleId və s.)
+          const technicalKeys = ['id', 'saleId', 'entityId', 'productId', 'staffId'];
+          const entries = Object.entries(changes).filter(
+            ([key]) => !technicalKeys.includes(key)
+          );
+          if (entries.length === 0) return '-';
+
+          const parts = entries.map(([key, value]) => {
+            const label = fieldLabels[key] || key;
+
+            // { old, new } forması
+            if (value && typeof value === 'object' && 'old' in value && 'new' in value) {
+              return `${label}: ${formatValue(key, value.old)} => ${formatValue(
+                key,
+                value.new
+              )}`;
+            }
+
+            // Yalnız yeni dəyər
+            return `${label}: ${formatValue(key, value)}`;
+          });
+
+          return parts.join(' | ');
+        }
+
+        // Başqa formatlarda sadəcə string-ə çevir
+        return typeof changes === 'string' ? changes : JSON.stringify(changes);
+      }
+    }
+  ];
+
   useEffect(() => {
     fetchStaffList();
   }, []);
 
   useEffect(() => {
-    // Filter dəyişdikdə səhifəni 1-ə reset et
-    setPagination(prev => ({ ...prev, page: 1 }));
-  }, [filters.staffId, filters.entityType, filters.action, filters.startDate, filters.endDate]);
-
-  useEffect(() => {
     fetchActivityLogs();
-  }, [pagination.page, pagination.limit, filters.staffId, filters.entityType, filters.action, filters.startDate, filters.endDate]);
+  }, [filters.staffId, filters.entityType, filters.action, filters.startDate, filters.endDate]);
 
   const fetchStaffList = async () => {
     try {
@@ -67,8 +198,9 @@ export default function ActivityLog() {
     setLoading(true);
     try {
       const params = {
-        page: pagination.page,
-        limit: pagination.limit
+        // Lokal pagination istifadə edirik deyə sadəcə kifayət qədər böyük limit verək
+        page: 1,
+        limit: 500
       };
 
       if (filters.staffId) params.staffId = filters.staffId;
@@ -81,13 +213,6 @@ export default function ActivityLog() {
       
       if (response.success) {
         setLogs(response.data || []);
-        if (response.pagination) {
-          setPagination(prev => ({
-            ...prev,
-            total: response.pagination.total,
-            totalPages: response.pagination.totalPages
-          }));
-        }
       } else {
         setLogs([]);
       }
@@ -325,121 +450,23 @@ export default function ActivityLog() {
         </div>
       )}
 
-      {/* Activity Logs Table */}
-      <div className="bg-white rounded-lg shadow-md overflow-hidden">
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="text-gray-600">{t('loading')}</div>
-          </div>
-        ) : logs.length === 0 ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="text-gray-500">{t('no_data')}</div>
-          </div>
-        ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {t('date')}
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {t('staff')}
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {t('entity_type')}
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {t('action')}
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {t('description')}
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {t('actions')}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {logs.map((log) => (
-                    <tr key={log.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                        {formatDate(log.createdAt)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                        {log.staff ? (
-                          <div className="flex items-center gap-2">
-                            <User className="w-4 h-4 text-gray-400" />
-                            <span>{log.staff.name} {log.staff.surName || ''}</span>
-                          </div>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                        <div className="flex items-center gap-2">
-                          <FileText className="w-4 h-4 text-gray-400" />
-                          <span>{t(`entity_types.${log.entityType}`) || log.entityType}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getActionBadgeColor(log.action)}`}>
-                          {t(`actions.${log.action}`) || log.action}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-700">
-                        <div className="max-w-md truncate" title={log.description || ''}>
-                          {log.description || '-'}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => handleViewDetails(log)}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                            title={t('view_details')}
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination */}
-            {pagination.totalPages > 1 && (
-              <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-                <div className="text-sm text-gray-700">
-                  {t('page')} {pagination.page} {t('of')} {pagination.totalPages} ({pagination.total} {t('items_per_page')})
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setPagination(prev => ({ ...prev, page: Math.max(1, prev.page - 1) }))}
-                    disabled={pagination.page === 1}
-                    className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    ←
-                  </button>
-                  <span className="px-4 py-2 text-gray-700">
-                    {pagination.page} / {pagination.totalPages}
-                  </span>
-                  <button
-                    onClick={() => setPagination(prev => ({ ...prev, page: Math.min(prev.totalPages, prev.page + 1) }))}
-                    disabled={pagination.page === pagination.totalPages}
-                    className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    →
-                  </button>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-      </div>
+      <TableTemplate
+        data={logs}
+        columns={columns}
+        title={t('title') || 'Son Əməliyyatlar'}
+        onView={handleViewDetails}
+        showBulkActions={false}
+        showFilters={false}
+        showSearch={false}
+        showDateFilter={false}
+        loading={loading}
+        emptyState={{
+          icon: 'activity',
+          title: t('no_data') || 'Məlumat yoxdur',
+          description: t('error_fetching') || 'Activity log tapılmadı',
+          showAction: false
+        }}
+      />
     </div>
   );
 }

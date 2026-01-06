@@ -56,7 +56,8 @@ export default function TableTamplate({
   datePresetValue = 'today',
   onClearFilters = null,
   onFilterChange = null,
-  searchPlaceholder = ''
+  searchPlaceholder = '',
+  headerRightContent = null
 }) {
   const { t } = useTranslation('admin-panel');
   const { t: tProduct } = useTranslation('product');
@@ -458,7 +459,13 @@ export default function TableTamplate({
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <h2 className="text-xl font-semibold text-gray-900">{title}</h2>
 
-          {/* Search and Filters - Right side */}
+          {/* Custom header content (if provided by parent) */}
+          {headerRightContent ? (
+            <div className="flex flex-col lg:flex-row gap-3 items-start lg:items-center">
+              {headerRightContent}
+            </div>
+          ) : (
+          /* Default Search and Filters - Right side */
           <div className="flex flex-col lg:flex-row gap-3 items-start lg:items-center">
             {/* Search Input */}
             {showSearch && (() => {
@@ -821,6 +828,7 @@ export default function TableTamplate({
               </div>
             )}
           </div>
+          )}
         </div>
 
         {/* Bulk Actions */}

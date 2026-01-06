@@ -71,31 +71,26 @@ export const decreaseProductStock = (product, quantity) => {
 
     // Əgər hələ də miqdar qalıbsa, tam qutulardan çıx
     if (remainingQuantity > 0 && fullBoxes > 0) {
-        const boxesNeeded = Math.ceil(remainingQuantity / piecesPerBox);
+        // Tam qutuların sayını hesabla
+        const boxesToOpen = Math.floor(remainingQuantity / piecesPerBox);
+        const piecesFromBoxes = remainingQuantity % piecesPerBox;
         
-        if (boxesNeeded <= fullBoxes) {
-            // Kifayət qədər qutu var
-            fullBoxes -= boxesNeeded;
-            const openedFromBox = remainingQuantity % piecesPerBox;
-            
-            // Əgər qalan miqdar varsa, yeni açıq qutu yarat
-            if (openedFromBox > 0) {
-                openedBoxQuantity = piecesPerBox - openedFromBox;
-                // Yeni qutu açdıqda, bir qutu azalt
-                fullBoxes = Math.max(0, fullBoxes - 1);
+        // Tam qutuları azalt
+        if (boxesToOpen > 0) {
+            fullBoxes -= boxesToOpen;
+        }
+        
+        // Əgər qalan miqdar varsa (piecesFromBoxes), bir qutu aç və ondan çıx
+        if (piecesFromBoxes > 0) {
+            if (fullBoxes > 0) {
+                // Bir qutu aç
+                fullBoxes -= 1;
+                // Açılan qutudan piecesFromBoxes miqdarını çıx, qalanı açıq qutuya qoy
+                openedBoxQuantity = piecesPerBox - piecesFromBoxes;
+            } else {
+                // Tam qutu yoxdur - stokda kifayət qədər məhsul yoxdur
+                throw new Error(`Stokda kifayət qədər məhsul yoxdur. Mövcud stok: ${(fullBoxes * piecesPerBox) + openedBoxQuantity}, tələb olunan: ${quantity}`);
             }
-        } else {
-            // Kifayət qədər qutu yoxdur - bütün qutuları çıx və açıq qutu miqdarını hesabla
-            const totalPieces = (fullBoxes * piecesPerBox) + openedBoxQuantity;
-            const remainingAfterSale = totalPieces - quantity;
-            
-            if (remainingAfterSale < 0) {
-                // Stokda kifayət qədər məhsul yoxdur
-                throw new Error(`Stokda kifayət qədər məhsul yoxdur. Mövcud stok: ${totalPieces}, tələb olunan: ${quantity}`);
-            }
-            
-            fullBoxes = Math.floor(remainingAfterSale / piecesPerBox);
-            openedBoxQuantity = remainingAfterSale % piecesPerBox;
         }
     } else if (remainingQuantity > 0) {
         // Tam qutu yoxdur və açıq qutu da bitib - stokda kifayət qədər məhsul yoxdur

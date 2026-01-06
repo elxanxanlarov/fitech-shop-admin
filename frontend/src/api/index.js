@@ -16,5 +16,7 @@ export { stockApi } from './stock.js';
 export { creditTermApi } from './creditTerm.js';
 export { creditPaymentApi } from './creditPayment.js';
 export { notificationApi } from './notification.js';
+export { finalDeliveryApi } from './finalDelivery.js';
+export { dailySummaryApi } from './dailySummary.js';
 export { default as api } from './axios.js';
 

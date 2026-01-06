@@ -20,8 +20,11 @@ import stockRoutes from "./src/routes/stockRoutes.js";
 import creditTermRoutes from "./src/routes/creditTermRoutes.js";
 import creditPaymentRoutes from "./src/routes/creditPaymentRoutes.js";
 import notificationRoutes from "./src/routes/notificationRoutes.js";
+import finalDeliveryRoutes from "./src/routes/finalDeliveryRoutes.js";
+import dailySummaryRoutes from "./src/routes/dailySummaryRoutes.js";
 import { seedData } from "./src/seed/seedData.js";
 import { checkCreditPaymentDue } from "./src/controllers/notificationController.js";
+import { generateDailySummaryForDate } from "./src/controllers/dailySummaryController.js";
 import path from "path";
 import { fileURLToPath } from "url";
 dotenv.config();
@@ -75,6 +78,8 @@ app.use("/api/stock", stockRoutes);
 app.use("/api/credit-term", creditTermRoutes);
 app.use("/api/credit-payment", creditPaymentRoutes);
 app.use("/api/notification", notificationRoutes);
+app.use("/api/final-delivery", finalDeliveryRoutes);
+app.use("/api/daily-summary", dailySummaryRoutes);
 
 app.get("/api/health", (req, res) => {
   res.json({
@@ -107,8 +112,61 @@ const scheduleCreditNotifications = () => {
   console.log(`📅 Kredit bildiriş scheduler aktivləşdirildi. Növbəti yoxlama: ${nextCheck.toLocaleString('az-AZ')}`);
 };
 
-// Scheduler-ı başlat
+// Hər gün 23:55-də avtomatik günlük yekun yaratmaq üçün scheduler
+const scheduleDailySummary = () => {
+  const now = new Date();
+  const nextRun = new Date();
+  nextRun.setHours(23, 55, 0, 0); // Axşam 23:55
+
+  // Əgər bu gün 23:55 keçibsə, növbəti gün üçün təyin et
+  if (now > nextRun) {
+    nextRun.setDate(nextRun.getDate() + 1);
+  }
+
+  const msUntilNextRun = nextRun.getTime() - now.getTime();
+
+  setTimeout(() => {
+    const today = new Date();
+    const dateStr = today.toISOString().split("T")[0];
+
+    generateDailySummaryForDate({ date: dateStr, note: "[AUTO]", staffId: null })
+      .then(({ summary, hasSales }) => {
+        console.log(
+          `📊 Günlük yekun avtomatik yaradıldı (${dateStr}). Satış var idimi? ${hasSales ? "Bəli" : "Xeyr"}`
+        );
+      })
+      .catch((err) => {
+        console.error("❌ Avtomatik günlük yekun yaradılarkən xəta:", err);
+      });
+
+    // Sonrakı günlər üçün hər 24 saatdan bir təkrarla
+    setInterval(() => {
+      const d = new Date();
+      const ds = d.toISOString().split("T")[0];
+      generateDailySummaryForDate({ date: ds, note: "[AUTO]", staffId: null })
+        .then(({ summary, hasSales }) => {
+          console.log(
+            `📊 Günlük yekun avtomatik yaradıldı (${ds}). Satış var idimi? ${
+              hasSales ? "Bəli" : "Xeyr"
+            }`
+          );
+        })
+        .catch((err) => {
+          console.error("❌ Avtomatik günlük yekun yaradılarkən xəta:", err);
+        });
+    }, 24 * 60 * 60 * 1000);
+  }, msUntilNextRun);
+
+  console.log(
+    `⏰ Günlük yekun scheduler aktivdir. Növbəti avtomatik yaradılma: ${nextRun.toLocaleString(
+      "az-AZ"
+    )}`
+  );
+};
+
+// Scheduler-ları başlat
 scheduleCreditNotifications();
+scheduleDailySummary();
 
 app.listen(PORT, () => {
   console.log(`✅ Server is running on http://localhost:${PORT}`);

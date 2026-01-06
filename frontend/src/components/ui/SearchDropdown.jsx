@@ -83,11 +83,11 @@ export default function SearchDropdown({
                     onClick={handleInputFocus}
                     disabled={disabled}
                     className={`
-                        w-full px-4 py-2.5 text-left bg-white border rounded-lg 
+                        w-full px-4 h-10 text-left bg-white border rounded-lg 
                         focus:ring-2 focus:ring-blue-500 focus:border-blue-500
                         ${error ? 'border-red-500' : 'border-gray-300'}
                         ${disabled ? 'bg-gray-100 cursor-not-allowed' : 'cursor-pointer hover:border-gray-400'}
-                        flex items-center justify-between text-base
+                        flex items-center justify-between text-sm md:text-base
                     `}
                 >
                     <span className={selectedOption ? 'text-gray-900' : 'text-gray-500'}>

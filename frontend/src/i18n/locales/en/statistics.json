@@ -52,6 +52,21 @@
   "total_amount": "Total Amount",
   "deleted": "Deleted",
   "soft_deleted": "Soft Deleted",
-  "archived": "Archived"
+  "archived": "Archived",
+  "create_daily_summary": "Create Daily Summary",
+  "daily_summary_history": "Daily Summary History",
+  "total_sales_count": "Sales Count",
+  "total_products": "Product Count",
+  "total_quantity": "Total Quantity",
+  "total_purchase": "Total Purchase",
+  "daily_summary_created": "Daily summary created",
+  "daily_summary_detail": "Daily Summary Details",
+  "note": "Note",
+  "note_placeholder": "Add a note...",
+  "reset": "Reset",
+  "totals": "Totals",
+  "view_detail": "View Detail",
+  "print_summary": "Print summary only",
+  "print_full": "Print summary with products"
 }
 

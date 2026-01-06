@@ -59,7 +59,7 @@
   "back": "Back",
   "sale_id_required": "Sale ID is required",
   "sale_not_found": "Sale not found",
-  "walk_in_customer": "Walk-in customer",
+  "walk_in_customer": "No information recorded",
   "no_information": "No information",
   "add_success": "Success!",
   "add_success_text": "Sale added successfully",
@@ -155,6 +155,19 @@
   "per_month": "per month",
   "initial_payment": "This month's payment",
   "initial_payment_hint": "This month's payment will be automatically recorded",
-  "optional": "Optional"
+  "optional": "Optional",
+  "date_filter": "Date Filter",
+  "date_range": "Date Range",
+  "today": "Today",
+  "this_week": "This Week",
+  "this_month": "This Month",
+  "custom": "Custom Range",
+  "start_date": "Start Date",
+  "end_date": "End Date",
+  "summary": "Summary",
+  "total_sales_count": "Total Sales Count",
+  "search_by_product": "Search by Product",
+  "only_superadmin_can_delete": "Only Superadmin can delete sales",
+  "clear_filter": "Clear Filter"
 }
 

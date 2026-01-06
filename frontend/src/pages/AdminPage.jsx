@@ -23,6 +23,8 @@ import Profile from "../components/panel/Profile.jsx"
 import CreditPayments from "../components/panel/CreditPayments.jsx"
 import CreditTermManagement from "../components/panel/CreditTermManagement.jsx"
 import InvoiceNameMapping from "../components/panel/InvoiceNameMapping.jsx"
+import FinalDelivery from "../components/panel/FinalDelivery.jsx"
+import FinalDeliveryForm from "../components/forms/FinalDeliveryForm.jsx"
 
 
 export default function AdminPanel() {
@@ -38,6 +40,7 @@ export default function AdminPanel() {
             {slug === "category-form" && <CategoryForm />}
             {slug === "expense-form" && <ExpenseForm />}
             {slug === "cash-handover-form" && <CashHandoverForm />}
+            {slug === "final-delivery-form" && <FinalDeliveryForm />}
 
             
             {/* Panels */}
@@ -56,6 +59,7 @@ export default function AdminPanel() {
             {slug === "cash-handover" && <CashHandover />}
             {slug === "credit-payments" && <CreditPayments />}
             {slug === "invoice-name-mapping" && <InvoiceNameMapping />}
+            {slug === "final-delivery" && <FinalDelivery />}
             {slug === "profile" && <Profile />}
         </div>
     )

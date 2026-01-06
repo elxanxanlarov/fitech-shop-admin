@@ -52,6 +52,21 @@
   "total_amount": "Ümumi məbləğ",
   "deleted": "Silinmiş",
   "soft_deleted": "Soft silinmiş",
-  "archived": "Arxivləşdirilmiş"
+  "archived": "Arxivləşdirilmiş",
+  "create_daily_summary": "Günlük yekun yarat",
+  "daily_summary_history": "Günlük yekun tarixçəsi",
+  "total_sales_count": "Satış sayı",
+  "total_products": "Məhsul sayı",
+  "total_quantity": "Ümumi miqdar",
+  "total_purchase": "Ümumi alış",
+  "daily_summary_created": "Günlük yekun yaradıldı",
+  "daily_summary_detail": "Günlük Yekun Detalları",
+  "note": "Qeyd",
+  "note_placeholder": "Qeyd əlavə edin...",
+  "reset": "Sıfırla",
+  "totals": "Cəmi",
+  "view_detail": "Detallı bax",
+  "print_summary": "Yalnız ümumi məlumatı çap et",
+  "print_full": "Ümumi məlumat + məhsullar siyahısını çap et"
 }
 
