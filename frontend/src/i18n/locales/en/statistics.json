@@ -67,6 +67,7 @@
   "totals": "Totals",
   "view_detail": "View Detail",
   "print_summary": "Print summary only",
-  "print_full": "Print summary with products"
+  "print_full": "Print summary with products",
+  "revenue_calculation": "Revenue Calculation",
+  "net_revenue": "Net Revenue"
 }
-

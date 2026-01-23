@@ -18,7 +18,7 @@ export default function CashHandoverForm() {
     const isAdmin = location.pathname.includes('/admin');
     const cashHandoverPagePath = isAdmin ? '/admin/cash-handover' : '/reception/cash-handover';
     const isEditMode = !!id;
-    
+
     const [formData, setFormData] = useState({
         date: new Date().toISOString().split('T')[0],
         amount: '',
@@ -26,12 +26,14 @@ export default function CashHandoverForm() {
         handedOverById: '',
         note: ''
     });
-    
+
     const [staffList, setStaffList] = useState([]);
     const [errors, setErrors] = useState({});
     const [isLoading, setIsLoading] = useState(false);
     const [loadingStaff, setLoadingStaff] = useState(false);
     const [initialFormData, setInitialFormData] = useState(null);
+    const [availableRevenue, setAvailableRevenue] = useState(null);
+    const [loadingRevenue, setLoadingRevenue] = useState(false);
 
     // Fetch staff list
     useEffect(() => {
@@ -82,31 +84,58 @@ export default function CashHandoverForm() {
         fetchCashHandover();
     }, [id, isEditMode, t]);
 
+    // Fetch available revenue when date changes
+    useEffect(() => {
+        const fetchAvailableRevenue = async () => {
+            if (!formData.date) return;
+
+            setLoadingRevenue(true);
+            try {
+                const response = await cashHandoverApi.getAvailableRevenueByDate(
+                    formData.date,
+                    isEditMode ? id : null
+                );
+                if (response.success && response.data) {
+                    setAvailableRevenue(response.data);
+                }
+            } catch (error) {
+                console.error('Error fetching available revenue:', error);
+                setAvailableRevenue(null);
+            } finally {
+                setLoadingRevenue(false);
+            }
+        };
+
+        fetchAvailableRevenue();
+    }, [formData.date, id, isEditMode]);
+
     const validateForm = () => {
         const newErrors = {};
-    
+
         // Məbləğ
         if (!formData.amount || parseFloat(formData.amount) <= 0) {
             newErrors.amount = t('amount_required') || 'Məbləğ tələb olunur və 0-dan böyük olmalıdır';
+        } else if (availableRevenue && parseFloat(formData.amount) > availableRevenue.availableRevenue) {
+            newErrors.amount = `Seçilən tarixdə maksimum ${availableRevenue.availableRevenue.toFixed(2)} AZN təslim edə bilərsiniz`;
         }
-    
+
         // Kimə təslim edildi
         if (!formData.handedOverToId) {
             newErrors.handedOverToId = t('handed_over_to_required') || 'Kimə təslim edildiyi seçilməlidir';
         }
-    
+
         // Kim təslim etdi
         if (!formData.handedOverById) {
             newErrors.handedOverById = t('handed_over_by_required') || 'Kim təslim etdiyi seçilməlidir';
         }
-    
+
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
 
     // Number fields
     const numberFields = ['amount'];
-    
+
     const handleInputChange = createInputChangeHandler(
         setFormData,
         setErrors,
@@ -118,7 +147,7 @@ export default function CashHandoverForm() {
     // Check if form has changed (only in edit mode)
     const hasFormChanged = () => {
         if (!isEditMode || !initialFormData) return true; // Always allow submit in create mode
-        
+
         // Compare form data with initial data
         const currentData = {
             date: formData.date,
@@ -127,7 +156,7 @@ export default function CashHandoverForm() {
             handedOverById: formData.handedOverById || '',
             note: formData.note?.trim() || ''
         };
-        
+
         const initial = {
             date: initialFormData.date,
             amount: initialFormData.amount?.toString() || '',
@@ -135,7 +164,7 @@ export default function CashHandoverForm() {
             handedOverById: initialFormData.handedOverById || '',
             note: initialFormData.note?.trim() || ''
         };
-        
+
         // Check if any field has changed
         const hasChanged = JSON.stringify(currentData) !== JSON.stringify(initial);
         return hasChanged;
@@ -143,19 +172,19 @@ export default function CashHandoverForm() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        
+
         if (!validateForm()) {
             return;
         }
-        
+
         // In edit mode, check if form has changed
         if (isEditMode && !hasFormChanged()) {
             Alert.info(t('no_changes') || 'Xəbərdarlıq', t('no_changes_text') || 'Formda heç bir dəyişiklik edilməyib');
             return;
         }
-        
+
         setIsLoading(true);
-        
+
         try {
             const payload = {
                 date: formData.date ? new Date(formData.date).toISOString() : new Date().toISOString(),
@@ -172,11 +201,11 @@ export default function CashHandoverForm() {
                 await cashHandoverApi.create(payload);
                 Alert.success(t('add_success') || 'Uğurlu!', t('add_success_text') || 'Məbləğ təslimi uğurla əlavə edildi');
             }
-            
+
             setTimeout(() => {
                 navigate(cashHandoverPagePath);
             }, 1500);
-            
+
         } catch (error) {
             console.error('Cash handover operation error:', error);
             Alert.error(
@@ -227,7 +256,7 @@ export default function CashHandoverForm() {
                         <MdAttachMoney className="inline w-5 h-5 mr-2" />
                         {t('basic_info') || 'Əsas Məlumatlar'}
                     </h3>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -240,14 +269,48 @@ export default function CashHandoverForm() {
                                     value={formData.date}
                                     onChange={(e) => handleInputChange('date', e.target.value)}
                                     disabled={isLoading}
-                                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                                        errors.date ? 'border-red-500' : 'border-gray-300'
-                                    }`}
+                                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.date ? 'border-red-500' : 'border-gray-300'
+                                        }`}
                                     required
                                 />
                             </div>
                             {errors.date && (
                                 <p className="mt-1 text-sm text-red-600">{errors.date}</p>
+                            )}
+
+                            {/* Mövcud gəlir məlumatı */}
+                            {loadingRevenue ? (
+                                <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                                    <p className="text-sm text-gray-600">Gəlir məlumatı yüklənir...</p>
+                                </div>
+                            ) : availableRevenue && (
+                                <div className="mt-3 p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
+                                    <p className="text-sm font-semibold text-blue-900">
+                                        {new Date(formData.date).toLocaleDateString('az-AZ')} - Gəlir Məlumatı
+                                    </p>
+                                    <div className="space-y-1 text-xs">
+                                        <div className="flex justify-between">
+                                            <span className="text-gray-600">Ümumi gəlir:</span>
+                                            <span className="font-medium text-gray-900">{availableRevenue.totalRevenue.toFixed(2)} AZN</span>
+                                        </div>
+                                        {availableRevenue.totalReturns > 0 && (
+                                            <div className="flex justify-between">
+                                                <span className="text-gray-600">Qaytarmalar:</span>
+                                                <span className="font-medium text-red-600">-{availableRevenue.totalReturns.toFixed(2)} AZN</span>
+                                            </div>
+                                        )}
+                                        {availableRevenue.totalHandedOver > 0 && (
+                                            <div className="flex justify-between">
+                                                <span className="text-gray-600">Artıq təslim edilib:</span>
+                                                <span className="font-medium text-orange-600">-{availableRevenue.totalHandedOver.toFixed(2)} AZN</span>
+                                            </div>
+                                        )}
+                                        <div className="flex justify-between pt-2 border-t border-blue-300">
+                                            <span className="text-blue-900 font-semibold">Təslim edilə bilər:</span>
+                                            <span className="font-bold text-green-600">{availableRevenue.availableRevenue.toFixed(2)} AZN</span>
+                                        </div>
+                                    </div>
+                                </div>
                             )}
                         </div>
 
@@ -274,9 +337,8 @@ export default function CashHandoverForm() {
                                     value={formData.handedOverToId}
                                     onChange={(e) => handleInputChange('handedOverToId', e.target.value)}
                                     disabled={isLoading || loadingStaff}
-                                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                                        errors.handedOverToId ? 'border-red-500' : 'border-gray-300'
-                                    }`}
+                                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.handedOverToId ? 'border-red-500' : 'border-gray-300'
+                                        }`}
                                     required
                                 >
                                     <option value="">{t('select_staff') || 'İşçi seçin'}</option>
@@ -302,9 +364,8 @@ export default function CashHandoverForm() {
                                     value={formData.handedOverById}
                                     onChange={(e) => handleInputChange('handedOverById', e.target.value)}
                                     disabled={isLoading || loadingStaff}
-                                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                                        errors.handedOverById ? 'border-red-500' : 'border-gray-300'
-                                    }`}
+                                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.handedOverById ? 'border-red-500' : 'border-gray-300'
+                                        }`}
                                     required
                                 >
                                     <option value="">{t('select_staff') || 'İşçi seçin'}</option>
@@ -319,7 +380,7 @@ export default function CashHandoverForm() {
                                 <p className="mt-1 text-sm text-red-600">{errors.handedOverById}</p>
                             )}
                         </div>
-                        
+
                         <div className="md:col-span-2">
                             <Input
                                 label={t('note') || 'Qeyd'}

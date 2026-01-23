@@ -13,10 +13,13 @@ export default function SearchDropdown({
     getOptionValue = (option) => option.id || option.value || '',
     searchFields = ['name'],
     className = '',
-    renderOption = null
+    renderOption = null,
+    allowCustomValue = false,
+    onSearchChange = null
 }) {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
+    const [displayValue, setDisplayValue] = useState('');
     const dropdownRef = useRef(null);
     const inputRef = useRef(null);
 
@@ -37,6 +40,33 @@ export default function SearchDropdown({
         }
     }, [isOpen]);
 
+    // Update display value when value prop changes (only if not in custom input mode)
+    useEffect(() => {
+        if (!allowCustomValue) {
+            const selectedOption = options.find(opt => getOptionValue(opt) === value);
+            if (selectedOption) {
+                setDisplayValue(getOptionLabel(selectedOption));
+            } else {
+                setDisplayValue('');
+            }
+        } else {
+            // In custom value mode, displayValue is controlled by input
+            if (value && typeof value === 'string' && !value.startsWith('PRODUCT_ID:')) {
+                setDisplayValue(value);
+            } else if (value && typeof value === 'string' && value.startsWith('PRODUCT_ID:')) {
+                const productId = value.replace('PRODUCT_ID:', '');
+                const selectedOption = options.find(opt => getOptionValue(opt) === value);
+                if (selectedOption) {
+                    setDisplayValue(getOptionLabel(selectedOption));
+                } else {
+                    setDisplayValue('');
+                }
+            } else {
+                setDisplayValue(value || '');
+            }
+        }
+    }, [value, options, allowCustomValue]);
+
     // Filter options based on search term
     const filteredOptions = options.filter(option => {
         if (!searchTerm.trim()) return true;
@@ -51,9 +81,33 @@ export default function SearchDropdown({
     const selectedOption = options.find(opt => getOptionValue(opt) === value);
 
     const handleSelect = (option) => {
-        onChange(getOptionValue(option));
+        const optionValue = getOptionValue(option);
+        onChange(optionValue);
         setIsOpen(false);
         setSearchTerm('');
+        if (allowCustomValue) {
+            const label = getOptionLabel(option);
+            setDisplayValue(label);
+        }
+    };
+
+    const handleSearchChange = (newSearchTerm) => {
+        setSearchTerm(newSearchTerm);
+        if (allowCustomValue && onSearchChange) {
+            onSearchChange(newSearchTerm);
+        } else if (allowCustomValue && onChange) {
+            // If no option matches, treat as custom value
+            const matchingOption = options.find(opt => {
+                const searchLower = newSearchTerm.toLowerCase();
+                return searchFields.some(field => {
+                    const fieldValue = opt[field];
+                    return fieldValue && fieldValue.toString().toLowerCase() === searchLower;
+                });
+            });
+            if (!matchingOption) {
+                onChange(newSearchTerm);
+            }
+        }
     };
 
     const handleInputFocus = () => {
@@ -78,43 +132,96 @@ export default function SearchDropdown({
             )}
             
             <div className="relative">
-                <button
-                    type="button"
-                    onClick={handleInputFocus}
-                    disabled={disabled}
-                    className={`
-                        w-full px-4 h-10 text-left bg-white border rounded-lg 
-                        focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-                        ${error ? 'border-red-500' : 'border-gray-300'}
-                        ${disabled ? 'bg-gray-100 cursor-not-allowed' : 'cursor-pointer hover:border-gray-400'}
-                        flex items-center justify-between text-sm md:text-base
-                    `}
-                >
-                    <span className={selectedOption ? 'text-gray-900' : 'text-gray-500'}>
-                        {selectedOption ? getOptionLabel(selectedOption) : placeholder}
-                    </span>
-                    <MdExpandMore 
-                        className={`w-5 h-5 text-gray-400 transition-transform ${isOpen ? 'transform rotate-180' : ''}`}
-                    />
-                </button>
+                {allowCustomValue ? (
+                    <div className="relative">
+                        <input
+                            type="text"
+                            value={isOpen ? searchTerm : (displayValue || '')}
+                            onChange={(e) => {
+                                const newValue = e.target.value;
+                                setSearchTerm(newValue);
+                                handleSearchChange(newValue);
+                                if (!isOpen) {
+                                    setIsOpen(true);
+                                }
+                            }}
+                            onFocus={() => {
+                                if (!disabled) {
+                                    setSearchTerm(displayValue || '');
+                                    setIsOpen(true);
+                                }
+                            }}
+                            onBlur={(e) => {
+                                // Delay closing to allow option click
+                                setTimeout(() => {
+                                    if (!dropdownRef.current?.contains(document.activeElement)) {
+                                        setIsOpen(false);
+                                        // Keep the typed value if no option was selected
+                                        if (searchTerm && !value) {
+                                            setDisplayValue(searchTerm);
+                                        }
+                                    }
+                                }, 200);
+                            }}
+                            placeholder={placeholder}
+                            disabled={disabled}
+                            className={`
+                                w-full px-4 h-10 text-left bg-white border rounded-lg 
+                                focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                                ${error ? 'border-red-500' : 'border-gray-300'}
+                                ${disabled ? 'bg-gray-100 cursor-not-allowed' : ''}
+                                text-sm md:text-base outline-none
+                            `}
+                        />
+                        <MdExpandMore 
+                            className={`absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 transition-transform pointer-events-none ${isOpen ? 'transform rotate-180' : ''}`}
+                        />
+                    </div>
+                ) : (
+                    <button
+                        type="button"
+                        onClick={handleInputFocus}
+                        disabled={disabled}
+                        className={`
+                            w-full px-4 h-10 text-left bg-white border rounded-lg 
+                            focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                            ${error ? 'border-red-500' : 'border-gray-300'}
+                            ${disabled ? 'bg-gray-100 cursor-not-allowed' : 'cursor-pointer hover:border-gray-400'}
+                            flex items-center justify-between text-sm md:text-base
+                        `}
+                    >
+                        <span className={selectedOption ? 'text-gray-900' : 'text-gray-500'}>
+                            {selectedOption ? getOptionLabel(selectedOption) : placeholder}
+                        </span>
+                        <MdExpandMore 
+                            className={`w-5 h-5 text-gray-400 transition-transform ${isOpen ? 'transform rotate-180' : ''}`}
+                        />
+                    </button>
+                )}
 
                 {isOpen && (
                     <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-hidden">
-                        {/* Search Input */}
-                        <div className="p-2 border-b border-gray-200 sticky top-0 bg-white">
-                            <div className="relative">
-                                <MdSearch className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                                <input
-                                    ref={inputRef}
-                                    type="text"
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    placeholder={placeholder}
-                                    className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                                    onClick={(e) => e.stopPropagation()}
-                                />
+                        {/* Search Input - only show if not in allowCustomValue mode (main input is already the search) */}
+                        {!allowCustomValue && (
+                            <div className="p-2 border-b border-gray-200 sticky top-0 bg-white">
+                                <div className="relative">
+                                    <MdSearch className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                                    <input
+                                        ref={inputRef}
+                                        type="text"
+                                        value={searchTerm}
+                                        onChange={(e) => {
+                                            const newValue = e.target.value;
+                                            setSearchTerm(newValue);
+                                        }}
+                                        placeholder={placeholder}
+                                        className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                        onClick={(e) => e.stopPropagation()}
+                                        autoFocus
+                                    />
+                                </div>
                             </div>
-                        </div>
+                        )}
 
                         {/* Options List */}
                         <div className="overflow-y-auto max-h-48">

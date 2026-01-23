@@ -56,6 +56,7 @@ export default function TableTamplate({
   datePresetValue = 'today',
   onClearFilters = null,
   onFilterChange = null,
+  onTempFilterChange = null,
   searchPlaceholder = '',
   headerRightContent = null
 }) {
@@ -153,6 +154,11 @@ export default function TableTamplate({
           filtered = filtered.filter(item => {
             const categoryName = item.category?.name || '';
             return categoryName.toLowerCase().trim() === value.toLowerCase().trim();
+          });
+        } else if (key === 'subCategoryName') {
+          filtered = filtered.filter(item => {
+            const subCategoryName = item.subCategory?.name || '';
+            return subCategoryName.toLowerCase().trim() === value.toLowerCase().trim();
           });
         } else if (key === 'isActive') {
           const isActiveValue = value.toLowerCase().trim();
@@ -314,24 +320,24 @@ export default function TableTamplate({
     if (e.target.type === 'checkbox' || e.target.closest('input[type="checkbox"]')) {
       return;
     }
-    
+
     // Əgər action button-lara klik edilibsə, heç nə etmə
     if (e.target.closest('button') || e.target.closest('svg') || e.target.closest('.action-buttons')) {
       return;
     }
-    
+
     // Əvvəlcə edit yoxla
     if (onEdit) {
       onEdit(item);
       return;
     }
-    
+
     // Sonra view yoxla
     if (onView) {
       onView(item);
       return;
     }
-    
+
     // Əgər heç biri yoxdursa və bulk actions aktivdirsə, seçim et
     if (showBulkActions) {
       handleSelectRow(item.id);
@@ -465,369 +471,378 @@ export default function TableTamplate({
               {headerRightContent}
             </div>
           ) : (
-          /* Default Search and Filters - Right side */
-          <div className="flex flex-col lg:flex-row gap-3 items-start lg:items-center">
-            {/* Search Input */}
-            {showSearch && (() => {
-              // Ensure currentSearchValue is always a string
-              const searchVal = onSearchChange && searchValue !== undefined && searchValue !== null ? searchValue : (searchTerm || '');
-              const currentSearchValue = typeof searchVal === 'string' ? searchVal : String(searchVal || '');
-              const hasValue = currentSearchValue.trim().length > 0;
-              
-              const handleClear = () => {
-                if (onSearchChange) {
-                  onSearchChange('');
-                  // If search submit handler exists, also clear the search query
-                  // Call onSearchSubmit with empty string directly to trigger API call with no search
-                  if (onSearchSubmit) {
-                    // Call onSearchSubmit with empty string to immediately clear search
-                    onSearchSubmit('');
+            /* Default Search and Filters - Right side */
+            <div className="flex flex-col lg:flex-row gap-3 items-start lg:items-center">
+              {/* Search Input */}
+              {showSearch && (() => {
+                // Ensure currentSearchValue is always a string
+                const searchVal = onSearchChange && searchValue !== undefined && searchValue !== null ? searchValue : (searchTerm || '');
+                const currentSearchValue = typeof searchVal === 'string' ? searchVal : String(searchVal || '');
+                const hasValue = currentSearchValue.trim().length > 0;
+
+                const handleClear = () => {
+                  if (onSearchChange) {
+                    onSearchChange('');
+                    // If search submit handler exists, also clear the search query
+                    // Call onSearchSubmit with empty string directly to trigger API call with no search
+                    if (onSearchSubmit) {
+                      // Call onSearchSubmit with empty string to immediately clear search
+                      onSearchSubmit('');
+                    }
+                  } else {
+                    setSearchTerm('');
                   }
-                } else {
-                  setSearchTerm('');
-                }
-              };
-              
-              return (
-                <div className="flex gap-2 w-full lg:w-auto lg:min-w-[280px]">
-                  <div className="relative flex-1">
+                };
+
+                return (
+                  <div className="flex gap-2 w-full lg:w-auto lg:min-w-[280px]">
+                    <div className="relative flex-1">
                       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" />
-                    <input
-                      type="text"
-                      placeholder={searchPlaceholder || "Axtar..."}
-                      value={currentSearchValue}
-                      onChange={(e) => {
-                        const newValue = e.target.value;
-                        if (onSearchChange) {
-                          onSearchChange(newValue);
-                        } else {
-                          setSearchTerm(newValue);
-                        }
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && onSearchSubmit) {
-                          // Pass currentSearchValue when Enter is pressed
-                          onSearchSubmit(currentSearchValue);
-                        }
-                      }}
-                      className={`w-full ${hasValue ? 'pl-10 pr-10' : 'pl-10 pr-4'} py-2.5 border border-gray-300 rounded-lg bg-white transition-colors`}
-                    />
-                    {hasValue && (
-                      <button
-                        onClick={handleClear}
-                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                        type="button"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
+                      <input
+                        type="text"
+                        placeholder={searchPlaceholder || "Axtar..."}
+                        value={currentSearchValue}
+                        onChange={(e) => {
+                          const newValue = e.target.value;
+                          if (onSearchChange) {
+                            onSearchChange(newValue);
+                          } else {
+                            setSearchTerm(newValue);
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && onSearchSubmit) {
+                            // Pass currentSearchValue when Enter is pressed
+                            onSearchSubmit(currentSearchValue);
+                          }
+                        }}
+                        className={`w-full ${hasValue ? 'pl-10 pr-10' : 'pl-10 pr-4'} py-2.5 border border-gray-300 rounded-lg bg-white transition-colors`}
+                      />
+                      {hasValue && (
+                        <button
+                          onClick={handleClear}
+                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                          type="button"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })()}
-            {showSearch && onSearchSubmit && (() => {
-              // Ensure currentSearchValue is always a string
-              const searchVal = onSearchChange && searchValue !== undefined && searchValue !== null ? searchValue : (searchTerm || '');
-              const currentSearchValue = typeof searchVal === 'string' ? searchVal : String(searchVal || '');
-              return (
-                <button
-                  onClick={() => {
-                    // Pass currentSearchValue as parameter to onSearchSubmit
-                    onSearchSubmit(currentSearchValue);
-                  }}
-                  disabled={!currentSearchValue.trim()}
-                  className={`px-4 py-2.5 rounded-lg font-medium transition-colors whitespace-nowrap ${
-                    currentSearchValue.trim()
+                );
+              })()}
+              {showSearch && onSearchSubmit && (() => {
+                // Ensure currentSearchValue is always a string
+                const searchVal = onSearchChange && searchValue !== undefined && searchValue !== null ? searchValue : (searchTerm || '');
+                const currentSearchValue = typeof searchVal === 'string' ? searchVal : String(searchVal || '');
+                return (
+                  <button
+                    onClick={() => {
+                      // Pass currentSearchValue as parameter to onSearchSubmit
+                      onSearchSubmit(currentSearchValue);
+                    }}
+                    disabled={!currentSearchValue.trim()}
+                    className={`px-4 py-2.5 rounded-lg font-medium transition-colors whitespace-nowrap ${currentSearchValue.trim()
                       ? 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'
                       : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  }`}
-                >
-                  Axtar
-                </button>
-              );
-            })()}
-
-            {/* Date Filter - Server-side pagination */}
-            {serverSidePagination && showDateFilter && (
-              <div className="flex flex-col lg:flex-row gap-3 items-start lg:items-center w-full lg:w-auto">
-                {/* Date Preset Selector */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
-                    Tarix:
-                  </label>
-                  <select
-                    onChange={(e) => handleDatePresetChange(e.target.value)}
-                    value={datePreset}
-                    className="px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm font-medium text-gray-700 focus:outline-none  transition-colors min-w-[140px]"
+                      }`}
                   >
-                    <option value="today">Bu gün</option>
-                    <option value="week">Bu həftə</option>
-                    <option value="month">Bu ay</option>
-                    <option value="6months">Son 6 ay</option>
-                    <option value="year">Bu il</option>
-                    <option value="all">Hamısı</option>
-                    <option value="custom">Xüsusi aralıq</option>
-                  </select>
-                </div>
+                    Axtar
+                  </button>
+                );
+              })()}
 
-                {/* Date Range Filter - Only show when "custom" preset is selected */}
-                {datePreset === 'custom' && (
-                  <div className="flex gap-2 w-full lg:w-auto">
-                    <div className="flex-1 lg:flex-none lg:min-w-[150px]">
-                      <input
-                        type="date"
-                        value={dateRange.start || ''}
-                        onChange={(e) => handleDateRangeChange(e.target.value, dateRange.end)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                      />
-                    </div>
-                    <div className="flex-1 lg:flex-none lg:min-w-[150px]">
-                      <input
-                        type="date"
-                        value={dateRange.end || ''}
-                        onChange={(e) => handleDateRangeChange(dateRange.start, e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                      />
-                    </div>
+              {/* Date Filter - Server-side pagination */}
+              {serverSidePagination && showDateFilter && (
+                <div className="flex flex-col lg:flex-row gap-3 items-start lg:items-center w-full lg:w-auto">
+                  {/* Date Preset Selector */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                      Tarix:
+                    </label>
+                    <select
+                      onChange={(e) => handleDatePresetChange(e.target.value)}
+                      value={datePreset}
+                      className="px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm font-medium text-gray-700 focus:outline-none  transition-colors min-w-[140px]"
+                    >
+                      <option value="today">Bu gün</option>
+                      <option value="week">Bu həftə</option>
+                      <option value="month">Bu ay</option>
+                      <option value="6months">Son 6 ay</option>
+                      <option value="year">Bu il</option>
+                      <option value="all">Hamısı</option>
+                      <option value="custom">Xüsusi aralıq</option>
+                    </select>
                   </div>
-                )}
-              </div>
-            )}
 
-            {/* Clear Filters Button - Left side, after filters - Always visible, disabled when no filters */}
-            {(() => {
-              // Check if there are any active filters or search
-              // If searchQuery is provided and not empty, it means search was submitted (even if no results)
-              const hasSearchQuery = searchQuery !== null && searchQuery !== undefined && 
-                                     typeof searchQuery === 'string' && searchQuery.trim().length > 0;
-              const hasSearchValue = (onSearchChange && searchValue !== undefined && searchValue !== null && 
-                                     typeof searchValue === 'string' && searchValue.trim()) || 
-                                    (!onSearchChange && searchTerm && typeof searchTerm === 'string' && searchTerm.trim());
-              const hasDateFilter = dateRange.start && dateRange.end && datePreset !== 'all';
-              const hasFilters = Object.keys(filters).some(key => filters[key]);
-              // Button should be active if there's a search query (even if no results) OR search value OR filters
-              const hasActiveFilters = hasSearchQuery || hasSearchValue || hasDateFilter || hasFilters;
-              
-              return (
-                <button
-                  onClick={clearFilters}
-                  disabled={!hasActiveFilters}
-                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors whitespace-nowrap ${
-                    hasActiveFilters
+                  {/* Date Range Filter - Only show when "custom" preset is selected */}
+                  {datePreset === 'custom' && (
+                    <div className="flex gap-2 w-full lg:w-auto">
+                      <div className="flex-1 lg:flex-none lg:min-w-[150px]">
+                        <input
+                          type="date"
+                          value={dateRange.start || ''}
+                          onChange={(e) => handleDateRangeChange(e.target.value, dateRange.end)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        />
+                      </div>
+                      <div className="flex-1 lg:flex-none lg:min-w-[150px]">
+                        <input
+                          type="date"
+                          value={dateRange.end || ''}
+                          onChange={(e) => handleDateRangeChange(dateRange.start, e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Clear Filters Button - Left side, after filters - Always visible, disabled when no filters */}
+              {(() => {
+                // Check if there are any active filters or search
+                // If searchQuery is provided and not empty, it means search was submitted (even if no results)
+                const hasSearchQuery = searchQuery !== null && searchQuery !== undefined &&
+                  typeof searchQuery === 'string' && searchQuery.trim().length > 0;
+                const hasSearchValue = (onSearchChange && searchValue !== undefined && searchValue !== null &&
+                  typeof searchValue === 'string' && searchValue.trim()) ||
+                  (!onSearchChange && searchTerm && typeof searchTerm === 'string' && searchTerm.trim());
+                const hasDateFilter = dateRange.start && dateRange.end && datePreset !== 'all';
+                const hasFilters = Object.keys(filters).some(key => filters[key]);
+                // Button should be active if there's a search query (even if no results) OR search value OR filters
+                const hasActiveFilters = hasSearchQuery || hasSearchValue || hasDateFilter || hasFilters;
+
+                return (
+                  <button
+                    onClick={clearFilters}
+                    disabled={!hasActiveFilters}
+                    className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors whitespace-nowrap ${hasActiveFilters
                       ? 'text-gray-700 bg-gray-100 hover:bg-gray-200 cursor-pointer'
                       : 'text-gray-400 bg-gray-50 cursor-not-allowed opacity-60'
-                  }`}
-                >
-                  {t('clear_all') || 'Təmizlə'}
-                </button>
-              );
-            })()}
+                      }`}
+                  >
+                    {t('clear_all') || 'Təmizlə'}
+                  </button>
+                );
+              })()}
 
-            {/* Default Filters Dropdown */}
-            {!serverSidePagination && showFilters && (
-              <div className="relative w-full lg:w-auto" ref={filterDropdownRef}>
-                <button
-                  onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-                  className="flex items-center gap-2 px-4 py-2.5 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 transition-colors w-full lg:w-auto"
-                >
-                  <Filter className="w-4 h-4 text-gray-600" />
-                  <span className="text-sm font-medium text-gray-700">{t('filters')}</span>
-                  <ChevronDown className={`w-4 h-4 text-gray-600 transition-transform ${showFilterDropdown ? 'rotate-180' : ''}`} />
-                </button>
+              {/* Default Filters Dropdown */}
+              {!serverSidePagination && showFilters && (
+                <div className="relative w-full lg:w-auto" ref={filterDropdownRef}>
+                  <button
+                    onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+                    className="flex items-center gap-2 px-4 py-2.5 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 transition-colors w-full lg:w-auto"
+                  >
+                    <Filter className="w-4 h-4 text-gray-600" />
+                    <span className="text-sm font-medium text-gray-700">{t('filters')}</span>
+                    <ChevronDown className={`w-4 h-4 text-gray-600 transition-transform ${showFilterDropdown ? 'rotate-180' : ''}`} />
+                  </button>
 
-                {showFilterDropdown && (
-                  <div className="absolute right-0 lg:right-0 mt-2 w-[50vw] min-w-[400px] max-w-[600px] bg-white border border-gray-200 rounded-lg shadow-xl z-50 overflow-visible">
-                    <div className="p-6 pb-4 border-b border-gray-200">
-                      <h3 className="text-lg font-semibold text-gray-900">{t('filters')}</h3>
-                      <p className="text-xs text-gray-500 mt-1">{t('filter_description') || 'Məhsulları filtrləyin'}</p>
-                    </div>
-                    <div className="p-6 pt-5 space-y-5 max-h-[70vh] overflow-y-auto">
-                      {/* Date Range Filter */}
-                      {showDateFilter && (
-                        <div className="w-full">
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            {t('date_range')}
-                          </label>
-                          <div className="grid grid-cols-2 gap-3">
-                            <input
-                              type="date"
-                              value={dateRange.start}
-                              onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-                              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm transition-colors"
-                            />
-                            <input
-                              type="date"
-                              value={dateRange.end}
-                              onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-                              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm transition-colors"
-                            />
+                  {showFilterDropdown && (
+                    <div className="absolute right-0 lg:right-0 mt-2 w-[50vw] min-w-[400px] max-w-[600px] bg-white border border-gray-200 rounded-lg shadow-xl z-50 overflow-visible">
+                      <div className="p-6 pb-4 border-b border-gray-200">
+                        <h3 className="text-lg font-semibold text-gray-900">{t('filters')}</h3>
+                        <p className="text-xs text-gray-500 mt-1">{t('filter_description') || 'Məhsulları filtrləyin'}</p>
+                      </div>
+                      <div className="p-6 pt-5 space-y-5 max-h-[70vh] overflow-y-auto">
+                        {/* Date Range Filter */}
+                        {showDateFilter && (
+                          <div className="w-full">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              {t('date_range')}
+                            </label>
+                            <div className="grid grid-cols-2 gap-3">
+                              <input
+                                type="date"
+                                value={dateRange.start}
+                                onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm transition-colors"
+                              />
+                              <input
+                                type="date"
+                                value={dateRange.end}
+                                onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm transition-colors"
+                              />
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
 
-                      {/* Column Filters */}
-                      <div className="grid grid-cols-2 gap-4">
-                        {Object.entries(filterOptions).map(([key, options]) => {
-                          // Get label translation
-                          const getLabel = (filterKey) => {
-                            const labels = {
-                              categoryName: tProduct('category') || t('category') || 'Kateqoriya',
-                              stockStatus: tProduct('stock_status') || 'Stok Statusu',
-                              isActive: tProduct('status') || t('status') || 'Status',
-                              isOfficial: tProduct('official_status') || 'Rəsmi Status',
-                              minPurchasePrice: tProduct('min_purchase_price') || 'Min Alış Qiyməti',
-                              maxPurchasePrice: tProduct('max_purchase_price') || 'Max Alış Qiyməti',
-                              minSalePrice: tProduct('min_sale_price') || 'Min Satış Qiyməti',
-                              maxSalePrice: tProduct('max_sale_price') || 'Max Satış Qiyməti'
-                            };
-                            return labels[filterKey] || filterKey.charAt(0).toUpperCase() + filterKey.slice(1);
-                          };
-
-                          // Handle number input for price range filters
-                          if (options === 'number') {
-                            const handleNumberChange = (e) => {
-                              const value = e.target.value;
-                              
-                              // Boş ola bilər
-                              if (value === '' || value === null || value === undefined) {
-                                setTempFilters({ ...tempFilters, [key]: undefined });
-                                return;
-                              }
-                              
-                              // Yalnız rəqəm və onluq nöqtə yazıla bilər
-                              const isValidNumber = /^\d*\.?\d*$/.test(value);
-                              if (!isValidNumber) {
-                                return; // Yalnız rəqəm və onluq nöqtə yazıla bilər
-                              }
-                              
-                              setTempFilters({ ...tempFilters, [key]: value || undefined });
+                        {/* Column Filters */}
+                        <div className="grid grid-cols-2 gap-4">
+                          {Object.entries(filterOptions).map(([key, options]) => {
+                            const getLabel = (filterKey) => {
+                              const labels = {
+                                categoryName: tProduct('category') || t('category') || 'Kateqoriya',
+                                subCategoryName: tProduct('subcategory') || 'Alt Kateqoriya',
+                                stockStatus: tProduct('stock_status') || 'Stok Statusu',
+                                isActive: tProduct('status') || t('status') || 'Status',
+                                isOfficial: tProduct('official_status') || 'Rəsmi Status',
+                                minPurchasePrice: tProduct('min_purchase_price') || 'Min Alış Qiyməti',
+                                maxPurchasePrice: tProduct('max_purchase_price') || 'Max Alış Qiyməti',
+                                minSalePrice: tProduct('min_sale_price') || 'Min Satış Qiyməti',
+                                maxSalePrice: tProduct('max_sale_price') || 'Max Satış Qiyməti'
+                              };
+                              return labels[filterKey] || filterKey.charAt(0).toUpperCase() + filterKey.slice(1);
                             };
 
-                            return (
-                              <div key={key} className="space-y-1">
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                  {getLabel(key)}
-                                </label>
-                                <input
-                                  type="text"
-                                  inputMode="decimal"
-                                  value={tempFilters[key] || ''}
-                                  onChange={handleNumberChange}
-                                  placeholder={getLabel(key)}
-                                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                                />
-                              </div>
-                            );
-                          }
+                            // Handle number input for price range filters
+                            if (options === 'number') {
+                              const handleNumberChange = (e) => {
+                                const value = e.target.value;
 
-                          // Skip empty filter options
-                          if (!options || options.length === 0) {
-                            return null;
-                          }
+                                // Boş ola bilər
+                                if (value === '' || value === null || value === undefined) {
+                                  setTempFilters({ ...tempFilters, [key]: undefined });
+                                  return;
+                                }
 
-                          // Check if options is an array of objects (for SearchDropdown) or strings (for select)
-                          const isObjectArray = options.length > 0 && typeof options[0] === 'object' && options[0] !== null;
+                                // Yalnız rəqəm və onluq nöqtə yazıla bilər
+                                const isValidNumber = /^\d*\.?\d*$/.test(value);
+                                if (!isValidNumber) {
+                                  return; // Yalnız rəqəm və onluq nöqtə yazıla bilər
+                                }
 
-                          return (
-                            <div key={key} className="space-y-1">
-                              {isObjectArray && key === 'categoryName' ? (
-                                // Use SearchDropdown for categoryName
-                                <SearchDropdown
-                                  label={getLabel(key)}
-                                  options={options}
-                                  value={tempFilters[key] || ''}
-                                  onChange={(value) => {
-                                    setTempFilters({ ...tempFilters, [key]: value });
-                                  }}
-                                  placeholder={t('all') || 'Hamısı'}
-                                  searchFields={['name']}
-                                  className="w-full"
-                                />
-                              ) : (
-                                // Use select for other filters
-                                <>
+                                setTempFilters({ ...tempFilters, [key]: value || undefined });
+                              };
+
+                              return (
+                                <div key={key} className="space-y-1">
                                   <label className="block text-sm font-medium text-gray-700 mb-2">
                                     {getLabel(key)}
                                   </label>
-                                  <select
+                                  <input
+                                    type="text"
+                                    inputMode="decimal"
                                     value={tempFilters[key] || ''}
-                                    onChange={(e) => {
-                                      setTempFilters({ ...tempFilters, [key]: e.target.value });
-                                    }}
-                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-sm text-gray-900 transition-colors appearance-none cursor-pointer"
-                                    style={{
-                                      minHeight: '42px',
-                                      backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
-                                      backgroundPosition: 'right 0.5rem center',
-                                      backgroundRepeat: 'no-repeat',
-                                      backgroundSize: '1.5em 1.5em',
-                                      paddingRight: '2.5rem'
-                                    }}
-                                  >
-                                    <option value="" className="text-gray-500">{t('all') || 'Hamısı'}</option>
-                                    {options.map((option, index) => {
-                                      const optionValue = isObjectArray ? (option.id || option.value || option.name) : option;
-                                      const optionLabel = isObjectArray ? (option.name || option.label || optionValue) : option;
-                                      return (
-                                        <option
-                                          key={`${optionValue}-${index}`}
-                                          value={optionValue}
-                                          className="text-gray-900 py-1"
-                                        >
-                                          {optionLabel}
-                                        </option>
-                                      );
-                                    })}
-                                  </select>
-                                </>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
+                                    onChange={handleNumberChange}
+                                    placeholder={getLabel(key)}
+                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                  />
+                                </div>
+                              );
+                            }
 
-                      <div className="flex gap-3 pt-5 border-t border-gray-200">
-                        <button
-                          onClick={() => {
-                            setTempFilters({});
-                            setFilters({});
-                            if (onFilterChange) {
-                              onFilterChange({});
+                            // Skip empty filter options
+                            if (!options || options.length === 0) {
+                              return null;
                             }
-                            if (onClearFilters) {
-                              onClearFilters();
-                            }
-                          }}
-                          className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-                        >
-                          {t('clear_all')}
-                        </button>
-                        <button
-                          onClick={() => {
-                            setFilters(tempFilters);
-                            if (onFilterChange) {
-                              onFilterChange(tempFilters);
-                            }
-                            setShowFilterDropdown(false);
-                          }}
-                          className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors shadow-sm"
-                        >
-                          {t('apply')}
-                        </button>
+
+                            // Check if options is an array of objects (for SearchDropdown) or strings (for select)
+                            const isObjectArray = options.length > 0 && typeof options[0] === 'object' && options[0] !== null;
+
+                            return (
+                              <div key={key} className="space-y-1">
+                                {isObjectArray && (key === 'categoryName' || key === 'subCategoryName') ? (
+                                  // Use SearchDropdown for categoryName and subCategoryName
+                                  <SearchDropdown
+                                    label={getLabel(key)}
+                                    options={options}
+                                    value={tempFilters[key] || ''}
+                                    onChange={(value) => {
+                                      const newTempFilters = { ...tempFilters, [key]: value };
+                                      if (key === 'categoryName') {
+                                        newTempFilters.subCategoryName = '';
+                                      }
+                                      setTempFilters(newTempFilters);
+                                      if (onTempFilterChange) {
+                                        onTempFilterChange(newTempFilters);
+                                      }
+                                    }}
+                                    placeholder={t('all') || 'Hamısı'}
+                                    searchFields={['name']}
+                                    className="w-full"
+                                  />
+                                ) : (
+                                  // Use select for other filters
+                                  <>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                      {getLabel(key)}
+                                    </label>
+                                    <select
+                                      value={tempFilters[key] || ''}
+                                      onChange={(e) => {
+                                        const newTempFilters = { ...tempFilters, [key]: e.target.value };
+                                        setTempFilters(newTempFilters);
+                                        if (onTempFilterChange) {
+                                          onTempFilterChange(newTempFilters);
+                                        }
+                                      }}
+                                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-sm text-gray-900 transition-colors appearance-none cursor-pointer"
+                                      style={{
+                                        minHeight: '42px',
+                                        backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                                        backgroundPosition: 'right 0.5rem center',
+                                        backgroundRepeat: 'no-repeat',
+                                        backgroundSize: '1.5em 1.5em',
+                                        paddingRight: '2.5rem'
+                                      }}
+                                    >
+                                      <option value="" className="text-gray-500">{t('all') || 'Hamısı'}</option>
+                                      {options.map((option, index) => {
+                                        const optionValue = isObjectArray ? (option.id || option.value || option.name) : option;
+                                        const optionLabel = isObjectArray ? (option.name || option.label || optionValue) : option;
+                                        return (
+                                          <option
+                                            key={`${optionValue}-${index}`}
+                                            value={optionValue}
+                                            className="text-gray-900 py-1"
+                                          >
+                                            {optionLabel}
+                                          </option>
+                                        );
+                                      })}
+                                    </select>
+                                  </>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <div className="flex gap-3 pt-5 border-t border-gray-200">
+                          <button
+                            onClick={() => {
+                              setTempFilters({});
+                              setFilters({});
+                              if (onFilterChange) {
+                                onFilterChange({});
+                              }
+                              if (onClearFilters) {
+                                onClearFilters();
+                              }
+                            }}
+                            className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                          >
+                            {t('clear_all')}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setFilters(tempFilters);
+                              if (onFilterChange) {
+                                onFilterChange(tempFilters);
+                              }
+                              setShowFilterDropdown(false);
+                            }}
+                            className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors shadow-sm"
+                          >
+                            {t('apply')}
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
-              </div>
-            )}
+                  )}
+                </div>
+              )}
 
-            {/* Results Count - Right aligned */}
-            {pagination && pagination.total > 0 && (
-              <div className="text-sm text-gray-600 ml-auto">
-                <span className="font-semibold text-gray-900">{pagination.total}</span> nəticə
-              </div>
-            )}
-          </div>
+              {/* Results Count - Right aligned */}
+              {pagination && pagination.total > 0 && (
+                <div className="text-sm text-gray-600 ml-auto">
+                  <span className="font-semibold text-gray-900">{pagination.total}</span> nəticə
+                </div>
+              )}
+            </div>
           )}
         </div>
 
@@ -1012,121 +1027,123 @@ export default function TableTamplate({
       </div>
 
       {/* Pagination */}
-      {totalPages > 0 && (
-        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-700">{t('show')}</span>
-              <select
-                value={effectiveLimit}
-                onChange={(e) => {
-                  if (serverSidePagination && onLimitChange) {
-                    onLimitChange(Number(e.target.value));
-                  } else {
-                    setItemsPerPage(Number(e.target.value));
-                  }
-                }}
-                className="px-2 py-1 border border-gray-300 rounded-md text-sm"
-              >
-                <option value={5}>5</option>
-                <option value={10}>10</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-              </select>
-              <span className="text-sm text-gray-700">
-                {((effectivePage - 1) * effectiveLimit + 1)}-{Math.min(effectivePage * effectiveLimit, effectiveTotal)} / {effectiveTotal}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  if (serverSidePagination && onPageChange) {
-                    onPageChange(effectivePage - 1);
-                  } else {
-                    setCurrentPage(prev => Math.max(prev - 1, 1));
-                  }
-                }}
-                disabled={effectivePage === 1 || (serverSidePagination && pagination && !pagination.hasPrevPage)}
-                className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-              >
-                {t('previous')}
-              </button>
-
-              <div className="flex items-center gap-1">
-                {/* Page number input */}
-                <span className="text-sm text-gray-700">Səhifə:</span>
-                <input
-                  type="number"
-                  min="1"
-                  max={totalPages}
-                  value={effectivePage}
+      {
+        totalPages > 0 && (
+          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-700">{t('show')}</span>
+                <select
+                  value={effectiveLimit}
                   onChange={(e) => {
-                    const pageNum = parseInt(e.target.value);
-                    if (pageNum >= 1 && pageNum <= totalPages) {
-                      if (serverSidePagination && onPageChange) {
-                        onPageChange(pageNum);
-                      } else {
-                        setCurrentPage(pageNum);
-                      }
+                    if (serverSidePagination && onLimitChange) {
+                      onLimitChange(Number(e.target.value));
+                    } else {
+                      setItemsPerPage(Number(e.target.value));
                     }
                   }}
-                  className="w-16 px-2 py-1 border border-gray-300 rounded-md text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700">/ {totalPages}</span>
+                  className="px-2 py-1 border border-gray-300 rounded-md text-sm"
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+                <span className="text-sm text-gray-700">
+                  {((effectivePage - 1) * effectiveLimit + 1)}-{Math.min(effectivePage * effectiveLimit, effectiveTotal)} / {effectiveTotal}
+                </span>
               </div>
 
-              <div className="flex items-center gap-1">
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  let pageNum;
-                  if (totalPages <= 5) {
-                    pageNum = i + 1;
-                  } else if (effectivePage <= 3) {
-                    pageNum = i + 1;
-                  } else if (effectivePage >= totalPages - 2) {
-                    pageNum = totalPages - 4 + i;
-                  } else {
-                    pageNum = effectivePage - 2 + i;
-                  }
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() => {
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    if (serverSidePagination && onPageChange) {
+                      onPageChange(effectivePage - 1);
+                    } else {
+                      setCurrentPage(prev => Math.max(prev - 1, 1));
+                    }
+                  }}
+                  disabled={effectivePage === 1 || (serverSidePagination && pagination && !pagination.hasPrevPage)}
+                  className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  {t('previous')}
+                </button>
+
+                <div className="flex items-center gap-1">
+                  {/* Page number input */}
+                  <span className="text-sm text-gray-700">Səhifə:</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max={totalPages}
+                    value={effectivePage}
+                    onChange={(e) => {
+                      const pageNum = parseInt(e.target.value);
+                      if (pageNum >= 1 && pageNum <= totalPages) {
                         if (serverSidePagination && onPageChange) {
                           onPageChange(pageNum);
                         } else {
                           setCurrentPage(pageNum);
                         }
-                      }}
-                      className={`px-3 py-1 border rounded-md text-sm ${effectivePage === pageNum
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'border-gray-300 hover:bg-gray-50'
-                        }`}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                })}
-              </div>
+                      }
+                    }}
+                    className="w-16 px-2 py-1 border border-gray-300 rounded-md text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-700">/ {totalPages}</span>
+                </div>
 
-              <button
-                onClick={() => {
-                  if (serverSidePagination && onPageChange) {
-                    onPageChange(effectivePage + 1);
-                  } else {
-                    setCurrentPage(prev => Math.min(prev + 1, totalPages));
-                  }
-                }}
-                disabled={effectivePage === totalPages || (serverSidePagination && pagination && !pagination.hasNextPage)}
-                className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-              >
-                {t('next')}
-              </button>
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (effectivePage <= 3) {
+                      pageNum = i + 1;
+                    } else if (effectivePage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = effectivePage - 2 + i;
+                    }
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => {
+                          if (serverSidePagination && onPageChange) {
+                            onPageChange(pageNum);
+                          } else {
+                            setCurrentPage(pageNum);
+                          }
+                        }}
+                        className={`px-3 py-1 border rounded-md text-sm ${effectivePage === pageNum
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'border-gray-300 hover:bg-gray-50'
+                          }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <button
+                  onClick={() => {
+                    if (serverSidePagination && onPageChange) {
+                      onPageChange(effectivePage + 1);
+                    } else {
+                      setCurrentPage(prev => Math.min(prev + 1, totalPages));
+                    }
+                  }}
+                  disabled={effectivePage === totalPages || (serverSidePagination && pagination && !pagination.hasNextPage)}
+                  className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  {t('next')}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 }

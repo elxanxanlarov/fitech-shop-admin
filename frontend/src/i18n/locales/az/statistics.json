@@ -67,6 +67,7 @@
   "totals": "Cəmi",
   "view_detail": "Detallı bax",
   "print_summary": "Yalnız ümumi məlumatı çap et",
-  "print_full": "Ümumi məlumat + məhsullar siyahısını çap et"
+  "print_full": "Ümumi məlumat + məhsullar siyahısını çap et",
+  "revenue_calculation": "Gəlir Hesablaması",
+  "net_revenue": "Xalis Gəlir"
 }
-

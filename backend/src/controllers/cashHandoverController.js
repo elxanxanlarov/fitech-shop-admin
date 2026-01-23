@@ -175,6 +175,65 @@ export const createCashHandover = async (req, res) => {
         let handoverDate = date ? new Date(date) : new Date();
         handoverDate.setHours(0, 0, 0, 0);
 
+        // Mövcud gəliri yoxla
+        const nextDate = new Date(handoverDate);
+        nextDate.setDate(nextDate.getDate() + 1);
+
+        const salesAggregation = await prisma.sale.aggregate({
+            where: {
+                deleteType: 'NONE',
+                isRefunded: false,
+                createdAt: {
+                    gte: handoverDate,
+                    lt: nextDate
+                }
+            },
+            _sum: {
+                totalAmount: true
+            }
+        });
+
+        const returnsAggregation = await prisma.saleReturn.aggregate({
+            where: {
+                createdAt: {
+                    gte: handoverDate,
+                    lt: nextDate
+                },
+                sale: {
+                    deleteType: 'NONE'
+                }
+            },
+            _sum: {
+                returnedAmount: true
+            }
+        });
+
+        const existingHandovers = await prisma.cashHandover.aggregate({
+            where: {
+                date: {
+                    gte: handoverDate,
+                    lt: nextDate
+                },
+                deleteType: 'NONE'
+            },
+            _sum: {
+                amount: true
+            }
+        });
+
+        const totalRevenue = parseFloat(salesAggregation._sum.totalAmount || 0);
+        const totalReturns = parseFloat(returnsAggregation._sum.returnedAmount || 0);
+        const totalHandedOver = parseFloat(existingHandovers._sum.amount || 0);
+        const availableRevenue = totalRevenue - totalReturns - totalHandedOver;
+
+        if (parseFloat(amount) > availableRevenue) {
+            return res.status(400).json({
+                success: false,
+                message: `Seçilən tarixdə maksimum ${availableRevenue.toFixed(2)} AZN təslim edə bilərsiniz`,
+                availableRevenue: availableRevenue
+            });
+        }
+
         const cashHandover = await prisma.cashHandover.create({
             data: {
                 date: handoverDate,
@@ -285,6 +344,73 @@ export const updateCashHandover = async (req, res) => {
         let handoverDate = date ? new Date(date) : existingCashHandover.date;
         if (date) {
             handoverDate.setHours(0, 0, 0, 0);
+        }
+
+        // Əgər məbləğ və ya tarix dəyişirsə, mövcud gəliri yoxla
+        if (amount !== undefined || date !== undefined) {
+            const checkDate = new Date(handoverDate);
+            checkDate.setHours(0, 0, 0, 0);
+            const nextDate = new Date(checkDate);
+            nextDate.setDate(nextDate.getDate() + 1);
+
+            const salesAggregation = await prisma.sale.aggregate({
+                where: {
+                    deleteType: 'NONE',
+                    isRefunded: false,
+                    createdAt: {
+                        gte: checkDate,
+                        lt: nextDate
+                    }
+                },
+                _sum: {
+                    totalAmount: true
+                }
+            });
+
+            const returnsAggregation = await prisma.saleReturn.aggregate({
+                where: {
+                    createdAt: {
+                        gte: checkDate,
+                        lt: nextDate
+                    },
+                    sale: {
+                        deleteType: 'NONE'
+                    }
+                },
+                _sum: {
+                    returnedAmount: true
+                }
+            });
+
+            const existingHandovers = await prisma.cashHandover.aggregate({
+                where: {
+                    date: {
+                        gte: checkDate,
+                        lt: nextDate
+                    },
+                    deleteType: 'NONE',
+                    id: {
+                        not: id // Cari cash handover-i çıxar
+                    }
+                },
+                _sum: {
+                    amount: true
+                }
+            });
+
+            const totalRevenue = parseFloat(salesAggregation._sum.totalAmount || 0);
+            const totalReturns = parseFloat(returnsAggregation._sum.returnedAmount || 0);
+            const totalHandedOver = parseFloat(existingHandovers._sum.amount || 0);
+            const availableRevenue = totalRevenue - totalReturns - totalHandedOver;
+            const newAmount = amount !== undefined ? parseFloat(amount) : parseFloat(existingCashHandover.amount);
+
+            if (newAmount > availableRevenue) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Seçilən tarixdə maksimum ${availableRevenue.toFixed(2)} AZN təslim edə bilərsiniz`,
+                    availableRevenue: availableRevenue
+                });
+            }
         }
 
         const updateData = {};
@@ -439,6 +565,112 @@ export const deleteCashHandover = async (req, res) => {
         return res.status(500).json({
             success: false,
             message: "Məbləğ təslimi silinərkən xəta baş verdi",
+            error: error.message
+        });
+    }
+};
+
+// Seçilən tarixə görə mövcud gəliri əldə et (təslim üçün)
+export const getAvailableRevenueByDate = async (req, res) => {
+    try {
+        const { date, excludeId } = req.query;
+        
+        if (!date) {
+            return res.status(400).json({
+                success: false,
+                message: "Tarix tələb olunur"
+            });
+        }
+
+        // Tarixi təyin et
+        const selectedDate = new Date(date);
+        selectedDate.setHours(0, 0, 0, 0);
+        const nextDate = new Date(selectedDate);
+        nextDate.setDate(nextDate.getDate() + 1);
+
+        // Həmin günün satışlarını hesabla (yalnız silinməyən satışlar)
+        const salesAggregation = await prisma.sale.aggregate({
+            where: {
+                deleteType: 'NONE',
+                isRefunded: false,
+                createdAt: {
+                    gte: selectedDate,
+                    lt: nextDate
+                }
+            },
+            _sum: {
+                totalAmount: true,
+                profitAmount: true
+            }
+        });
+
+        // Həmin günün qaytarmalarını hesabla (yalnız silinməmiş satışlara aid)
+        const returnsAggregation = await prisma.saleReturn.aggregate({
+            where: {
+                createdAt: {
+                    gte: selectedDate,
+                    lt: nextDate
+                },
+                sale: {
+                    deleteType: 'NONE'
+                }
+            },
+            _sum: {
+                returnedAmount: true
+            }
+        });
+
+        // Həmin günün artıq təslim edilmiş məbləğlərini hesabla
+        const cashHandoverWhere = {
+            date: {
+                gte: selectedDate,
+                lt: nextDate
+            },
+            deleteType: 'NONE'
+        };
+
+        // Əgər edit modundadırsa, cari cash handover-i çıxar
+        if (excludeId) {
+            cashHandoverWhere.id = {
+                not: excludeId
+            };
+        }
+
+        const cashHandoverAggregation = await prisma.cashHandover.aggregate({
+            where: cashHandoverWhere,
+            _sum: {
+                amount: true
+            }
+        });
+
+        // Hesablamalar
+        const totalRevenue = salesAggregation._sum.totalAmount || 0;
+        const totalReturns = returnsAggregation._sum.returnedAmount || 0;
+        const totalHandedOver = cashHandoverAggregation._sum.amount || 0;
+        
+        // Xalis gəlir (qaytarmalar çıxıldıqdan sonra)
+        const netRevenue = parseFloat(totalRevenue) - parseFloat(totalReturns);
+        
+        // Mövcud gəlir (artıq təslim edilənlər çıxıldıqdan sonra)
+        const availableRevenue = netRevenue - parseFloat(totalHandedOver);
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                date: selectedDate,
+                totalRevenue: parseFloat(totalRevenue),
+                totalReturns: parseFloat(totalReturns),
+                netRevenue: netRevenue,
+                totalHandedOver: parseFloat(totalHandedOver),
+                availableRevenue: Math.max(0, availableRevenue), // Mənfi ola bilməz
+                profit: parseFloat(salesAggregation._sum.profitAmount || 0)
+            }
+        });
+    } catch (error) {
+        console.error("getAvailableRevenueByDate error", error);
+        return res.status(500).json({
+            success: false,
+            message: "Gəlir məlumatları alınarkən xəta baş verdi",
             error: error.message
         });
     }

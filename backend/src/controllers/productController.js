@@ -25,7 +25,9 @@ export const getAllProducts = async (req, res) => {
             minPurchasePrice,
             maxPurchasePrice,
             minSalePrice,
-            maxSalePrice
+            maxSalePrice,
+            subCategoryId,
+            subCategoryName
         } = req.query;
 
         const where = {};
@@ -59,6 +61,25 @@ export const getAllProducts = async (req, res) => {
             } else {
                 // If category not found, return empty result
                 where.categoryId = 'non-existent-id';
+            }
+        }
+
+        // Subcategory filter by ID (takes precedence over subCategoryName)
+        if (subCategoryId) {
+            where.subCategoryId = subCategoryId;
+        } else if (subCategoryName) {
+            // Subcategory filter by name
+            const subCategory = await prisma.subCategory.findFirst({
+                where: {
+                    name: subCategoryName
+                },
+                select: { id: true }
+            });
+
+            if (subCategory) {
+                where.subCategoryId = subCategory.id;
+            } else {
+                where.subCategoryId = 'non-existent-id';
             }
         }
 
@@ -304,14 +325,29 @@ export const createProduct = async (req, res) => {
         let calculatedFullBoxes = finalFullBoxes;
         let calculatedOpenedBoxQuantity = finalOpenedBoxQuantity;
 
+        console.log('=== CREATE PRODUCT STOCK DEBUG ===');
+        console.log('Input stock:', stock);
+        console.log('Input fullBoxes:', fullBoxes);
+        console.log('Input openedBoxQuantity:', openedBoxQuantity);
+        console.log('piecesPerBox:', finalPiecesPerBox);
+        console.log('calculatedStock (initial):', calculatedStock);
+
         // Əgər qutu tipindədirsə və tam stok verilibsə, fullBoxes və openedBoxQuantity-ni hesabla
         if (finalPiecesPerBox && finalPiecesPerBox > 0 && stock !== undefined) {
             calculatedFullBoxes = Math.floor(calculatedStock / finalPiecesPerBox);
             calculatedOpenedBoxQuantity = calculatedStock % finalPiecesPerBox;
+            console.log('Calculated from stock - fullBoxes:', calculatedFullBoxes, 'openedBoxQuantity:', calculatedOpenedBoxQuantity);
         } else if (finalPiecesPerBox && finalPiecesPerBox > 0 && fullBoxes !== undefined) {
             // Əgər fullBoxes verilibsə, stock hesabla
             calculatedStock = (calculatedFullBoxes * finalPiecesPerBox) + calculatedOpenedBoxQuantity;
+            console.log('Calculated from boxes - stock:', calculatedStock);
         }
+
+        console.log('Final calculatedStock:', calculatedStock);
+        console.log('Final calculatedFullBoxes:', calculatedFullBoxes);
+        console.log('Final calculatedOpenedBoxQuantity:', calculatedOpenedBoxQuantity);
+        console.log('=== END DEBUG ===');
+
 
         const newProduct = await prisma.product.create({
             data: {

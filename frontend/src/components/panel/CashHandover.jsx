@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useLocation } from 'react-router-dom';
 import TableTemplate from '../ui/TableTamplate';
@@ -13,6 +13,8 @@ export default function CashHandover() {
     const location = useLocation();
     const [cashHandoverData, setCashHandoverData] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [dateRange, setDateRange] = useState({ start: '', end: '' });
+    const isAdmin = useMemo(() => location.pathname.includes('/admin'), [location.pathname]);
 
     const columns = useMemo(() => [
         {
@@ -70,31 +72,35 @@ export default function CashHandover() {
         },
     ], [t]);
 
-    useEffect(() => {
-        const fetchCashHandovers = async () => {
-            setLoading(true);
-            try {
-                const response = await cashHandoverApi.getAll();
-                if (response.success && response.date) {
-                    setCashHandoverData(response.date);
-                } else {
-                    setCashHandoverData([]);
-                }
-            } catch (error) {
-                console.error('Error fetching cash handovers:', error);
-                Alert.error(t('error_fetching') || 'Xəta!', t('error_fetching_text') || 'Məbləğ təslimləri siyahısı alınarkən xəta baş verdi');
+    const fetchCashHandovers = useCallback(async () => {
+        setLoading(true);
+        try {
+            const params = {};
+            if (dateRange.start) params.startDate = dateRange.start;
+            if (dateRange.end) params.endDate = dateRange.end;
+
+            const response = await cashHandoverApi.getAll(params);
+            if (response.success && response.date) {
+                setCashHandoverData(response.date);
+            } else {
                 setCashHandoverData([]);
-            } finally {
-                setLoading(false);
             }
-        };
+        } catch (error) {
+            console.error('Error fetching cash handovers:', error);
+            Alert.error(t('error_fetching') || 'Xəta!', t('error_fetching_text') || 'Məbləğ təslimləri siyahısı alınarkən xəta baş verdi');
+            setCashHandoverData([]);
+        } finally {
+            setLoading(false);
+        }
+    }, [dateRange, t]);
+
+    useEffect(() => {
         fetchCashHandovers();
-    }, [t]);
+    }, [fetchCashHandovers]);
 
     const handleEdit = async (cashHandover) => {
-        const isAdmin = location.pathname.includes('/admin');
         if (!isAdmin) return;
-        const editPath = `/${isAdmin ? 'admin' : 'reception'}/cash-handover-form?id=${cashHandover.id.toString()}`;
+        const editPath = `/admin/cash-handover-form?id=${cashHandover.id.toString()}`;
         navigate(editPath);
     };
 
@@ -113,11 +119,11 @@ export default function CashHandover() {
         if (result.isConfirmed) {
             try {
                 Alert.loading(t('loading') || 'Yüklənir...');
-                
+
                 await cashHandoverApi.delete(cashHandover.id);
-                
+
                 setCashHandoverData(prev => prev.filter(item => item.id !== cashHandover.id));
-                
+
                 Alert.close();
                 setTimeout(() => {
                     Alert.success(tAlert('delete_success') || 'Uğurlu', tAlert('delete_success_text') || 'Məbləğ təslimi uğurla silindi');
@@ -132,13 +138,13 @@ export default function CashHandover() {
     };
 
     const handleView = (cashHandover) => {
-        const handedOverToInfo = cashHandover.handedOverTo 
+        const handedOverToInfo = cashHandover.handedOverTo
             ? `\n${t('handed_over_to') || 'Kimə təslim edildi'}: ${cashHandover.handedOverTo.name} ${cashHandover.handedOverTo.surName || ''}`.trim()
             : '';
-        const handedOverByInfo = cashHandover.handedOverBy 
+        const handedOverByInfo = cashHandover.handedOverBy
             ? `\n${t('handed_over_by') || 'Kim təslim etdi'}: ${cashHandover.handedOverBy.name} ${cashHandover.handedOverBy.surName || ''}`.trim()
             : '';
-        
+
         Alert.info(
             `${t('cash_handover')}: ${parseFloat(cashHandover.amount || 0).toFixed(2)} AZN`,
             `${t('date')}: ${cashHandover.date ? new Date(cashHandover.date).toLocaleDateString('az-AZ') : '-'}${handedOverToInfo}${handedOverByInfo}${cashHandover.note ? `\n${t('note')}: ${cashHandover.note}` : ''}`
@@ -160,11 +166,11 @@ export default function CashHandover() {
         if (result.isConfirmed) {
             try {
                 Alert.loading(t('loading') || 'Yüklənir...');
-                
+
                 await Promise.all(selectedIds.map(id => cashHandoverApi.delete(id)));
-                
+
                 setCashHandoverData(prev => prev.filter(item => !selectedIds.includes(item.id)));
-                
+
                 Alert.close();
                 setTimeout(() => {
                     Alert.success(tAlert('bulk_delete_success') || 'Uğurlu', tAlert('bulk_delete_success_text') || 'Məbləğ təslimləri uğurla silindi');
@@ -205,14 +211,17 @@ export default function CashHandover() {
                 columns={columns}
                 title={t('cash_handovers') || 'Məbləğ Təslimləri'}
                 searchFields={['note']}
-                onEdit={handleEdit}
-                onDelete={undefined}
+                onEdit={isAdmin ? handleEdit : undefined}
+                onDelete={isAdmin ? handleDelete : undefined}
                 onView={handleView}
-                onBulkDelete={undefined}
-                showBulkActions={false}
+                onBulkDelete={isAdmin ? handleBulkDelete : undefined}
+                showBulkActions={isAdmin}
                 showFilters={false}
                 showSearch={true}
                 showDateFilter={true}
+                serverSidePagination={true} // To enable date filter in main bar
+                dateRangeValue={dateRange}
+                onDateRangeChange={(start, end) => setDateRange({ start, end })}
                 loading={loading}
                 emptyState={{
                     icon: 'dollar-sign',

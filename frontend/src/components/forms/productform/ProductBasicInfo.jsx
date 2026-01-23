@@ -13,9 +13,12 @@ export default function ProductBasicInfo({
     subCategories,
     imagePreview,
     isEditMode,
+    existingProducts = [],
+    loadingProducts = false,
     onInputChange,
     onCategoryChange,
-    onImageSelect
+    onImageSelect,
+    onProductSelect
 }) {
     const { t } = useTranslation('product');
 
@@ -39,16 +42,76 @@ export default function ProductBasicInfo({
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Input
-                    label={t('name')}
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) => onInputChange('name', e.target.value)}
-                    error={errors.name}
-                    placeholder={t('name_placeholder') || 'Məhsul adını daxil edin'}
-                    icon={<MdInventory />}
-                    required
-                />
+                {isEditMode ? (
+                    <Input
+                        label={t('name')}
+                        type="text"
+                        value={formData.name}
+                        onChange={(e) => onInputChange('name', e.target.value)}
+                        error={errors.name}
+                        placeholder={t('name_placeholder') || 'Məhsul adını daxil edin'}
+                        icon={<MdInventory />}
+                        required
+                    />
+                ) : (
+                    <div>
+                        <SearchDropdown
+                            label={t('name')}
+                            options={existingProducts}
+                            value={formData.name}
+                            onChange={(value) => {
+                                // Əgər productId seçilibsə (mövcud məhsul), edit səhifəsinə yönləndir
+                                if (value && typeof value === 'string' && value.startsWith('PRODUCT_ID:')) {
+                                    const productId = value.replace('PRODUCT_ID:', '');
+                                    if (onProductSelect) {
+                                        onProductSelect(productId);
+                                    }
+                                } else if (value && typeof value === 'string') {
+                                    // Əgər sadə textdirsə (yeni ad), formData-ya yaz
+                                    onInputChange('name', value);
+                                }
+                            }}
+                            placeholder={t('name_placeholder') || 'Məhsul adını daxil edin və ya mövcud məhsul seçin'}
+                            disabled={isLoading || loadingProducts}
+                            error={!!errors.name}
+                            searchFields={['name', 'barcode', 'description']}
+                            getOptionLabel={(option) => {
+                                return `${option.name || ''}${option.barcode ? ` (${option.barcode})` : ''}`;
+                            }}
+                            getOptionValue={(option) => {
+                                return `PRODUCT_ID:${option.id}`;
+                            }}
+                            renderOption={(option) => {
+                                return (
+                                    <div>
+                                        <div className="text-sm font-medium text-gray-900">{option.name}</div>
+                                        {option.barcode && (
+                                            <div className="text-xs text-gray-500">Barcode: {option.barcode}</div>
+                                        )}
+                                    </div>
+                                );
+                            }}
+                            onSearchChange={(searchTerm) => {
+                                // Axtarış zamanı formData.name-i yenilə (yeni ad yazmaq üçün)
+                                if (searchTerm) {
+                                    const matchingProduct = existingProducts.find(p => 
+                                        p.name?.toLowerCase() === searchTerm.toLowerCase()
+                                    );
+                                    if (!matchingProduct) {
+                                        onInputChange('name', searchTerm);
+                                    }
+                                } else {
+                                    onInputChange('name', '');
+                                }
+                            }}
+                            allowCustomValue={true}
+                            className="w-full"
+                        />
+                        {errors.name && (
+                            <p className="mt-1 text-sm text-red-600">{errors.name}</p>
+                        )}
+                    </div>
+                )}
 
                 <Input
                     label={t('barcode')}

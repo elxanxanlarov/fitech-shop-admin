@@ -32,5 +32,15 @@ export const cashHandoverApi = {
     });
     return response.data;
   },
+
+  // Get available revenue by date
+  getAvailableRevenueByDate: async (date, excludeId = null) => {
+    const params = { date };
+    if (excludeId) {
+      params.excludeId = excludeId;
+    }
+    const response = await api.get('/cash-handover/available-revenue', { params });
+    return response.data;
+  },
 };
 

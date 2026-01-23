@@ -174,6 +174,14 @@ export const getOverallStatistics = async (req, res) => {
         const todayTotalProfit = new Prisma.Decimal(todaySalesAggregation._sum.profitAmount || 0);
         const todayNetProfit = parseFloat(todayTotalProfit.sub(todayLoss).toString());
 
+        // ================= NET REVENUE (after cash handover) =================
+        const totalCashHandover = cashHandoverAggregation._sum.amount || 0;
+        const todayCashHandover = todayCashHandoverAggregation._sum.amount || 0;
+        
+        // Xalis gəlir (Cash Handover çıxıldıqdan sonra)
+        const netRevenueAfterHandover = netSalesAmount - totalCashHandover;
+        const todayNetRevenueAfterHandover = todayNetAmount - todayCashHandover;
+
         // ================= RESPONSE =================
         res.json({
             success: true,
@@ -182,10 +190,12 @@ export const getOverallStatistics = async (req, res) => {
                     total: totalSales,
                     totalAmount: netSalesAmount,
                     totalProfit: netProfit,
+                    netRevenueAfterHandover: netRevenueAfterHandover, // Təslim edildikdən sonra qalan gəlir
                     today: {
                         count: todaySales,
                         amount: todayNetAmount,
-                        profit: todayNetProfit
+                        profit: todayNetProfit,
+                        netRevenueAfterHandover: todayNetRevenueAfterHandover // Bu günkü təslim edildikdən sonra qalan
                     }
                 },
                 returns: {

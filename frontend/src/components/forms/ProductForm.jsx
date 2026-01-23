@@ -59,6 +59,8 @@ export default function ProductForm() {
     const [subCategories, setSubCategories] = useState([]);
     const [loadingCategories, setLoadingCategories] = useState(false);
     const [showStockHistoryModal, setShowStockHistoryModal] = useState(false);
+    const [existingProducts, setExistingProducts] = useState([]);
+    const [loadingProducts, setLoadingProducts] = useState(false);
 
     // Validation hook
     const { validateForm } = useProductFormValidation(formData, setErrors);
@@ -196,6 +198,27 @@ export default function ProductForm() {
         };
         fetchCategories();
     }, []);
+
+    // Fetch existing products for search (only in create mode)
+    useEffect(() => {
+        if (isEditMode) return; // Edit modunda lazım deyil
+
+        const fetchProducts = async () => {
+            setLoadingProducts(true);
+            try {
+                const response = await productApi.getAll();
+                if (response.success && (response.data || response.date)) {
+                    const list = response.data || response.date;
+                    setExistingProducts(list || []);
+                }
+            } catch (error) {
+                console.error('Error fetching products:', error);
+            } finally {
+                setLoadingProducts(false);
+            }
+        };
+        fetchProducts();
+    }, [isEditMode]);
 
     // Fetch subcategories when category changes
     const fetchSubCategories = async (categoryId) => {
@@ -357,14 +380,26 @@ export default function ProductForm() {
             let calculatedOpenedBoxQuantity = parseInt(formData.openedBoxQuantity) || 0;
             const piecesPerBox = formData.piecesPerBox ? parseInt(formData.piecesPerBox) : null;
 
+            console.log('=== FRONTEND STOCK DEBUG ===');
+            console.log('formData.stock:', formData.stock);
+            console.log('formData.fullBoxes:', formData.fullBoxes);
+            console.log('formData.openedBoxQuantity:', formData.openedBoxQuantity);
+            console.log('formData.piecesPerBox:', formData.piecesPerBox);
+            console.log('calculatedStock (initial):', calculatedStock);
+
             // Əgər qutu tipindədirsə və stok verilibsə, fullBoxes və openedBoxQuantity hesabla
             if (piecesPerBox && piecesPerBox > 0 && formData.stock) {
                 calculatedFullBoxes = Math.floor(calculatedStock / piecesPerBox);
                 calculatedOpenedBoxQuantity = calculatedStock % piecesPerBox;
+                console.log('Calculated from stock - fullBoxes:', calculatedFullBoxes, 'openedBoxQuantity:', calculatedOpenedBoxQuantity);
             } else if (piecesPerBox && piecesPerBox > 0 && (formData.fullBoxes !== undefined || formData.openedBoxQuantity !== undefined)) {
                 // fullBoxes və ya openedBoxQuantity verilibsə, stock hesabla
                 calculatedStock = (calculatedFullBoxes * piecesPerBox) + calculatedOpenedBoxQuantity;
+                console.log('Calculated from boxes - stock:', calculatedStock);
             }
+
+            console.log('Final calculatedStock:', calculatedStock);
+            console.log('=== END FRONTEND DEBUG ===');
 
             // Qutu qiymətini avtomatik hesabla
             let calculatedBoxPrice = null;
@@ -446,9 +481,16 @@ export default function ProductForm() {
                     subCategories={subCategories}
                     imagePreview={imagePreview}
                     isEditMode={isEditMode}
+                    existingProducts={existingProducts}
+                    loadingProducts={loadingProducts}
                     onInputChange={handleInputChange}
                     onCategoryChange={handleCategoryChange}
                     onImageSelect={handleImageSelect}
+                    onProductSelect={(productId) => {
+                        const isAdmin = location.pathname.includes('/admin');
+                        const editPath = isAdmin ? `/admin/product-form?id=${productId}` : `/reception/product-form?id=${productId}`;
+                        navigate(editPath);
+                    }}
                 />
 
                 {/* Price and Discount Information */}

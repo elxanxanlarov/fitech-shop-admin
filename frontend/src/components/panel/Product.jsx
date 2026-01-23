@@ -5,7 +5,7 @@ import TableTemplate from '../ui/TableTamplate';
 import Alert from '../ui/Alert';
 import { Edit, Trash2, Eye, Plus, FileSpreadsheet } from 'lucide-react';
 import { getProductColumns } from '../../data/table-columns/ProductColumns';
-import { productApi, categoryApi } from '../../api';
+import { productApi, categoryApi, subCategoryApi } from '../../api';
 import ExcelImportModal from '../modals/ExcelImportModal';
 
 export default function Product() {
@@ -16,6 +16,7 @@ export default function Product() {
     const [productData, setProductData] = useState([]);
     const [loading, setLoading] = useState(true);
     const [categories, setCategories] = useState([]);
+    const [subCategories, setSubCategories] = useState([]);
     const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
     const [filters, setFilters] = useState({});
     const [searchValue, setSearchValue] = useState(''); // Input value
@@ -38,10 +39,38 @@ export default function Product() {
         fetchCategories();
     }, []);
 
+    const fetchSubCategories = useCallback(async (categoryName) => {
+        if (!categoryName) {
+            setSubCategories([]);
+            return;
+        }
+
+        const selectedCategory = categories.find(cat => cat.name === categoryName);
+        if (!selectedCategory) {
+            setSubCategories([]);
+            return;
+        }
+
+        try {
+            const response = await subCategoryApi.getAll(selectedCategory.id);
+            if (response.success && response.date) {
+                setSubCategories(response.date);
+            }
+        } catch (error) {
+            console.error('Error fetching subcategories:', error);
+            setSubCategories([]);
+        }
+    }, [categories]);
+
+    // Fetch subcategories when applied category filter changes
+    useEffect(() => {
+        fetchSubCategories(filters.categoryName);
+    }, [filters.categoryName, fetchSubCategories]);
+
     // Build query string from filters
     const buildQueryString = useCallback((filters, searchQuery) => {
         const params = new URLSearchParams();
-        
+
         // Ensure searchQuery is a string before calling trim
         if (searchQuery !== null && searchQuery !== undefined) {
             const searchStr = typeof searchQuery === 'string' ? searchQuery : String(searchQuery || '');
@@ -49,15 +78,19 @@ export default function Product() {
                 params.append('search', searchStr.trim());
             }
         }
-        
+
         if (filters.categoryName) {
             params.append('categoryName', filters.categoryName);
         }
-        
+
+        if (filters.subCategoryName) {
+            params.append('subCategoryName', filters.subCategoryName);
+        }
+
         if (filters.stockStatus) {
             params.append('stockStatus', filters.stockStatus);
         }
-        
+
         if (filters.isActive) {
             const isActiveValue = filters.isActive.toLowerCase().trim();
             if (isActiveValue === 'aktiv' || isActiveValue === 'active') {
@@ -66,11 +99,11 @@ export default function Product() {
                 params.append('isActive', 'false');
             }
         }
-        
+
         if (filters.isOfficial) {
             params.append('isOfficial', filters.isOfficial);
         }
-        
+
         // Price range filters
         if (filters.minPurchasePrice) {
             params.append('minPurchasePrice', filters.minPurchasePrice);
@@ -84,7 +117,7 @@ export default function Product() {
         if (filters.maxSalePrice) {
             params.append('maxSalePrice', filters.maxSalePrice);
         }
-        
+
         const queryString = params.toString();
         return queryString ? `?${queryString}` : '';
     }, []);
@@ -95,7 +128,7 @@ export default function Product() {
         try {
             const queryString = buildQueryString(filters, searchQuery);
             const response = await productApi.getAll(queryString);
-            
+
             if (response.success && response.date) {
                 setProductData(response.date);
             } else {
@@ -118,14 +151,14 @@ export default function Product() {
 
     useEffect(() => {
         fetchProducts();
-        
+
         // Custom event dinlə - məhsul bərpa ediləndə yenilə
         const handleProductRestored = () => {
             fetchProducts();
         };
-        
+
         window.addEventListener('productRestored', handleProductRestored);
-        
+
         return () => {
             window.removeEventListener('productRestored', handleProductRestored);
         };
@@ -153,18 +186,18 @@ export default function Product() {
         if (result.isConfirmed) {
             try {
                 Alert.loading(t('loading'));
-                
+
                 // Default olaraq SOFT delete istifadə et
                 await productApi.delete(product.id, 'SOFT');
-                
+
                 // Soft delete zamanı məhsul siyahıdan çıxır (çünki deleteType filter var)
                 setProductData(prev => prev.filter(item => item.id !== product.id));
-                
+
                 // Custom event dispatch et - DeletedProductsBell yenilənsin
-                window.dispatchEvent(new CustomEvent('productSoftDeleted', { 
-                    detail: { productId: product.id } 
+                window.dispatchEvent(new CustomEvent('productSoftDeleted', {
+                    detail: { productId: product.id }
                 }));
-                
+
                 Alert.close();
                 setTimeout(() => {
                     Alert.success(tAlert('delete_success'), tAlert('delete_success_text'));
@@ -179,10 +212,10 @@ export default function Product() {
     };
 
     const handleView = (product) => {
-        const discountInfo = product.hasDiscount 
+        const discountInfo = product.hasDiscount
             ? `\n${t('discount_price')}: ${parseFloat(product.discountPrice || 0).toFixed(2)} ₼\n${t('discount_percent')}: ${product.discountPercent || 0}%`
             : '';
-        
+
         Alert.info(
             `${t('name')}: ${product.name}`,
             `${t('description')}: ${product.description || '-'}\n${t('barcode')}: ${product.barcode || '-'}\n${t('purchase_price')}: ${parseFloat(product.purchasePrice || 0).toFixed(2)} ₼\n${t('sale_price')}: ${parseFloat(product.salePrice || 0).toFixed(2)} ₼${discountInfo}\n${t('stock')}: ${product.stock || 0}\n${t('status')}: ${product.isActive ? t('active') : t('inactive')}`
@@ -204,11 +237,11 @@ export default function Product() {
         if (result.isConfirmed) {
             try {
                 Alert.loading(t('loading'));
-                
+
                 await Promise.all(selectedIds.map(id => productApi.delete(id)));
-                
+
                 setProductData(prev => prev.filter(item => !selectedIds.includes(item.id)));
-                
+
                 Alert.close();
                 setTimeout(() => {
                     Alert.success(tAlert('bulk_delete_success'), tAlert('bulk_delete_success_text'));
@@ -231,7 +264,7 @@ export default function Product() {
     const handleExcelImport = async (file) => {
         try {
             Alert.loading(t('uploading') || 'Yüklənir...');
-            
+
             const result = await productApi.importFromExcel(file);
 
             Alert.close();
@@ -241,10 +274,10 @@ export default function Product() {
                     t('import_success') || 'Uğurlu!',
                     result.message || `${result.data?.imported || 0} ${t('products_imported') || 'məhsul uğurla idxal edildi'}`
                 );
-                
+
                 // Refresh product list with current filters
                 await fetchProducts();
-                
+
                 setIsExcelModalOpen(false);
             } else {
                 Alert.error(
@@ -265,6 +298,15 @@ export default function Product() {
     const handleFilterChange = useCallback((newFilters) => {
         setFilters(newFilters);
     }, []);
+
+    const handleTempFilterChange = useCallback((tempFilters) => {
+        // Fetch subcategories when category is selected in the filter dropdown (before Apply)
+        if (tempFilters.categoryName) {
+            fetchSubCategories(tempFilters.categoryName);
+        } else {
+            setSubCategories([]);
+        }
+    }, [fetchSubCategories]);
 
     const handleSearchChange = useCallback((search) => {
         // Only update input value, don't search yet
@@ -317,10 +359,11 @@ export default function Product() {
                 searchFields={['name', 'barcode', 'description']}
                 searchPlaceholder={t('search_by_name_barcode') || 'Ad, barkod və ya təsvirə görə axtar...'}
                 filterOptions={useMemo(() => {
-                    // categoryName üçün object array hazırla (SearchDropdown üçün)
                     const categoryObjects = categories.map(cat => ({ id: cat.name, name: cat.name }));
+                    const subCategoryObjects = subCategories.map(sub => ({ id: sub.name, name: sub.name }));
                     return {
                         categoryName: categoryObjects, // Object array
+                        subCategoryName: subCategoryObjects, // Object array
                         stockStatus: [
                             t('in_stock') || 'Stokda var',
                             t('low_stock') || 'Az stok',
@@ -340,7 +383,7 @@ export default function Product() {
                         minSalePrice: 'number',
                         maxSalePrice: 'number'
                     };
-                }, [categories, t])}
+                }, [categories, subCategories, t])}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 onView={handleView}
@@ -365,6 +408,7 @@ export default function Product() {
                 searchValue={searchValue}
                 searchQuery={searchQuery}
                 onFilterChange={handleFilterChange}
+                onTempFilterChange={handleTempFilterChange}
                 onClearFilters={handleClearFilters}
             />
 

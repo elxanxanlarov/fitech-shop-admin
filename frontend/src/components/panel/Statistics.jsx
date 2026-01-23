@@ -4,12 +4,12 @@ import { statisticsApi } from '../../api';
 import DailySummaryForm from '../forms/DailySummaryForm.jsx';
 import DailySummaryHistory from './DailySummaryHistory.jsx';
 import Alert from '../ui/Alert';
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  ShoppingCart, 
-  Package, 
-  Users, 
+import {
+  TrendingUp,
+  TrendingDown,
+  ShoppingCart,
+  Package,
+  Users,
   DollarSign,
   ArrowUp,
   ArrowDown,
@@ -27,7 +27,7 @@ export default function Statistics() {
   const [loading, setLoading] = useState(true);
   const [showDailyForm, setShowDailyForm] = useState(false);
   const [showDailyHistory, setShowDailyHistory] = useState(false);
-  
+
   // Default tarixləri bu günə təyin et
   const getTodayDate = () => {
     const today = new Date();
@@ -36,10 +36,10 @@ export default function Statistics() {
     const day = String(today.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   };
-  
+
   const [startDate, setStartDate] = useState(getTodayDate());
   const [endDate, setEndDate] = useState(getTodayDate());
-  
+
   useEffect(() => {
     fetchOverallStatistics();
     fetchTopProducts();
@@ -201,218 +201,252 @@ export default function Statistics() {
         <div className="space-y-6">
           {/* Total Revenue & Profit Summary */}
           <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg shadow-lg p-6 text-white">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div>
-                <p className="text-blue-100 text-sm font-medium mb-2">{t('total_revenue') || 'Ümumi Gəlir'}</p>
-                <p className="text-3xl font-bold">{formatCurrency(overallData.sales.totalAmount)} AZN</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Sol tərəf - Gəlir hesablaması */}
+              <div className="space-y-3">
+                <p className="text-blue-100 text-sm font-medium mb-3">{t('revenue_calculation') || 'Gəlir Hesablaması'}</p>
+
+                {/* Satışlar */}
+                <div className="flex justify-between items-center">
+                  <span className="text-blue-100 text-sm">{t('sales') || 'Satışlar'}:</span>
+                  <span className="text-xl font-semibold">+{formatCurrency(overallData.sales.totalAmount)} AZN</span>
+                </div>
+
+                {/* Qaytarmalar */}
+                {overallData.returns && overallData.returns.returnedAmount > 0 && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-blue-100 text-sm">{t('returns') || 'Qaytarmalar'}:</span>
+                    <span className="text-xl font-semibold text-red-200">-{formatCurrency(overallData.returns.returnedAmount)} AZN</span>
+                  </div>
+                )}
+
+                {/* Təslim edilmiş məbləğ */}
+                {overallData.cashHandover && overallData.cashHandover.totalAmount > 0 && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-blue-100 text-sm">{t('cash_handover') || 'Məbləğ Təslimi'}:</span>
+                    <span className="text-xl font-semibold text-orange-200">-{formatCurrency(overallData.cashHandover.totalAmount)} AZN</span>
+                  </div>
+                )}
+
+                {/* Ümumi Gəlir */}
+                <div className="flex justify-between items-center pt-3 border-t border-blue-400">
+                  <span className="text-yellow-100 font-semibold">{t('total_revenue') || 'Ümumi Gəlir'}:</span>
+                  <span className="text-2xl font-bold text-yellow-200">
+                    {formatCurrency(overallData.sales.netRevenueAfterHandover || overallData.sales.totalAmount)} AZN
+                  </span>
+                </div>
+
                 {(!startDate || !endDate) && overallData.sales.today && (
-                  <p className="text-xs text-blue-100 mt-1">
-                    {t('today')}: {formatCurrency(overallData.sales.today.amount)} AZN
+                  <p className="text-xs text-blue-100 mt-2">
+                    {t('today')}: {formatCurrency(overallData.sales.today.netRevenueAfterHandover || overallData.sales.today.amount)} AZN
                   </p>
                 )}
               </div>
-              <div>
-                <p className="text-green-200 text-sm font-medium mb-2">{t('total_profit') || 'Ümumi Qazanc'}</p>
-                <p className="text-3xl font-bold text-green-200">{formatCurrency(overallData.sales.totalProfit)} AZN</p>
-                {(!startDate || !endDate) && overallData.sales.today && (
-                  <p className="text-xs text-blue-100 mt-1">
-                    {t('today')}: {formatCurrency(overallData.sales.today.profit)} AZN
+
+              {/* Sağ tərəf - Qazanc və Xərclər */}
+              <div className="space-y-3">
+                {/* Xalis Qazanc */}
+                <div>
+                  <p className="text-green-100 text-sm font-medium mb-2">{t('net_profit') || 'Xalis Qazanc'}</p>
+                  <p className="text-3xl font-bold text-green-200">{formatCurrency(
+                    parseFloat(overallData.sales.totalProfit || 0) - parseFloat(overallData.expenses?.totalAmount || 0)
+                  )} AZN</p>
+                  {(!startDate || !endDate) && overallData.sales.today && (
+                    <p className="text-xs text-blue-100 mt-1">
+                      {t('today')}: {formatCurrency(
+                        parseFloat(overallData.sales.today.profit || 0) - parseFloat(overallData.expenses?.today?.amount || 0)
+                      )} AZN
+                    </p>
+                  )}
+                </div>
+
+                {/* Xərclər */}
+                <div className="pt-3 border-t border-blue-400">
+                  <p className="text-red-100 text-sm font-medium mb-2">{t('total_expenses') || 'Ümumi Xərclər'}</p>
+                  <p className="text-3xl font-bold text-red-200">
+                    {formatCurrency(overallData.expenses?.totalAmount || 0)} AZN
                   </p>
-                )}
-              </div>
-              <div>
-                <p className="text-red-200 text-sm font-medium mb-2">{t('total_expenses') || 'Ümumi Xərclər'}</p>
-                <p className="text-3xl font-bold text-red-200">
-                  {formatCurrency(overallData.expenses?.totalAmount || 0)} AZN
-                </p>
-                {(!startDate || !endDate) && overallData.expenses?.today && (
-                  <p className="text-xs text-blue-100 mt-1">
-                    {t('today')}: {formatCurrency(overallData.expenses.today.amount || 0)} AZN
-                  </p>
-                )}
+                  {(!startDate || !endDate) && overallData.expenses?.today && (
+                    <p className="text-xs text-blue-100 mt-1">
+                      {t('today')}: {formatCurrency(overallData.expenses.today.amount || 0)} AZN
+                    </p>
+                  )}
+                </div>
+
+
               </div>
             </div>
-            {overallData.expenses && (
-              <div className="mt-4 pt-4 border-t border-blue-400">
-                <div className="flex items-center justify-between">
-                  <p className="text-blue-100 text-sm font-medium">{t('net_profit') || 'Xalis Qazanc'}</p>
-                  <p className="text-2xl font-bold text-green-200">
-                    {formatCurrency(
-                      parseFloat(overallData.sales.totalProfit || 0) - parseFloat(overallData.expenses.totalAmount || 0)
-                    )} AZN
+
+
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+            {/* Sales Card */}
+            <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-600 text-sm font-medium">{t('sales')}</p>
+                  <p className="text-2xl font-bold text-gray-800 mt-2">
+                    {overallData.sales.total.toLocaleString()}
                   </p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {t('amount')}: {formatCurrency(overallData.sales.totalAmount)} AZN
+                  </p>
+                  <p className="text-sm text-green-600 mt-1 flex items-center gap-1">
+                    <TrendingUp className="w-4 h-4" />
+                    {t('profit')}: {formatCurrency(overallData.sales.totalProfit)} AZN
+                  </p>
+                  {(!startDate || !endDate) && overallData.sales.today && (
+                    <p className="text-xs text-gray-400 mt-2">
+                      {t('today')}: {overallData.sales.today.count} ({formatCurrency(overallData.sales.today.amount)} AZN)
+                    </p>
+                  )}
+                </div>
+                <div className="bg-blue-100 rounded-full p-3">
+                  <ShoppingCart className="w-8 h-8 text-blue-600" />
+                </div>
+              </div>
+            </div>
+
+            {/* Returns Card */}
+            <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-red-500">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-600 text-sm font-medium">{t('returns')}</p>
+                  <p className="text-2xl font-bold text-gray-800 mt-2">
+                    {overallData.returns.total.toLocaleString()}
+                  </p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {t('amount')}: {formatCurrency(overallData.returns.totalAmount)} AZN
+                  </p>
+                  <p className="text-sm text-red-600 mt-1">
+                    {t('returned_amount')}: {formatCurrency(overallData.returns.returnedAmount)} AZN
+                  </p>
+                  {(!startDate || !endDate) && overallData.returns.today && (
+                    <p className="text-xs text-gray-400 mt-2">
+                      {t('today')}: {overallData.returns.today.count} ({formatCurrency(overallData.returns.today.amount)} AZN)
+                    </p>
+                  )}
+                </div>
+                <div className="bg-red-100 rounded-full p-3">
+                  <TrendingDown className="w-8 h-8 text-red-600" />
+                </div>
+              </div>
+            </div>
+
+            {/* Products Card */}
+            <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-green-500">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-600 text-sm font-medium">{t('products')}</p>
+                  <p className="text-2xl font-bold text-gray-800 mt-2">
+                    {overallData.products.total.toLocaleString()}
+                  </p>
+                  <p className="text-sm text-green-600 mt-1">
+                    {t('active')}: {overallData.products.active}
+                  </p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {t('stock')}: {overallData.products.totalStock.toLocaleString()}
+                  </p>
+                  {overallData.products.deleted && overallData.products.deleted.total > 0 && (
+                    <div className="mt-2 pt-2 border-t border-gray-200">
+                      <p className="text-xs text-red-600 font-medium">
+                        {t('deleted')}: {overallData.products.deleted.total}
+                      </p>
+                      <div className="text-xs text-gray-500 mt-1 space-y-0.5">
+                        {overallData.products.deleted.soft > 0 && (
+                          <p>• {t('soft_deleted')}: {overallData.products.deleted.soft}</p>
+                        )}
+                        {overallData.products.deleted.archived > 0 && (
+                          <p>• {t('archived')}: {overallData.products.deleted.archived}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="bg-green-100 rounded-full p-3">
+                  <Package className="w-8 h-8 text-green-600" />
+                </div>
+              </div>
+            </div>
+
+            {/* Staff Card */}
+            <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-purple-500">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-600 text-sm font-medium">{t('staff')}</p>
+                  <p className="text-2xl font-bold text-gray-800 mt-2">
+                    {overallData.staff.total.toLocaleString()}
+                  </p>
+                  <p className="text-sm text-purple-600 mt-1">
+                    {t('active')}: {overallData.staff.active}
+                  </p>
+                </div>
+                <div className="bg-purple-100 rounded-full p-3">
+                  <Users className="w-8 h-8 text-purple-600" />
+                </div>
+              </div>
+            </div>
+
+            {/* Cash Handover Card */}
+            {overallData.cashHandover && (
+              <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-orange-500">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-gray-600 text-sm font-medium">{t('cash_handover') || 'Məbləğ Təslimi'}</p>
+                    <p className="text-2xl font-bold text-gray-800 mt-2">
+                      {overallData.cashHandover.total.toLocaleString()}
+                    </p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      {t('amount')}: {formatCurrency(overallData.cashHandover.totalAmount)} AZN
+                    </p>
+                    {(!startDate || !endDate) && overallData.cashHandover.today && (
+                      <p className="text-xs text-gray-400 mt-2">
+                        {t('today')}: {overallData.cashHandover.today.count} ({formatCurrency(overallData.cashHandover.today.amount)} AZN)
+                      </p>
+                    )}
+                  </div>
+                  <div className="bg-orange-100 rounded-full p-3">
+                    <HandCoins className="w-8 h-8 text-orange-600" />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Credits Card */}
+            {overallData.credits && (
+              <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-purple-500">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-gray-600 text-sm font-medium">{t('credits') || 'Kreditlər'}</p>
+                    <p className="text-2xl font-bold text-gray-800 mt-2">
+                      {overallData.credits.total.toLocaleString()}
+                    </p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      {t('total_amount')}: {formatCurrency(overallData.credits.totalAmount)} AZN
+                    </p>
+                    <p className="text-sm text-green-600 mt-1">
+                      {t('paid_amount')}: {formatCurrency(overallData.credits.paidAmount)} AZN
+                    </p>
+                    <p className="text-sm text-red-600 mt-1">
+                      {t('remaining_amount')}: {formatCurrency(overallData.credits.remainingAmount)} AZN
+                    </p>
+                    <p className="text-sm text-purple-600 mt-1">
+                      {t('active')}: {overallData.credits.active}
+                    </p>
+                    {(!startDate || !endDate) && overallData.credits.today && (
+                      <p className="text-xs text-gray-400 mt-2">
+                        {t('today')}: {overallData.credits.today.count} ({formatCurrency(overallData.credits.today.amount)} AZN)
+                      </p>
+                    )}
+                  </div>
+                  <div className="bg-purple-100 rounded-full p-3">
+                    <CreditCard className="w-8 h-8 text-purple-600" />
+                  </div>
                 </div>
               </div>
             )}
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-          {/* Sales Card */}
-          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm font-medium">{t('sales')}</p>
-                <p className="text-2xl font-bold text-gray-800 mt-2">
-                  {overallData.sales.total.toLocaleString()}
-                </p>
-                <p className="text-sm text-gray-500 mt-1">
-                  {t('amount')}: {formatCurrency(overallData.sales.totalAmount)} AZN
-                </p>
-                <p className="text-sm text-green-600 mt-1 flex items-center gap-1">
-                  <TrendingUp className="w-4 h-4" />
-                  {t('profit')}: {formatCurrency(overallData.sales.totalProfit)} AZN
-                </p>
-                {(!startDate || !endDate) && overallData.sales.today && (
-                  <p className="text-xs text-gray-400 mt-2">
-                    {t('today')}: {overallData.sales.today.count} ({formatCurrency(overallData.sales.today.amount)} AZN)
-                  </p>
-                )}
-              </div>
-              <div className="bg-blue-100 rounded-full p-3">
-                <ShoppingCart className="w-8 h-8 text-blue-600" />
-              </div>
-            </div>
-          </div>
-
-          {/* Returns Card */}
-          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-red-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm font-medium">{t('returns')}</p>
-                <p className="text-2xl font-bold text-gray-800 mt-2">
-                  {overallData.returns.total.toLocaleString()}
-                </p>
-                <p className="text-sm text-gray-500 mt-1">
-                  {t('amount')}: {formatCurrency(overallData.returns.totalAmount)} AZN
-                </p>
-                <p className="text-sm text-red-600 mt-1">
-                  {t('returned_amount')}: {formatCurrency(overallData.returns.returnedAmount)} AZN
-                </p>
-                {(!startDate || !endDate) && overallData.returns.today && (
-                  <p className="text-xs text-gray-400 mt-2">
-                    {t('today')}: {overallData.returns.today.count} ({formatCurrency(overallData.returns.today.amount)} AZN)
-                  </p>
-                )}
-              </div>
-              <div className="bg-red-100 rounded-full p-3">
-                <TrendingDown className="w-8 h-8 text-red-600" />
-              </div>
-            </div>
-          </div>
-
-          {/* Products Card */}
-          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-green-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm font-medium">{t('products')}</p>
-                <p className="text-2xl font-bold text-gray-800 mt-2">
-                  {overallData.products.total.toLocaleString()}
-                </p>
-                <p className="text-sm text-green-600 mt-1">
-                  {t('active')}: {overallData.products.active}
-                </p>
-                <p className="text-sm text-gray-500 mt-1">
-                  {t('stock')}: {overallData.products.totalStock.toLocaleString()}
-                </p>
-                {overallData.products.deleted && overallData.products.deleted.total > 0 && (
-                  <div className="mt-2 pt-2 border-t border-gray-200">
-                    <p className="text-xs text-red-600 font-medium">
-                      {t('deleted')}: {overallData.products.deleted.total}
-                    </p>
-                    <div className="text-xs text-gray-500 mt-1 space-y-0.5">
-                      {overallData.products.deleted.soft > 0 && (
-                        <p>• {t('soft_deleted')}: {overallData.products.deleted.soft}</p>
-                      )}
-                      {overallData.products.deleted.archived > 0 && (
-                        <p>• {t('archived')}: {overallData.products.deleted.archived}</p>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="bg-green-100 rounded-full p-3">
-                <Package className="w-8 h-8 text-green-600" />
-              </div>
-            </div>
-          </div>
-
-          {/* Staff Card */}
-          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-purple-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm font-medium">{t('staff')}</p>
-                <p className="text-2xl font-bold text-gray-800 mt-2">
-                  {overallData.staff.total.toLocaleString()}
-                </p>
-                <p className="text-sm text-purple-600 mt-1">
-                  {t('active')}: {overallData.staff.active}
-                </p>
-              </div>
-              <div className="bg-purple-100 rounded-full p-3">
-                <Users className="w-8 h-8 text-purple-600" />
-              </div>
-            </div>
-          </div>
-
-          {/* Cash Handover Card */}
-          {overallData.cashHandover && (
-            <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-orange-500">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-600 text-sm font-medium">{t('cash_handover') || 'Məbləğ Təslimi'}</p>
-                  <p className="text-2xl font-bold text-gray-800 mt-2">
-                    {overallData.cashHandover.total.toLocaleString()}
-                  </p>
-                  <p className="text-sm text-gray-500 mt-1">
-                    {t('amount')}: {formatCurrency(overallData.cashHandover.totalAmount)} AZN
-                  </p>
-                  {(!startDate || !endDate) && overallData.cashHandover.today && (
-                    <p className="text-xs text-gray-400 mt-2">
-                      {t('today')}: {overallData.cashHandover.today.count} ({formatCurrency(overallData.cashHandover.today.amount)} AZN)
-                    </p>
-                  )}
-                </div>
-                <div className="bg-orange-100 rounded-full p-3">
-                  <HandCoins className="w-8 h-8 text-orange-600" />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Credits Card */}
-          {overallData.credits && (
-            <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-purple-500">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-600 text-sm font-medium">{t('credits') || 'Kreditlər'}</p>
-                  <p className="text-2xl font-bold text-gray-800 mt-2">
-                    {overallData.credits.total.toLocaleString()}
-                  </p>
-                  <p className="text-sm text-gray-500 mt-1">
-                    {t('total_amount')}: {formatCurrency(overallData.credits.totalAmount)} AZN
-                  </p>
-                  <p className="text-sm text-green-600 mt-1">
-                    {t('paid_amount')}: {formatCurrency(overallData.credits.paidAmount)} AZN
-                  </p>
-                  <p className="text-sm text-red-600 mt-1">
-                    {t('remaining_amount')}: {formatCurrency(overallData.credits.remainingAmount)} AZN
-                  </p>
-                  <p className="text-sm text-purple-600 mt-1">
-                    {t('active')}: {overallData.credits.active}
-                  </p>
-                  {(!startDate || !endDate) && overallData.credits.today && (
-                    <p className="text-xs text-gray-400 mt-2">
-                      {t('today')}: {overallData.credits.today.count} ({formatCurrency(overallData.credits.today.amount)} AZN)
-                    </p>
-                  )}
-                </div>
-                <div className="bg-purple-100 rounded-full p-3">
-                  <CreditCard className="w-8 h-8 text-purple-600" />
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
         </div>
       )}
 
@@ -444,21 +478,21 @@ export default function Statistics() {
                       const quantity = item.totalQuantity || 0;
                       const unitType = product.unitType || 'PIECE';
                       const piecesPerBox = product.piecesPerBox;
-                      
+
                       // Əgər PIECE tipindədirsə, sadəcə ədəd göstər
                       if (unitType === 'PIECE') {
                         return `${quantity} ədəd`;
                       }
-                      
+
                       // Qutu/paket tipindədirsə
                       if (piecesPerBox && piecesPerBox > 0) {
                         const boxes = Math.floor(quantity / piecesPerBox);
                         const pieces = quantity % piecesPerBox;
-                        const unitLabel = unitType === 'BOX' ? 'ədəd' : 
-                                         unitType === 'METER' ? 'metr' : 
-                                         unitType === 'LITER' ? 'litr' : 
-                                         unitType === 'KILOGRAM' ? 'kq' : 'ədəd';
-                        
+                        const unitLabel = unitType === 'BOX' ? 'ədəd' :
+                          unitType === 'METER' ? 'metr' :
+                            unitType === 'LITER' ? 'litr' :
+                              unitType === 'KILOGRAM' ? 'kq' : 'ədəd';
+
                         if (boxes > 0 && pieces > 0) {
                           return `${boxes} ${unitType === 'BOX' ? 'qutu' : 'paket'} + ${pieces} açıq (${quantity} ${unitLabel})`;
                         } else if (boxes > 0) {
@@ -468,10 +502,10 @@ export default function Statistics() {
                         }
                         return `${quantity} ${unitLabel}`;
                       }
-                      
+
                       return `${quantity} ədəd`;
                     };
-                    
+
                     return (
                       <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
                         <td className="py-3 px-4 text-gray-800">
@@ -482,10 +516,10 @@ export default function Statistics() {
                             <span>{formatQuantity()}</span>
                             {item.product?.unitType && item.product.unitType !== 'PIECE' && (
                               <span className="text-xs text-gray-500">
-                                {item.product.unitType === 'BOX' ? 'Qutu' : 
-                                 item.product.unitType === 'METER' ? 'Metr' : 
-                                 item.product.unitType === 'LITER' ? 'Litr' : 
-                                 item.product.unitType === 'KILOGRAM' ? 'Kiloqram' : ''}
+                                {item.product.unitType === 'BOX' ? 'Qutu' :
+                                  item.product.unitType === 'METER' ? 'Metr' :
+                                    item.product.unitType === 'LITER' ? 'Litr' :
+                                      item.product.unitType === 'KILOGRAM' ? 'Kiloqram' : ''}
                               </span>
                             )}
                           </div>
