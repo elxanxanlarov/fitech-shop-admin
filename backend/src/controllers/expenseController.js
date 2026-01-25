@@ -22,10 +22,14 @@ export const getAllExpenses = async (req, res) => {
         if (startDate || endDate) {
             where.date = {};
             if (startDate) {
-                where.date.gte = new Date(startDate);
+                const s = new Date(startDate);
+                s.setHours(0, 0, 0, 0);
+                where.date.gte = s;
             }
             if (endDate) {
-                where.date.lte = new Date(endDate);
+                const e = new Date(endDate);
+                e.setHours(23, 59, 59, 999);
+                where.date.lte = e;
             }
         }
         

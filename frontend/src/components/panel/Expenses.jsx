@@ -1,9 +1,9 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useLocation } from 'react-router-dom';
 import TableTemplate from '../ui/TableTamplate';
 import Alert from '../ui/Alert';
-import { Edit, Trash2, Eye, Plus } from 'lucide-react';
+import { Edit, Trash2, Eye, Plus, ShoppingBag, TrendingDown } from 'lucide-react';
 import { expenseApi } from '../../api';
 
 export default function Expenses() {
@@ -13,6 +13,14 @@ export default function Expenses() {
     const location = useLocation();
     const [expenseData, setExpenseData] = useState([]);
     const [loading, setLoading] = useState(true);
+
+    const [dateRange, setDateRange] = useState(() => {
+        const today = new Date();
+        const localToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        return { start: localToday, end: localToday };
+    });
+    const [datePreset, setDatePreset] = useState('today');
+    const isAdmin = useMemo(() => location.pathname.includes('/admin'), [location.pathname]);
 
     const columns = useMemo(() => [
         {
@@ -69,40 +77,43 @@ export default function Expenses() {
         },
     ], [t]);
 
-    useEffect(() => {
-        const fetchExpenses = async () => {
-            setLoading(true);
-            try {
-                const response = await expenseApi.getAll();
-                if (response.success && response.date) {
-                    setExpenseData(response.date);
-                } else {
-                    setExpenseData([]);
-                }
-            } catch (error) {
-                console.error('Error fetching expenses:', error);
-                Alert.error(t('error_fetching') || 'Xəta!', t('error_fetching_text') || 'Xərclər siyahısı alınarkən xəta baş verdi');
+    const fetchExpenses = useCallback(async () => {
+        setLoading(true);
+        try {
+            const params = {};
+            if (dateRange.start) params.startDate = dateRange.start;
+            if (dateRange.end) params.endDate = dateRange.end;
+
+            const response = await expenseApi.getAll(params);
+            if (response.success && response.date) {
+                setExpenseData(response.date);
+            } else {
                 setExpenseData([]);
-            } finally {
-                setLoading(false);
             }
-        };
+        } catch (error) {
+            console.error('Error fetching expenses:', error);
+            Alert.error(t('error_fetching') || 'Xəta!', t('error_fetching_text') || 'Xərclər siyahısı alınarkən xəta baş verdi');
+            setExpenseData([]);
+        } finally {
+            setLoading(false);
+        }
+    }, [dateRange, t]);
+
+    useEffect(() => {
         fetchExpenses();
-        
-        // Custom event dinlə - xərc bərpa ediləndə yenilə
+
         const handleExpenseRestored = () => {
             fetchExpenses();
         };
-        
+
         window.addEventListener('expenseRestored', handleExpenseRestored);
-        
+
         return () => {
             window.removeEventListener('expenseRestored', handleExpenseRestored);
         };
-    }, [t]);
+    }, [fetchExpenses]);
 
     const handleEdit = async (expense) => {
-        const isAdmin = location.pathname.includes('/admin');
         if (!isAdmin) return;
         const editPath = `/${isAdmin ? 'admin' : 'reception'}/expense-form?id=${expense.id.toString()}`;
         navigate(editPath);
@@ -123,16 +134,15 @@ export default function Expenses() {
         if (result.isConfirmed) {
             try {
                 Alert.loading(t('loading') || 'Yüklənir...');
-                
+
                 await expenseApi.delete(expense.id);
-                
+
                 setExpenseData(prev => prev.filter(item => item.id !== expense.id));
-                
-                // Custom event dispatch et - DeletedProductsBell yenilənsin
-                window.dispatchEvent(new CustomEvent('expenseDeleted', { 
-                    detail: { expenseId: expense.id } 
+
+                window.dispatchEvent(new CustomEvent('expenseDeleted', {
+                    detail: { expenseId: expense.id }
                 }));
-                
+
                 Alert.close();
                 setTimeout(() => {
                     Alert.success(tAlert('delete_success') || 'Uğurlu', tAlert('delete_success_text') || 'Xərc uğurla silindi');
@@ -147,10 +157,10 @@ export default function Expenses() {
     };
 
     const handleView = (expense) => {
-        const staffInfo = expense.staff 
+        const staffInfo = expense.staff
             ? `\n${t('added_by') || 'Əlavə edən'}: ${expense.staff.name} ${expense.staff.surName || ''}`.trim()
             : '';
-        
+
         Alert.info(
             `${t('expense')}: ${expense.title}`,
             `${t('description')}: ${expense.description || '-'}\n${t('amount')}: ${parseFloat(expense.amount || 0).toFixed(2)} AZN\n${t('category')}: ${expense.category || '-'}\n${t('date')}: ${expense.date ? new Date(expense.date).toLocaleDateString('az-AZ') : '-'}${staffInfo}${expense.note ? `\n${t('note')}: ${expense.note}` : ''}`
@@ -172,18 +182,17 @@ export default function Expenses() {
         if (result.isConfirmed) {
             try {
                 Alert.loading(t('loading') || 'Yüklənir...');
-                
+
                 await Promise.all(selectedIds.map(id => expenseApi.delete(id)));
-                
+
                 setExpenseData(prev => prev.filter(item => !selectedIds.includes(item.id)));
-                
-                // Custom event dispatch et - DeletedProductsBell yenilənsin
+
                 selectedIds.forEach(id => {
-                    window.dispatchEvent(new CustomEvent('expenseDeleted', { 
-                        detail: { expenseId: id } 
+                    window.dispatchEvent(new CustomEvent('expenseDeleted', {
+                        detail: { expenseId: id }
                     }));
                 });
-                
+
                 Alert.close();
                 setTimeout(() => {
                     Alert.success(tAlert('bulk_delete_success') || 'Uğurlu', tAlert('bulk_delete_success_text') || 'Xərclər uğurla silindi');
@@ -202,6 +211,12 @@ export default function Expenses() {
         const addExpensePath = isAdmin ? '/admin/expense-form' : '/reception/expense-form';
         navigate(addExpensePath);
     };
+
+    const summaryStats = useMemo(() => {
+        const totalCount = expenseData.length;
+        const totalAmount = expenseData.reduce((sum, item) => sum + parseFloat(item.amount || 0), 0);
+        return { totalCount, totalAmount };
+    }, [expenseData]);
 
     return (
         <div className="p-6">
@@ -224,14 +239,19 @@ export default function Expenses() {
                 columns={columns}
                 title={t('expenses') || 'Xərclər'}
                 searchFields={['title', 'description', 'category']}
-                onEdit={handleEdit}
-                onDelete={handleDelete}
+                onEdit={isAdmin ? handleEdit : undefined}
+                onDelete={isAdmin ? handleDelete : undefined}
                 onView={handleView}
-                onBulkDelete={handleBulkDelete}
-                showBulkActions={true}
+                onBulkDelete={isAdmin ? handleBulkDelete : undefined}
+                showBulkActions={isAdmin}
                 showFilters={false}
                 showSearch={true}
-                showDateFilter={false}
+                showDateFilter={true}
+                serverSidePagination={true}
+                dateRangeValue={dateRange}
+                onDateRangeChange={(start, end) => setDateRange({ start, end })}
+                datePresetValue={datePreset}
+                onDatePresetChange={(preset) => setDatePreset(preset)}
                 loading={loading}
                 emptyState={{
                     icon: 'dollar-sign',
@@ -242,7 +262,43 @@ export default function Expenses() {
                     showAction: true
                 }}
             />
+
+            {expenseData.length > 0 && (
+                <div className="mt-6 bg-white rounded-lg shadow-sm p-6">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('summary') || 'Xülasə'}</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="bg-blue-50 rounded-lg p-4 border border-blue-100">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm font-medium text-blue-600 mb-1">
+                                        {t('total_expenses_count') || 'Ümumi Xərc Sayı'}
+                                    </p>
+                                    <p className="text-2xl font-bold text-blue-900">{summaryStats.totalCount}</p>
+                                </div>
+                                <div className="bg-blue-100 rounded-full p-3">
+                                    <ShoppingBag className="w-6 h-6 text-blue-600" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-red-50 rounded-lg p-4 border border-red-100">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm font-medium text-red-600 mb-1">
+                                        {t('total_expenses_amount') || 'Ümumi Xərc Məbləği'}
+                                    </p>
+                                    <p className="text-2xl font-bold text-red-900">
+                                        {summaryStats.totalAmount.toFixed(2)} AZN
+                                    </p>
+                                </div>
+                                <div className="bg-red-100 rounded-full p-3">
+                                    <TrendingDown className="w-6 h-6 text-red-600" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
-

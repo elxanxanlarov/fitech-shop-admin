@@ -45,6 +45,15 @@
   "category_utilities": "Kommunal",
   "category_office": "Ofis",
   "category_advertising": "Reklam",
-  "category_other": "Digər"
+  "category_other": "Digər",
+  "summary": "Xülasə",
+  "total_expenses_count": "Ümumi Xərc Sayı",
+  "total_expenses_amount": "Ümumi Xərc Məbləği",
+  "clear_filter": "Hamısını təmizlə",
+  "today": "Bu gün",
+  "this_week": "Bu həftə",
+  "this_month": "Bu ay",
+  "this_year": "Bu il",
+  "all": "Hamısı",
+  "custom": "Xüsusi tarix"
 }
-
