@@ -4,11 +4,13 @@ import { useTranslation } from 'react-i18next';
 import Input from '../components/ui/Input';
 import { MdEmail, MdLock, MdLogin } from 'react-icons/md';
 import { authApi } from '../api';
+import { useAuth } from '../context/AuthContext';
 
 export default function Login() {
     const navigate = useNavigate();
     const { t } = useTranslation('auth');
-    
+    const auth = useAuth();
+
     // Əgər artıq login olubsa (token varsa), admin səhifəsinə yönləndir
     useEffect(() => {
         const token = sessionStorage.getItem('token');
@@ -16,12 +18,12 @@ export default function Login() {
             navigate('/admin/staff');
         }
     }, [navigate]);
-    
+
     const [formData, setFormData] = useState({
         email: '',
         password: ''
     });
-    
+
     const [errors, setErrors] = useState({});
     const [isLoading, setIsLoading] = useState(false);
 
@@ -30,7 +32,7 @@ export default function Login() {
             ...prev,
             [field]: value
         }));
-        
+
         // Clear error when user starts typing
         if (errors[field]) {
             setErrors(prev => ({
@@ -42,13 +44,13 @@ export default function Login() {
 
     const validateForm = () => {
         const newErrors = {};
-        
+
         if (!formData.email.trim()) {
             newErrors.email = t('email_required');
         } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
             newErrors.email = t('email_invalid');
         }
-        
+
         if (!formData.password) {
             newErrors.password = t('password_required');
         } else if (formData.password.length < 6) {
@@ -61,28 +63,28 @@ export default function Login() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        
+
         if (validateForm()) {
             setIsLoading(true);
             try {
                 // Login - cookie-də token saxlanır
                 const loginResponse = await authApi.login(formData.email, formData.password);
-                
+
                 if (!loginResponse.success) {
                     setErrors({ password: loginResponse.message || t('login_error') });
                     setIsLoading(false);
                     return;
                 }
-                
+
                 const meResponse = await authApi.me();
-                
+
                 if (meResponse.success && meResponse.data) {
-                    // Token-u sessionStorage-a yaz (flag olaraq 'authenticated')
-                    sessionStorage.setItem('token', 'authenticated');
-                    
+                    // AuthContext-də login funksiyasını çağır
+                    auth.login(meResponse.data);
+
                     // Role məlumatını al
                     const roleName = meResponse.data.role?.name?.toLowerCase();
-                    
+
                     // Superadmin və ya Admin olsa /admin/staff-ə yönləndir
                     if (roleName === 'superadmin' || roleName === 'admin') {
                         navigate('/admin/staff');
@@ -122,7 +124,7 @@ export default function Login() {
 
                 {/* Login Form */}
                 <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-8">
-                    <form action="#" onSubmit={(e)=>handleSubmit(e)} className="space-y-6">
+                    <form action="#" onSubmit={(e) => handleSubmit(e)} className="space-y-6">
                         {/* Email Input */}
                         <Input
                             label={t('email')}
@@ -149,7 +151,7 @@ export default function Login() {
                             leftIcon={<MdLock />}
                         />
 
-                       
+
 
                         {/* Submit Button */}
                         <button

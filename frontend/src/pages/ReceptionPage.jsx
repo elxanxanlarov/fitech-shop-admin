@@ -8,21 +8,25 @@ import SaleForm from "../components/forms/SaleForm"
 import ExpenseForm from "../components/forms/ExpenseForm"
 import CashHandoverForm from "../components/forms/CashHandoverForm"
 import CreditPayments from "../components/panel/CreditPayments"
-export default function RepeptionPage() {
+import Check from "../components/panel/Check"
+
+export default function ReceptionPage() {
     const { slug } = useParams()
     return (
         <div>
+            {/* Forms */}
             {slug === "sale-form" && <SaleForm />}
             {slug === "expense-form" && <ExpenseForm />}
             {slug === "cash-handover-form" && <CashHandoverForm />}
 
-
+            {/* Panels */}
             {slug === "sales" && <Sales />}
             {slug === "expenses" && <Expenses />}
             {slug === "cash-handover" && <CashHandover />}
             {slug === "credit-payments" && <CreditPayments />}
             {slug === "statistics" && <Statistics />}
             {slug === "profile" && <Profile />}
+            {slug === "check" && <Check />}
         </div>
     )
 }

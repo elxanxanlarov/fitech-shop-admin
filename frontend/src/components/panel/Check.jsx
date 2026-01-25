@@ -20,13 +20,14 @@ export default function Check() {
         const fetchData = async () => {
             if (!saleId) {
                 Alert.error(t('error') || 'Xəta!', t('sale_id_required') || 'Satış ID tələb olunur');
-                navigate('/admin/sales');
+                const isAdmin = location.pathname.includes('/admin');
+                navigate(`/${isAdmin ? 'admin' : 'reception'}/sales`);
                 return;
             }
 
             try {
                 setLoading(true);
-                
+
                 // Əvvəlcə qəbz məlumatlarını gətir
                 try {
                     const receiptResponse = await receiptApi.getBySaleId(saleId);
@@ -42,27 +43,28 @@ export default function Check() {
                                 setSale(saleResponse.data);
                             }
                         }
+                    } else {
+                        // Qəbz yoxdursa, satış məlumatlarını gətir
+                        const saleResponse = await saleApi.getById(saleId);
+                        if (saleResponse.success && saleResponse.data) {
+                            setSale(saleResponse.data);
                         } else {
-                            // Qəbz yoxdursa, satış məlumatlarını gətir
-                            const saleResponse = await saleApi.getById(saleId);
-                            if (saleResponse.success && saleResponse.data) {
-                                setSale(saleResponse.data);
-                            } else {
-                                Alert.error(t('error') || 'Xəta!', t('sale_not_found') || 'Satış tapılmadı');
-                                navigate('/admin/sales');
-                            }
+                            Alert.error(t('error') || 'Xəta!', t('sale_not_found') || 'Satış tapılmadı');
+                            const isAdmin = location.pathname.includes('/admin');
+                            navigate(`/${isAdmin ? 'admin' : 'reception'}/sales`);
                         }
-                        
-                        // Qaytarma məlumatlarını gətir
-                        try {
-                            const returnsResponse = await returnApi.getBySaleId(saleId);
-                            if (returnsResponse.success && returnsResponse.data) {
-                                setReturns(returnsResponse.data);
-                            }
-                        } catch (returnError) {
-                            console.error('Error fetching returns:', returnError);
-                            // Qaytarma xətası qəbz göstərməyə mane olmasın
+                    }
+
+                    // Qaytarma məlumatlarını gətir
+                    try {
+                        const returnsResponse = await returnApi.getBySaleId(saleId);
+                        if (returnsResponse.success && returnsResponse.data) {
+                            setReturns(returnsResponse.data);
                         }
+                    } catch (returnError) {
+                        console.error('Error fetching returns:', returnError);
+                        // Qaytarma xətası qəbz göstərməyə mane olmasın
+                    }
                 } catch {
                     // Qəbz xətası halında, satış məlumatlarını gətir
                     const saleResponse = await saleApi.getById(saleId);
@@ -70,13 +72,15 @@ export default function Check() {
                         setSale(saleResponse.data);
                     } else {
                         Alert.error(t('error') || 'Xəta!', t('sale_not_found') || 'Satış tapılmadı');
-                        navigate('/admin/sales');
+                        const isAdmin = location.pathname.includes('/admin');
+                        navigate(`/${isAdmin ? 'admin' : 'reception'}/sales`);
                     }
                 }
             } catch (error) {
                 console.error('Error fetching data:', error);
                 Alert.error(t('error') || 'Xəta!', error.response?.data?.message || t('error_fetching_text') || 'Məlumatlar alınarkən xəta baş verdi');
-                navigate('/admin/sales');
+                const isAdmin = location.pathname.includes('/admin');
+                navigate(`/${isAdmin ? 'admin' : 'reception'}/sales`);
             } finally {
                 setLoading(false);
             }
@@ -98,7 +102,8 @@ export default function Check() {
     };
 
     const handleBack = () => {
-        navigate('/admin/sales');
+        const isAdmin = location.pathname.includes('/admin');
+        navigate(`/${isAdmin ? 'admin' : 'reception'}/sales`);
     };
 
     if (loading) {
@@ -119,7 +124,7 @@ export default function Check() {
     // Qəbz məlumatları varsa, onları istifadə et
     const displaySale = receipt?.sale || sale;
     // Qəbz-də müştəri adı varsa, onu istifadə et, yoxsa sale-dəki məlumatları yoxla
-    const receiptCustomerName = receipt?.customerName || receipt?.customerSurname 
+    const receiptCustomerName = receipt?.customerName || receipt?.customerSurname
         ? `${receipt.customerName || ''} ${receipt.customerSurname || ''}`.trim()
         : '';
     const saleCustomerName = `${displaySale.customerName || ''} ${displaySale.customerSurname || ''}`.trim();
@@ -273,7 +278,7 @@ export default function Check() {
                                             {parseFloat(returnItem.returnedAmount || returnItem.totalAmount || 0).toFixed(2)} ₼
                                         </span>
                                     </div>
-                                    
+
                                     {returnItem.items && returnItem.items.length > 0 && (
                                         <div className="mt-3 pt-3 border-t border-orange-200">
                                             <p className="text-xs font-semibold text-gray-700 mb-2">{t('returned_items') || 'Qaytarılan Məhsullar'}:</p>
@@ -291,7 +296,7 @@ export default function Check() {
                                             </div>
                                         </div>
                                     )}
-                                    
+
                                     {returnItem.reason && (
                                         <div className="mt-2 pt-2 border-t border-orange-200">
                                             <p className="text-xs font-semibold text-gray-700 mb-1">{t('reason') || 'Səbəb'}:</p>

@@ -98,14 +98,14 @@ export default function Sales() {
             }
         };
         fetchSales();
-        
+
         // Custom event dinlə - satış bərpa ediləndə yenilə
         const handleSaleRestored = () => {
             fetchSales();
         };
-        
+
         window.addEventListener('saleRestored', handleSaleRestored);
-        
+
         return () => {
             window.removeEventListener('saleRestored', handleSaleRestored);
         };
@@ -148,8 +148,8 @@ export default function Sales() {
 
     const handleEdit = async (sale) => {
         const isAdmin = location.pathname.includes('/admin');
-        if (!isAdmin) return;
-        const editPath = `/admin/sale-form?id=${sale.id.toString()}`;
+        const rolePrefix = isAdmin ? 'admin' : 'reception';
+        const editPath = `/${rolePrefix}/sale-form?id=${sale.id.toString()}`;
         navigate(editPath);
     };
 
@@ -174,12 +174,12 @@ export default function Sales() {
                 Alert.loading(t('loading') || 'Yüklənir...');
                 await saleApi.delete(sale.id);
                 setSaleData(prev => prev.filter(item => item.id !== sale.id));
-                
+
                 // Custom event dispatch et - DeletedProductsBell yenilənsin
-                window.dispatchEvent(new CustomEvent('saleDeleted', { 
-                    detail: { saleId: sale.id } 
+                window.dispatchEvent(new CustomEvent('saleDeleted', {
+                    detail: { saleId: sale.id }
                 }));
-                
+
                 Alert.close();
                 setTimeout(() => { Alert.success(tAlert('delete_success'), tAlert('delete_success_text')); }, 100);
             } catch (error) {
@@ -195,16 +195,18 @@ export default function Sales() {
             const response = await receiptApi.getBySaleId(sale.id);
             if (response.success && response.data) {
                 // Qəbz səhifəsinə yönləndir
-                navigate(`/admin/check?id=${sale.id}`);
+                const isAdmin = location.pathname.includes('/admin');
+                const rolePrefix = isAdmin ? 'admin' : 'reception';
+                navigate(`/${rolePrefix}/check?id=${sale.id}`);
             } else {
                 // Qəbz yoxdursa, satış məlumatlarını göstər
-                const customerInfo = sale.customerName || sale.customerSurname 
-                    ? `${t('customer')}: ${sale.customerName || ''} ${sale.customerSurname || ''}` 
+                const customerInfo = sale.customerName || sale.customerSurname
+                    ? `${t('customer')}: ${sale.customerName || ''} ${sale.customerSurname || ''}`
                     : `${t('customer')}: -`;
-                const itemsInfo = sale.items?.map(item => 
+                const itemsInfo = sale.items?.map(item =>
                     `• ${item.product?.name || '-'} x${item.quantity} = ${parseFloat(item.totalPrice || 0).toFixed(2)} ₼`
                 ).join('\n') || '-';
-                
+
                 Alert.info(
                     `${t('sale')} #${sale.id.substring(0, 8)}`,
                     `${customerInfo}\n${t('phone')}: ${sale.customerPhone || '-'}\n\n${t('items')}:\n${itemsInfo}\n\n${t('total_amount')}: ${parseFloat(sale.totalAmount || 0).toFixed(2)} ₼\n${t('paid_amount')}: ${parseFloat(sale.paidAmount || 0).toFixed(2)} ₼\n${t('profit')}: ${parseFloat(sale.profitAmount || 0).toFixed(2)} ₼\n${t('date')}: ${new Date(sale.createdAt).toLocaleString(i18n.language === 'az' ? 'az-AZ' : 'en-US')}`
@@ -213,13 +215,13 @@ export default function Sales() {
         } catch (error) {
             console.error('Error fetching receipt:', error);
             // Xəta halında satış məlumatlarını göstər
-            const customerInfo = sale.customerName || sale.customerSurname 
-                ? `${t('customer')}: ${sale.customerName || ''} ${sale.customerSurname || ''}` 
+            const customerInfo = sale.customerName || sale.customerSurname
+                ? `${t('customer')}: ${sale.customerName || ''} ${sale.customerSurname || ''}`
                 : `${t('customer')}: -`;
-            const itemsInfo = sale.items?.map(item => 
+            const itemsInfo = sale.items?.map(item =>
                 `• ${item.product?.name || '-'} x${item.quantity} = ${parseFloat(item.totalPrice || 0).toFixed(2)} ₼`
             ).join('\n') || '-';
-            
+
             Alert.info(
                 `${t('sale')} #${sale.id.substring(0, 8)}`,
                 `${customerInfo}\n${t('phone')}: ${sale.customerPhone || '-'}\n\n${t('items')}:\n${itemsInfo}\n\n${t('total_amount')}: ${parseFloat(sale.totalAmount || 0).toFixed(2)} ₼\n${t('paid_amount')}: ${parseFloat(sale.paidAmount || 0).toFixed(2)} ₼\n${t('profit')}: ${parseFloat(sale.profitAmount || 0).toFixed(2)} ₼\n${t('date')}: ${new Date(sale.createdAt).toLocaleString(i18n.language === 'az' ? 'az-AZ' : 'en-US')}`
@@ -248,14 +250,14 @@ export default function Sales() {
                 Alert.loading(t('loading') || 'Yüklənir...');
                 await Promise.all(selectedIds.map(id => saleApi.delete(id)));
                 setSaleData(prev => prev.filter(item => !selectedIds.includes(item.id)));
-                
+
                 // Custom event dispatch et - DeletedProductsBell yenilənsin
                 selectedIds.forEach(id => {
-                    window.dispatchEvent(new CustomEvent('saleDeleted', { 
-                        detail: { saleId: id } 
+                    window.dispatchEvent(new CustomEvent('saleDeleted', {
+                        detail: { saleId: id }
                     }));
                 });
-                
+
                 Alert.close();
                 setTimeout(() => { Alert.success(tAlert('bulk_delete_success'), tAlert('bulk_delete_success_text')); }, 100);
             } catch (error) {
@@ -304,7 +306,7 @@ export default function Sales() {
         const totalProfit = filteredData.reduce((sum, sale) => {
             return sum + parseFloat(sale.profitAmount || 0);
         }, 0);
-        
+
         return {
             totalSales,
             totalAmount,
@@ -328,7 +330,7 @@ export default function Sales() {
                     {t('add_sale') || 'Yeni Satış Əlavə Et'}
                 </button>
             </div>
-            
+
             <TableTemplate
                 data={filteredData}
                 columns={columns}
@@ -412,44 +414,40 @@ export default function Sales() {
                                 <button
                                     type="button"
                                     onClick={() => setPaymentFilter('all')}
-                                    className={`px-3 h-10 rounded-lg text-xs md:text-sm transition-colors ${
-                                        paymentFilter === 'all'
-                                            ? 'bg-blue-600 text-white'
-                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                    }`}
+                                    className={`px-3 h-10 rounded-lg text-xs md:text-sm transition-colors ${paymentFilter === 'all'
+                                        ? 'bg-blue-600 text-white'
+                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        }`}
                                 >
                                     {t('all') || 'Hamısı'}
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => setPaymentFilter('cash')}
-                                    className={`px-3 h-10 rounded-lg text-xs md:text-sm transition-colors ${
-                                        paymentFilter === 'cash'
-                                            ? 'bg-green-600 text-white'
-                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                    }`}
+                                    className={`px-3 h-10 rounded-lg text-xs md:text-sm transition-colors ${paymentFilter === 'cash'
+                                        ? 'bg-green-600 text-white'
+                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        }`}
                                 >
                                     {t('cash') || 'Nağd'}
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => setPaymentFilter('card')}
-                                    className={`px-3 h-10 rounded-lg text-xs md:text-sm transition-colors ${
-                                        paymentFilter === 'card'
-                                            ? 'bg-blue-500 text-white'
-                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                    }`}
+                                    className={`px-3 h-10 rounded-lg text-xs md:text-sm transition-colors ${paymentFilter === 'card'
+                                        ? 'bg-blue-500 text-white'
+                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        }`}
                                 >
                                     {t('card') || 'Kart'}
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => setPaymentFilter('credit')}
-                                    className={`px-3 h-10 rounded-lg text-xs md:text-sm transition-colors ${
-                                        paymentFilter === 'credit'
-                                            ? 'bg-purple-600 text-white'
-                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                    }`}
+                                    className={`px-3 h-10 rounded-lg text-xs md:text-sm transition-colors ${paymentFilter === 'credit'
+                                        ? 'bg-purple-600 text-white'
+                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        }`}
                                 >
                                     {t('credit') || 'Kredit'}
                                 </button>
@@ -485,7 +483,7 @@ export default function Sales() {
                                 </div>
                             </div>
                         </div>
-                        
+
                         <div className="bg-green-50 rounded-lg p-4 border border-green-100">
                             <div className="flex items-center justify-between">
                                 <div>
@@ -501,7 +499,7 @@ export default function Sales() {
                                 </div>
                             </div>
                         </div>
-                        
+
                         <div className="bg-purple-50 rounded-lg p-4 border border-purple-100">
                             <div className="flex items-center justify-between">
                                 <div>
@@ -517,7 +515,7 @@ export default function Sales() {
                                 </div>
                             </div>
                         </div>
-                        
+
                         <div className="bg-orange-50 rounded-lg p-4 border border-orange-100">
                             <div className="flex items-center justify-between">
                                 <div>
