@@ -375,32 +375,42 @@ export default function TableTamplate({
     const today = new Date();
     let startDate, endDate;
 
+    const formatDate = (date) => {
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    };
+
     switch (preset) {
       case 'today':
-        startDate = endDate = getTodayDate();
+        startDate = endDate = formatDate(today);
         break;
       case 'week': {
         const weekStart = new Date(today);
-        weekStart.setDate(today.getDate() - today.getDay());
-        startDate = weekStart.toISOString().split('T')[0];
-        endDate = getTodayDate();
+        const day = today.getDay(); // 0 is Sunday, 1 is Monday...
+        const diff = (day === 0 ? -6 : 1) - day; // Azerbaijan week starts on Monday
+        weekStart.setDate(today.getDate() + diff);
+        startDate = formatDate(weekStart);
+        endDate = formatDate(today);
         break;
       }
-      case 'month':
-        startDate = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
-        endDate = getTodayDate();
+      case 'month': {
+        const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+        startDate = formatDate(monthStart);
+        endDate = formatDate(today);
         break;
+      }
       case '6months': {
         const sixMonthsAgo = new Date(today);
         sixMonthsAgo.setMonth(today.getMonth() - 6);
-        startDate = sixMonthsAgo.toISOString().split('T')[0];
-        endDate = getTodayDate();
+        startDate = formatDate(sixMonthsAgo);
+        endDate = formatDate(today);
         break;
       }
-      case 'year':
-        startDate = new Date(today.getFullYear(), 0, 1).toISOString().split('T')[0];
-        endDate = getTodayDate();
+      case 'year': {
+        const yearStart = new Date(today.getFullYear(), 0, 1);
+        startDate = formatDate(yearStart);
+        endDate = formatDate(today);
         break;
+      }
       case 'all':
         if (onDateRangeChange) {
           onDateRangeChange('', '');
@@ -411,9 +421,9 @@ export default function TableTamplate({
         return;
       case 'custom':
         if (!dateRange.start || !dateRange.end) {
-          const today = getTodayDate();
+          const todayStr = formatDate(today);
           if (onDateRangeChange) {
-            onDateRangeChange(today, today);
+            onDateRangeChange(todayStr, todayStr);
           }
         }
         if (onDatePresetChange) {

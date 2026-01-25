@@ -6,49 +6,29 @@ import { authApi } from "../../api"
 import { useNavigate } from "react-router-dom"
 import Alert from "../ui/Alert"
 import { useState, useEffect } from "react"
+import { useAuth } from "../../context/AuthContext"
 
 const Sidebar = ({ sidebarData, onItemClick, collapsed, onToggleCollapse, isMobileOpen, onMobileClose, profilePath }) => {
   const sidebarRef = useClickOutside(isMobileOpen, onMobileClose);
   const { t } = useTranslation('sidebar');
   const { t: tAuth } = useTranslation('auth');
   const navigate = useNavigate();
-  const [currentUser, setCurrentUser] = useState(null);
-
-  // Fetch current user
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const response = await authApi.me();
-        if (response.success && response.data) {
-          setCurrentUser(response.data);
-        }
-      } catch (error) {
-        console.error('Error fetching user:', error);
-      }
-    };
-
-    fetchUser();
-  }, []);
+  const { user: currentUser } = useAuth();
+  const { logout: authLogout } = useAuth();
   const handleLogout = async () => {
     const result = await Alert.confirm(tAuth('logout_confirm'), tAuth('logout_confirm_text'), {
       confirmText: tAuth('yes'),
       cancelText: tAuth('no'),
       confirmColor: '#EF4444',
       cancelColor: '#6B7280'
-    });  
+    });
     if (result.isConfirmed) {
-      try {
-        await authApi.logout();
-        navigate('/dashboard/login');
-      } catch (error) {
-        console.error('Logout error:', error);
-        sessionStorage.removeItem('token');
-        navigate('/dashboard/login');
-      }
+      await authLogout();
+      navigate('/dashboard/login');
     }
   }
   return (
-    <div 
+    <div
       ref={sidebarRef}
       className="h-screen sticky top-0 flex flex-col bg-white border-r border-gray-200 shadow-lg w-full transition-all duration-300 ease-in-out"
     >
@@ -80,21 +60,18 @@ const Sidebar = ({ sidebarData, onItemClick, collapsed, onToggleCollapse, isMobi
             onClick={onItemClick}
             title={item.title}
             className={({ isActive }) =>
-              `group flex items-center h-13 ${
-                collapsed ? 'justify-center px-3' : 'justify-start px-3'
-              } py-3 rounded-lg cursor-pointer transition-all duration-200 relative ${
-                isActive
-                  ? 'text-red-600 bg-red-50 border-r-4 border-red-600'
-                  : 'text-black hover:bg-gray-50 hover:text-gray-700'
+              `group flex items-center h-13 ${collapsed ? 'justify-center px-3' : 'justify-start px-3'
+              } py-3 rounded-lg cursor-pointer transition-all duration-200 relative ${isActive
+                ? 'text-red-600 bg-red-50 border-r-4 border-red-600'
+                : 'text-black hover:bg-gray-50 hover:text-gray-700'
               }`
             }
           >
             <span className={`text-xl ${collapsed ? '' : 'mr-3'} text-current`}>
               {item.icon}
             </span>
-            <span className={`font-medium transition-opacity duration-200 ${
-              collapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'
-            }`}>
+            <span className={`font-medium transition-opacity duration-200 ${collapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'
+              }`}>
               {t(item.title)}
             </span>
           </NavLink>
@@ -105,23 +82,21 @@ const Sidebar = ({ sidebarData, onItemClick, collapsed, onToggleCollapse, isMobi
         <div className="space-y-2">
           <Link
             to={`${profilePath}/profile`}
-            className={`group flex items-center ${
-              collapsed ? 'justify-center px-3' : 'justify-start px-4'
-            } py-3 w-full rounded-lg text-blue-600 hover:bg-blue-50 hover:text-blue-700 transition-all duration-200`}
+            className={`group flex items-center ${collapsed ? 'justify-center px-3' : 'justify-start px-4'
+              } py-3 w-full rounded-lg text-blue-600 hover:bg-blue-50 hover:text-blue-700 transition-all duration-200`}
           >
             <div className={`w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center ${collapsed ? '' : 'mr-3'}`}>
               <span className="text-white font-bold text-sm">
-                {currentUser 
+                {currentUser
                   ? `${(currentUser.name || '').charAt(0).toUpperCase()}${(currentUser.surName || '').charAt(0).toUpperCase()}`.trim() || 'U'
                   : 'U'
                 }
               </span>
             </div>
-            <div className={`flex flex-col transition-opacity duration-200 ${
-              collapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'
-            }`}>
+            <div className={`flex flex-col transition-opacity duration-200 ${collapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'
+              }`}>
               <span className="font-medium">
-                {currentUser 
+                {currentUser
                   ? `${currentUser.name || ''} ${currentUser.surName || ''}`.trim() || t('profile')
                   : t('profile')
                 }
@@ -131,15 +106,13 @@ const Sidebar = ({ sidebarData, onItemClick, collapsed, onToggleCollapse, isMobi
           </Link>
 
           <button
-            className={`group flex items-center ${
-              collapsed ? 'justify-center px-3' : 'justify-start px-4'
-            } py-3 w-full rounded-lg text-red-600 hover:bg-red-50 hover:text-red-700 transition-all duration-200`}
+            className={`group flex items-center ${collapsed ? 'justify-center px-3' : 'justify-start px-4'
+              } py-3 w-full rounded-lg text-red-600 hover:bg-red-50 hover:text-red-700 transition-all duration-200`}
             onClick={handleLogout}
           >
             <FiLogOut className={`text-xl ${collapsed ? '' : 'mr-3'}`} />
-            <span className={`font-medium transition-opacity duration-200 ${
-              collapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'
-            }`}>
+            <span className={`font-medium transition-opacity duration-200 ${collapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'
+              }`}>
               {t('logout')}
             </span>
           </button>

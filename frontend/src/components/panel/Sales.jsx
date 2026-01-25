@@ -116,21 +116,28 @@ export default function Sales() {
         setDatePreset(preset);
         const today = new Date();
 
+        const formatDate = (date) => {
+            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        };
+
         if (preset === 'today') {
-            const todayStr = getTodayDate();
+            const todayStr = formatDate(today);
             setStartDate(todayStr);
             setEndDate(todayStr);
         } else if (preset === 'week') {
             const weekStart = new Date(today);
-            weekStart.setDate(today.getDate() - today.getDay()); // Həftənin başlanğıcı
-            const weekStartStr = weekStart.toISOString().split('T')[0];
-            const todayStr = getTodayDate();
+            const day = today.getDay(); // 0 is Sunday, 1 is Monday...
+            const diff = (day === 0 ? -6 : 1) - day; // Azerbaijan week starts on Monday
+            weekStart.setDate(today.getDate() + diff);
+
+            const weekStartStr = formatDate(weekStart);
+            const todayStr = formatDate(today);
             setStartDate(weekStartStr);
             setEndDate(todayStr);
         } else if (preset === 'month') {
             const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-            const monthStartStr = monthStart.toISOString().split('T')[0];
-            const todayStr = getTodayDate();
+            const monthStartStr = formatDate(monthStart);
+            const todayStr = formatDate(today);
             setStartDate(monthStartStr);
             setEndDate(todayStr);
         } else if (preset === 'all') {
@@ -139,7 +146,7 @@ export default function Sales() {
         } else if (preset === 'custom') {
             // Custom seçiləndə əgər boşdursa bu günü qoy
             if (!startDate || !endDate) {
-                const todayStr = getTodayDate();
+                const todayStr = formatDate(today);
                 setStartDate(todayStr);
                 setEndDate(todayStr);
             }
