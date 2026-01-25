@@ -6,6 +6,7 @@ import Alert from '../ui/Alert';
 import { MdAttachMoney, MdDescription, MdArrowBack, MdEvent, MdPerson } from 'react-icons/md';
 import { cashHandoverApi, staffApi } from '../../api';
 import { createInputChangeHandler, validateNumberInput } from '../../utils/validation';
+import SearchDropdown from '../ui/SearchDropdown';
 
 export default function CashHandoverForm() {
     const navigate = useNavigate();
@@ -20,7 +21,10 @@ export default function CashHandoverForm() {
     const isEditMode = !!id;
 
     const [formData, setFormData] = useState({
-        date: new Date().toISOString().split('T')[0],
+        date: (() => {
+            const today = new Date();
+            return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        })(),
         amount: '',
         handedOverToId: '',
         handedOverById: '',
@@ -187,7 +191,7 @@ export default function CashHandoverForm() {
 
         try {
             const payload = {
-                date: formData.date ? new Date(formData.date).toISOString() : new Date().toISOString(),
+                date: formData.date || new Date().toISOString().split('T')[0],
                 amount: parseFloat(formData.amount),
                 handedOverToId: formData.handedOverToId,
                 handedOverById: formData.handedOverById,
@@ -327,55 +331,39 @@ export default function CashHandoverForm() {
                             />
                         </div>
 
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                {t('handed_over_to') || 'Kimə təslim edildi'} <span className="text-red-500">*</span>
-                            </label>
-                            <div className="relative">
-                                <MdPerson className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                                <select
-                                    value={formData.handedOverToId}
-                                    onChange={(e) => handleInputChange('handedOverToId', e.target.value)}
-                                    disabled={isLoading || loadingStaff}
-                                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.handedOverToId ? 'border-red-500' : 'border-gray-300'
-                                        }`}
-                                    required
-                                >
-                                    <option value="">{t('select_staff') || 'İşçi seçin'}</option>
-                                    {staffList.map(staff => (
-                                        <option key={staff.id} value={staff.id}>
-                                            {staff.name} {staff.surName || ''}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
+                        <div className="md:col-span-1">
+                            <SearchDropdown
+                                label={t('handed_over_to') || 'Kimə təslim edildi'}
+                                options={staffList}
+                                value={formData.handedOverToId}
+                                onChange={(value) => handleInputChange('handedOverToId', value)}
+                                disabled={isLoading || loadingStaff}
+                                error={!!errors.handedOverToId}
+                                placeholder={t('select_staff') || 'İşçi seçin'}
+                                getOptionLabel={(staff) => `${staff.name} ${staff.surName || ''}`}
+                                getOptionValue={(staff) => staff.id}
+                                searchFields={['name', 'surName']}
+                                className="w-full"
+                            />
                             {errors.handedOverToId && (
                                 <p className="mt-1 text-sm text-red-600">{errors.handedOverToId}</p>
                             )}
                         </div>
 
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                {t('handed_over_by') || 'Kim təslim etdi'} <span className="text-red-500">*</span>
-                            </label>
-                            <div className="relative">
-                                <MdPerson className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                                <select
-                                    value={formData.handedOverById}
-                                    onChange={(e) => handleInputChange('handedOverById', e.target.value)}
-                                    disabled={isLoading || loadingStaff}
-                                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.handedOverById ? 'border-red-500' : 'border-gray-300'
-                                        }`}
-                                    required
-                                >
-                                    <option value="">{t('select_staff') || 'İşçi seçin'}</option>
-                                    {staffList.map(staff => (
-                                        <option key={staff.id} value={staff.id}>
-                                            {staff.name} {staff.surName || ''}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
+                        <div className="md:col-span-1">
+                            <SearchDropdown
+                                label={t('handed_over_by') || 'Kim təslim etdi'}
+                                options={staffList}
+                                value={formData.handedOverById}
+                                onChange={(value) => handleInputChange('handedOverById', value)}
+                                disabled={isLoading || loadingStaff}
+                                error={!!errors.handedOverById}
+                                placeholder={t('select_staff') || 'İşçi seçin'}
+                                getOptionLabel={(staff) => `${staff.name} ${staff.surName || ''}`}
+                                getOptionValue={(staff) => staff.id}
+                                searchFields={['name', 'surName']}
+                                className="w-full"
+                            />
                             {errors.handedOverById && (
                                 <p className="mt-1 text-sm text-red-600">{errors.handedOverById}</p>
                             )}

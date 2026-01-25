@@ -13,7 +13,12 @@ export default function CashHandover() {
     const location = useLocation();
     const [cashHandoverData, setCashHandoverData] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [dateRange, setDateRange] = useState({ start: '', end: '' });
+    const [dateRange, setDateRange] = useState(() => {
+        const today = new Date();
+        const localToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        return { start: localToday, end: localToday };
+    });
+    const [datePreset, setDatePreset] = useState('today');
     const isAdmin = useMemo(() => location.pathname.includes('/admin'), [location.pathname]);
 
     const columns = useMemo(() => [
@@ -222,6 +227,8 @@ export default function CashHandover() {
                 serverSidePagination={true} // To enable date filter in main bar
                 dateRangeValue={dateRange}
                 onDateRangeChange={(start, end) => setDateRange({ start, end })}
+                datePresetValue={datePreset}
+                onDatePresetChange={(preset) => setDatePreset(preset)}
                 loading={loading}
                 emptyState={{
                     icon: 'dollar-sign',

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { statisticsApi } from '../../api';
 import DailySummaryForm from '../forms/DailySummaryForm.jsx';
 import DailySummaryHistory from './DailySummaryHistory.jsx';
+import DailySummaryDetailModal from './DailySummaryDetailModal.jsx';
 import Alert from '../ui/Alert';
 import {
   TrendingUp,
@@ -27,6 +28,7 @@ export default function Statistics() {
   const [loading, setLoading] = useState(true);
   const [showDailyForm, setShowDailyForm] = useState(false);
   const [showDailyHistory, setShowDailyHistory] = useState(false);
+  const [selectedSummaryId, setSelectedSummaryId] = useState(null);
 
   // Default tarixləri bu günə təyin et
   const getTodayDate = () => {
@@ -143,11 +145,25 @@ export default function Statistics() {
         <DailySummaryHistory
           onClose={() => setShowDailyHistory(false)}
           onSelect={(row) => {
+            setSelectedSummaryId(row.id);
+            // URL-i yeniləmək isteğe bağlıdır, amma detail üçün id-ni saxlayırıq
             const currentUrl = new URL(window.location.href);
             currentUrl.searchParams.set('dailySummaryId', row.id);
             window.history.replaceState({}, '', currentUrl.toString());
-            setShowDailyHistory(false);
-            setShowDailyForm(true);
+            // Tarixçəni bağlamırıq ki, geri dönmək rahat olsun, 
+            // modal z-index ilə üstə çıxacaq.
+          }}
+        />
+      )}
+
+      {selectedSummaryId && (
+        <DailySummaryDetailModal
+          id={selectedSummaryId}
+          onClose={() => {
+            setSelectedSummaryId(null);
+            const currentUrl = new URL(window.location.href);
+            currentUrl.searchParams.delete('dailySummaryId');
+            window.history.replaceState({}, '', currentUrl.toString());
           }}
         />
       )}
@@ -224,7 +240,7 @@ export default function Statistics() {
                 {overallData.cashHandover && overallData.cashHandover.totalAmount > 0 && (
                   <div className="flex justify-between items-center">
                     <span className="text-blue-100 text-sm">{t('cash_handover') || 'Məbləğ Təslimi'}:</span>
-                    <span className="text-xl font-semibold text-orange-200">-{formatCurrency(overallData.cashHandover.totalAmount)} AZN</span>
+                    <span className="text-xl font-semibold text-orange-200">{formatCurrency(overallData.cashHandover.totalAmount)} AZN</span>
                   </div>
                 )}
 

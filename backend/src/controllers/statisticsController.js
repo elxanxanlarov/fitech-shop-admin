@@ -86,7 +86,10 @@ export const getOverallStatistics = async (req, res) => {
             const end = new Date(endDate); end.setHours(23, 59, 59, 999);
             expenseDateFilter = { date: { gte: start, lte: end } };
         }
-        const expensesAggregation = await prisma.expense.aggregate({ where: expenseDateFilter, _sum: { amount: true } });
+        const expensesAggregation = await prisma.expense.aggregate({ 
+            where: { deleteType: 'NONE', ...expenseDateFilter }, 
+            _sum: { amount: true } 
+        });
 
         // ================= CASH HANDOVER =================
         let cashHandoverDateFilter = {};
@@ -96,7 +99,7 @@ export const getOverallStatistics = async (req, res) => {
             cashHandoverDateFilter = { date: { gte: start, lte: end } };
         }
         const cashHandoverAggregation = await prisma.cashHandover.aggregate({
-            where: cashHandoverDateFilter,
+            where: { deleteType: 'NONE', ...cashHandoverDateFilter },
             _sum: { amount: true },
             _count: true
         });
@@ -139,8 +142,8 @@ export const getOverallStatistics = async (req, res) => {
                 _sum: { returnedAmount: true } 
             });
             
-            todayExpensesAggregation = await prisma.expense.aggregate({ where: { date: { gte: today, lt: tomorrow } }, _sum: { amount: true } });
-            todayCashHandoverAggregation = await prisma.cashHandover.aggregate({ where: { date: { gte: today, lt: tomorrow } }, _sum: { amount: true }, _count: true });
+            todayExpensesAggregation = await prisma.expense.aggregate({ where: { deleteType: 'NONE', date: { gte: today, lt: tomorrow } }, _sum: { amount: true } });
+            todayCashHandoverAggregation = await prisma.cashHandover.aggregate({ where: { deleteType: 'NONE', date: { gte: today, lt: tomorrow } }, _sum: { amount: true }, _count: true });
             const todayCreditFilter = { isCredit: true, deleteType: 'NONE', createdAt: { gte: today, lt: tomorrow } };
             todayCreditSales = await prisma.sale.count({ where: todayCreditFilter });
             todayCreditSalesAggregation = await prisma.sale.aggregate({ where: todayCreditFilter, _sum: { creditTotalAmount: true, creditRemainingAmount: true } });

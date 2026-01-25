@@ -74,8 +74,9 @@ export default function TableTamplate({
     }
     // Default to today for server-side
     if (serverSidePagination) {
-      const today = new Date().toISOString().split('T')[0];
-      return { start: today, end: today };
+      const today = new Date();
+      const localToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      return { start: localToday, end: localToday };
     }
     return { start: '', end: '' };
   });
@@ -363,13 +364,13 @@ export default function TableTamplate({
   // Get today date helper
   const getTodayDate = () => {
     const today = new Date();
-    return today.toISOString().split('T')[0];
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   };
 
   // Handle date preset change for server-side
   const handleDatePresetChange = (preset) => {
     setDatePreset(preset);
-    if (!serverSidePagination || !onDatePresetChange) return;
+    if (!serverSidePagination) return;
 
     const today = new Date();
     let startDate, endDate;

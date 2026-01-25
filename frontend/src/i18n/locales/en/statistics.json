@@ -69,5 +69,6 @@
   "print_summary": "Print summary only",
   "print_full": "Print summary with products",
   "revenue_calculation": "Revenue Calculation",
-  "net_revenue": "Net Revenue"
+  "net_revenue": "Net Revenue",
+  "period_totals": "Period Totals"
 }

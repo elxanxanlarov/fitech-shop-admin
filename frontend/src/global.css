@@ -1,7 +1,9 @@
 @import "tailwindcss";
 
-input , select, textarea {
-    outline: none;
+input,
+select,
+textarea {
+  outline: none;
 }
 
 /* Yekun Təslimat / Günlük yekun print üçün yalnız müəyyən hissənin çıxması */
@@ -9,10 +11,12 @@ input , select, textarea {
   body * {
     visibility: hidden;
   }
+
   .final-delivery-print,
   .final-delivery-print * {
     visibility: visible;
   }
+
   .final-delivery-print {
     position: absolute;
     inset: 0;
@@ -24,12 +28,14 @@ input , select, textarea {
   .daily-summary-print * {
     visibility: visible;
   }
+
   .daily-summary-print {
     position: absolute;
     inset: 0;
     margin: 0;
     padding: 0;
   }
+
   /* Yalnız ümumi məlumat üçün: məhsul cədvəlini gizlət */
   .daily-summary-print.summary-only .daily-summary-product-table {
     display: none !important;

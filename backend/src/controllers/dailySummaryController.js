@@ -112,31 +112,31 @@ export const generateDailySummaryForDate = async ({ date, note, staffId = null }
     });
   }
 
-  // Activity log
+  // Activity log (ehtiyac olsa genişləndirilə bilər)
   try {
-    await createActivityLog({
-      staffId,
-      entityType: "DailySummary",
-      entityId: summary.id,
-      action: existing ? "UPDATE" : "CREATE",
-      description: `Günlük yekun ${existing ? "yeniləndi" : "yaradıldı"}: ${start
-        .toISOString()
-        .split("T")[0]}`,
-      changes: {
-        date: summary.date.toISOString(),
-        totalSalesCount: summary.totalSalesCount,
-        totalProducts: summary.totalProducts,
-        totalQuantity: summary.totalQuantity,
-        totalRevenue: summary.totalRevenue.toString(),
-        totalPurchase: summary.totalPurchase.toString(),
-        totalProfit: summary.totalProfit.toString(),
-      },
-    });
-  } catch (logErr) {
-    console.error("DailySummary activity log error:", logErr);
-  }
+    const { start, end } = getDayRange(date);
+    const [expensesAgg, handoversAgg] = await Promise.all([
+      prisma.expense.aggregate({
+        _sum: { amount: true },
+        where: { date: { gte: start, lte: end }, deleteType: "NONE" }
+      }),
+      prisma.cashHandover.aggregate({
+        _sum: { amount: true },
+        where: { date: { gte: start, lte: end }, deleteType: "NONE" }
+      })
+    ]);
 
-  return { summary, existing, hasSales };
+    return { 
+      summary, 
+      existing, 
+      hasSales, 
+      totalExpenses: Number(expensesAgg._sum.amount || 0), 
+      totalCashHandover: Number(handoversAgg._sum.amount || 0) 
+    };
+  } catch (err) {
+    console.error("Activity log or summary data enrichment error:", err);
+    return { summary, existing, hasSales, totalExpenses: 0, totalCashHandover: 0 };
+  }
 };
 
 // Günlük yekun yarat (və ya yenilə) - istifadəçi tərəfindən çağırılan API
@@ -286,8 +286,31 @@ export const getDailySummaryById = async (req, res) => {
       });
     }
 
-    // Eyni gündəki satışlardan məhsul-level detallar
-    const { start, end } = getDayRange(summary.date.toISOString().split('T')[0]);
+    // Eyni gündəki hərəkətlər üçün tarix aralığını tam müəyyən edək (timezone sürüşməsini önləmək üçün)
+    const year = summary.date.getFullYear();
+    const month = String(summary.date.getMonth() + 1).padStart(2, '0');
+    const day = String(summary.date.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+    const { start, end } = getDayRange(dateStr);
+
+    // Xərcləri və təslimatları da gətirək
+    const [expensesAgg, handoversAgg] = await Promise.all([
+      prisma.expense.aggregate({
+        _sum: { amount: true },
+        _count: true,
+        where: { date: { gte: start, lte: end }, deleteType: "NONE" }
+      }),
+      prisma.cashHandover.aggregate({
+        _sum: { amount: true },
+        _count: true,
+        where: { date: { gte: start, lte: end }, deleteType: "NONE" }
+      })
+    ]);
+
+    const totalExpenses = Number(expensesAgg._sum.amount || 0);
+    const totalExpensesCount = expensesAgg._count || 0;
+    const totalCashHandover = Number(handoversAgg._sum.amount || 0);
+    const totalCashHandoverCount = handoversAgg._count || 0;
 
     const sales = await prisma.sale.findMany({
       where: {
@@ -339,6 +362,10 @@ export const getDailySummaryById = async (req, res) => {
       success: true,
       data: summary,
       productDetails,
+      totalExpenses,
+      totalExpensesCount,
+      totalCashHandover,
+      totalCashHandoverCount
     });
   } catch (error) {
     console.error("getDailySummaryById error", error);

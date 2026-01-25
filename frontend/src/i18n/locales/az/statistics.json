@@ -69,5 +69,6 @@
   "print_summary": "Yalnız ümumi məlumatı çap et",
   "print_full": "Ümumi məlumat + məhsullar siyahısını çap et",
   "revenue_calculation": "Gəlir Hesablaması",
-  "net_revenue": "Xalis Gəlir"
+  "net_revenue": "Xalis Gəlir",
+  "period_totals": "Seçilmiş dövrün cəmi"
 }

@@ -124,7 +124,7 @@ export default function DailySummaryForm({ onClose, onCreated }) {
             )}
             <button
               onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+              className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
             >
               ×
             </button>
@@ -152,9 +152,8 @@ export default function DailySummaryForm({ onClose, onCreated }) {
 
           {isDetail && detail && (
             <div
-              className={`daily-summary-print ${
-                printMode === 'summary' ? 'summary-only' : 'full'
-              }`}
+              className={`daily-summary-print ${printMode === 'summary' ? 'summary-only' : 'full'
+                }`}
             >
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm bg-gray-50 border border-gray-200 rounded-lg p-4">
                 <div>

@@ -22,13 +22,13 @@ export const getAllCashHandovers = async (req, res) => {
         if (startDate || endDate) {
             where.date = {};
             if (startDate) {
-                const start = new Date(startDate);
-                start.setHours(0, 0, 0, 0);
+                const [year, month, day] = startDate.split('-').map(Number);
+                const start = new Date(year, month - 1, day, 0, 0, 0, 0);
                 where.date.gte = start;
             }
             if (endDate) {
-                const end = new Date(endDate);
-                end.setHours(23, 59, 59, 999);
+                const [year, month, day] = endDate.split('-').map(Number);
+                const end = new Date(year, month - 1, day, 23, 59, 59, 999);
                 where.date.lte = end;
             }
         }
@@ -172,8 +172,19 @@ export const createCashHandover = async (req, res) => {
         }
 
         // Tarix təyin et
-        let handoverDate = date ? new Date(date) : new Date();
-        handoverDate.setHours(0, 0, 0, 0);
+        let handoverDate;
+        if (date) {
+            if (typeof date === 'string' && date.includes('-') && !date.includes('T')) {
+                const [y, m, d] = date.split('-').map(Number);
+                handoverDate = new Date(y, m - 1, d, 0, 0, 0, 0);
+            } else {
+                handoverDate = new Date(date);
+                handoverDate.setHours(0, 0, 0, 0);
+            }
+        } else {
+            handoverDate = new Date();
+            handoverDate.setHours(0, 0, 0, 0);
+        }
 
         // Mövcud gəliri yoxla
         const nextDate = new Date(handoverDate);
@@ -341,8 +352,17 @@ export const updateCashHandover = async (req, res) => {
         }
 
         // Tarix təyin et
-        let handoverDate = date ? new Date(date) : existingCashHandover.date;
+        let handoverDate;
         if (date) {
+            if (typeof date === 'string' && date.includes('-') && !date.includes('T')) {
+                const [y, m, d] = date.split('-').map(Number);
+                handoverDate = new Date(y, m - 1, d, 0, 0, 0, 0);
+            } else {
+                handoverDate = new Date(date);
+                handoverDate.setHours(0, 0, 0, 0);
+            }
+        } else {
+            handoverDate = new Date(existingCashHandover.date);
             handoverDate.setHours(0, 0, 0, 0);
         }
 
@@ -583,8 +603,14 @@ export const getAvailableRevenueByDate = async (req, res) => {
         }
 
         // Tarixi təyin et
-        const selectedDate = new Date(date);
-        selectedDate.setHours(0, 0, 0, 0);
+        let selectedDate;
+        if (typeof date === 'string' && date.includes('-') && !date.includes('T')) {
+            const [y, m, d] = date.split('-').map(Number);
+            selectedDate = new Date(y, m - 1, d, 0, 0, 0, 0);
+        } else {
+            selectedDate = new Date(date);
+            selectedDate.setHours(0, 0, 0, 0);
+        }
         const nextDate = new Date(selectedDate);
         nextDate.setDate(nextDate.getDate() + 1);
 
