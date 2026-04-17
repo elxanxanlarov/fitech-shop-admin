@@ -18,5 +18,8 @@ export { creditPaymentApi } from './creditPayment.js';
 export { notificationApi } from './notification.js';
 export { finalDeliveryApi } from './finalDelivery.js';
 export { dailySummaryApi } from './dailySummary.js';
+export { branchApi } from './branch.js';
+export { stockTransferApi } from './stockTransfer.js';
+export { convertApi } from './convert.js';
 export { default as api } from './axios.js';
 

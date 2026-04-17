@@ -6,9 +6,16 @@ import { decreaseProductStock, increaseProductStock, calculateProductPrice, calc
 
 export const getAllSales = async (req, res) => {
     try {
-        const { deleteType, includeDeleted, startDate, endDate } = req.query;
+        const { deleteType, includeDeleted, startDate, endDate, branchId } = req.query;
         
         const where = {};
+
+        // Branch filter
+        if (branchId && branchId !== 'central') {
+            where.branchId = branchId;
+        } else if (branchId === 'central') {
+            where.branchId = null;
+        }
         
         // DeleteType filter - default olaraq yalnız silinməyən satışları göstər
         if (includeDeleted === 'true') {
@@ -101,7 +108,8 @@ export const createSale = async (req, res) => {
             note, 
             paymentType,
             isCredit,
-            creditTermId
+            creditTermId,
+            branchId // From BranchContext
         } = req.body;
 
         if (!items || !Array.isArray(items) || items.length === 0) {
@@ -133,7 +141,21 @@ export const createSale = async (req, res) => {
             }
 
             // Stock yoxla (qutu/ədəd məntiqinə uyğun)
-            const availableStock = calculateProductStock(product);
+            let productForStock = product;
+            if (branchId && branchId !== 'central') {
+                const bStock = await prisma.branchstock.findFirst({
+                    where: {
+                        branchId: branchId,
+                        productId: productId
+                    }
+                });
+                if (!bStock) {
+                    return res.status(400).json({ success: false, message: `Bu filialda məhsul tapılmadı: ${product.name}` });
+                }
+                productForStock = { ...product, ...bStock }; // Use branch stock values
+            }
+
+            const availableStock = calculateProductStock(productForStock);
             if (availableStock < quantity) {
                 return res.status(400).json({ 
                     success: false, 
@@ -180,7 +202,7 @@ export const createSale = async (req, res) => {
         // Kredit məntiqini hesabla
         let creditData = {};
         if (isCredit && creditTermId) {
-            const creditTerm = await prisma.creditTerm.findUnique({
+            const creditTerm = await prisma.creditterm.findUnique({
                 where: { id: creditTermId }
             });
 
@@ -235,6 +257,7 @@ export const createSale = async (req, res) => {
                 profitAmount: totalProfit,
                 paymentType: paymentType || 'cash', // "cash" (nagd) və ya "card" (kart)
                 note: note?.trim() || null,
+                branchId: (branchId && branchId !== 'central') ? branchId : null,
                 ...creditData,
                 items: {
                     create: saleItems
@@ -258,17 +281,39 @@ export const createSale = async (req, res) => {
             if (!product) continue;
 
             try {
-                // Stok azalt (qutu/ədəd məntiqinə uyğun)
-                const newStockData = decreaseProductStock(product, item.quantity);
+                if (branchId && branchId !== 'central') {
+                    // Filial stokunu azalt
+                    const bStock = await prisma.branchstock.findFirst({
+                        where: {
+                            branchId: branchId,
+                            productId: item.productId
+                        }
+                    });
+                    
+                    const branchStockWithMeta = { ...product, ...bStock };
+                    const newStockData = decreaseProductStock(branchStockWithMeta, item.quantity);
 
-                await prisma.product.update({
-                    where: { id: item.productId },
-                    data: {
-                        stock: newStockData.stock,
-                        fullBoxes: newStockData.fullBoxes,
-                        openedBoxQuantity: newStockData.openedBoxQuantity
-                    }
-                });
+                    await prisma.branchstock.update({
+                        where: { id: bStock.id },
+                        data: {
+                            stock: newStockData.stock,
+                            fullBoxes: newStockData.fullBoxes,
+                            openedBoxQuantity: newStockData.openedBoxQuantity
+                        }
+                    });
+                } else {
+                    // Mərkəz anbar stokunu azalt
+                    const newStockData = decreaseProductStock(product, item.quantity);
+
+                    await prisma.product.update({
+                        where: { id: item.productId },
+                        data: {
+                            stock: newStockData.stock,
+                            fullBoxes: newStockData.fullBoxes,
+                            openedBoxQuantity: newStockData.openedBoxQuantity
+                        }
+                    });
+                }
             } catch (stockError) {
                 console.error(`Stok yenilənərkən xəta (${product.name}):`, stockError);
                 // Xətanı log et, amma satışı ləğv etmə
@@ -290,14 +335,15 @@ export const createSale = async (req, res) => {
                 const initialPaymentType = req.body.initialPaymentType || 'cash';
                 
                 // İlk ödənişi yarat
-                await prisma.creditPayment.create({
+                await prisma.creditpayment.create({
                     data: {
                         saleId: sale.id,
                         amount: initialPaymentAmount,
                         paymentType: initialPaymentType,
                         paymentDate: new Date(),
                         note: 'Bu ayın ödənişi',
-                        staffId: req.staffId || null
+                        staffId: req.staffId || null,
+                        branchId: sale.branchId
                     }
                 });
                 
@@ -432,7 +478,7 @@ export const deleteSale = async (req, res) => {
         if (validDeleteType === 'HARD') {
             // Hard delete - stokları geri qaytar və tamamilə sil
             // Qaytarmaları yüklə (qalan miqdarı hesablamaq üçün)
-            const saleReturns = await prisma.saleReturn.findMany({
+            const saleReturns = await prisma.salereturn.findMany({
                 where: { saleId: id },
                 include: {
                     items: {
@@ -461,7 +507,7 @@ export const deleteSale = async (req, res) => {
                 // 1) Delete SaleReturnItem entries that reference these sale items
                 if (saleItemIds.length > 0) {
                     console.log(`Deleting SaleReturnItem by saleItemId count: ${saleItemIds.length}`);
-                    await prisma.saleReturnItem.deleteMany({ where: { saleItemId: { in: saleItemIds } } });
+                    await prisma.salereturnitem.deleteMany({ where: { saleItemId: { in: saleItemIds } } });
                 }
 
                 // 2) Find SaleReturn records for this sale and delete their items
@@ -469,9 +515,9 @@ export const deleteSale = async (req, res) => {
                 const returnIds = saleReturns.map(r => r.id);
                 if (returnIds.length > 0) {
                     console.log(`Deleting SaleReturnItem by returnId count: ${returnIds.length}`);
-                    await prisma.saleReturnItem.deleteMany({ where: { returnId: { in: returnIds } } });
+                    await prisma.salereturnitem.deleteMany({ where: { returnId: { in: returnIds } } });
                     console.log(`Deleting SaleReturn records count: ${returnIds.length}`);
-                    await prisma.saleReturn.deleteMany({ where: { id: { in: returnIds } } });
+                    await prisma.salereturn.deleteMany({ where: { id: { in: returnIds } } });
                 }
 
                 // 3) İndi stokları geri qaytar (yalnız qalan miqdarı)
@@ -511,7 +557,7 @@ export const deleteSale = async (req, res) => {
                 // 4) Delete SaleItem records for this sale
                 if (saleItemIds.length > 0) {
                     console.log(`Deleting SaleItem records count: ${saleItemIds.length}`);
-                    await prisma.saleItem.deleteMany({ where: { id: { in: saleItemIds } } });
+                    await prisma.saleitem.deleteMany({ where: { id: { in: saleItemIds } } });
                 }
 
                 // 4) Delete any receipts linked to this sale (should cascade, but be explicit)

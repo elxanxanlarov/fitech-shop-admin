@@ -1,12 +1,67 @@
 import prisma from "../lib/prisma.js";
 import bcrypt from "bcryptjs";
 import { createActivityLog } from "./activityLogController.js";
+import { migrateStaffToBranch, ensureBranch } from "../utils/branchHelper.js";
+
+/** Superadmin və baş admin (admin + isBoss) heç vaxt filiala bağlı olmamalıdır */
+const privilegedNoBranchWhere = {
+    OR: [
+        { role: { name: "superadmin" } },
+        { AND: [{ role: { name: "admin" } }, { isBoss: true }] },
+    ],
+};
+
+async function stripBranchFromPrivilegedStaff() {
+    await prisma.staff.updateMany({
+        where: {
+            branchId: { not: null },
+            ...privilegedNoBranchWhere,
+        },
+        data: { branchId: null },
+    });
+}
+
+function isPrivilegedStaff(roleName, isBoss) {
+    const rn = (roleName || "").toLowerCase();
+    return rn === "superadmin" || (rn === "admin" && isBoss);
+}
+
+/** Superadmin və Baş Admin başqa filial təyin edə bilər; filial admin / reception yalnız öz filialı */
+function requesterCanPickAnyBranch(requester) {
+    const r = requester?.role?.name?.toLowerCase();
+    return r === "superadmin" || (r === "admin" && requester?.isBoss === true);
+}
 
 export const getAllStaff = async (req, res) => {
     try {
+      const { branchId } = req.query;
+      const where = {};
+
+      // Kürdəxanı filialının mövcudluğunu sığortalayırıq və işçiləri ora köçürürük
+      const kurdaxani = await ensureBranch("Kürdəxanı", "Kürdəxanı qəsəbəsi");
+      if (kurdaxani) {
+        await migrateStaffToBranch(kurdaxani.id);
+      }
+
+      await stripBranchFromPrivilegedStaff();
+
+      if (branchId) {
+          if (branchId === "null") {
+              where.branchId = null;
+          } else {
+              // Filial üzrə filter + superadmin və baş admin həmişə siyahıda
+              where.OR = [
+                  { branchId },
+                  ...privilegedNoBranchWhere.OR,
+              ];
+          }
+      }
+
       const staffList = await prisma.staff.findMany({
+        where,
         include: {
           role: true,
+          branch: true,
         },
         orderBy: {
           createdAt: 'desc',
@@ -33,6 +88,7 @@ export const getStaffById = async (req, res) => {
           where: { id },
           include: {
             role: true,
+            branch: true,
           },
         });
 
@@ -40,6 +96,23 @@ export const getStaffById = async (req, res) => {
             return res.status(404).json({
                 success: false,
                 messagge: "Staff tapılmadı",
+            });
+        }
+
+        const requester = await prisma.staff.findUnique({
+            where: { id: req.staffId },
+            include: { role: true },
+        });
+        const requesterRole = requester?.role?.name?.toLowerCase();
+        const viewingOther = staff.id !== req.staffId;
+        if (
+            viewingOther &&
+            isPrivilegedStaff(staff.role?.name, staff.isBoss) &&
+            requesterRole !== "superadmin"
+        ) {
+            return res.status(403).json({
+                success: false,
+                message: "Superadmin və Baş Admin məlumatlarına yalnız Superadmin baxa bilər",
             });
         }
 
@@ -58,7 +131,7 @@ export const getStaffById = async (req, res) => {
 
 export const createStaff = async (req, res) => {
     try {
-        const { name, surName, phone, email, password, roleId, isActive } = req.body;
+        const { name, surName, phone, email, password, roleId, branchId, isActive, isBoss } = req.body;
         if (!name || !surName) {
             return res.status(400).json({
                 success: false,
@@ -72,6 +145,29 @@ export const createStaff = async (req, res) => {
           hashedPassword = await bcrypt.hash(password.trim(), 10);
         }
 
+        const bossFlag = typeof isBoss === "boolean" ? isBoss : false;
+        const roleRec = roleId
+            ? await prisma.role.findUnique({ where: { id: roleId.trim() } })
+            : null;
+
+        const requester = await prisma.staff.findUnique({
+            where: { id: req.staffId },
+            include: { role: true },
+        });
+        const requesterRole = requester?.role?.name?.toLowerCase();
+        if (isPrivilegedStaff(roleRec?.name, bossFlag) && requesterRole !== "superadmin") {
+            return res.status(403).json({
+                success: false,
+                message: "Superadmin və Baş Admin yalnız Superadmin tərəfindən yaradıla bilər",
+            });
+        }
+
+        const forceNoBranch = isPrivilegedStaff(roleRec?.name, bossFlag);
+        let finalBranchId = forceNoBranch ? null : (branchId ? branchId.trim() : null);
+        if (!forceNoBranch && !requesterCanPickAnyBranch(requester) && requester?.branchId) {
+            finalBranchId = requester.branchId;
+        }
+
         const newStaff = await prisma.staff.create({
           data: {
             name: name.trim(),
@@ -80,7 +176,9 @@ export const createStaff = async (req, res) => {
             email: email ? email.trim() : null,
             password: hashedPassword,
             roleId: roleId ? roleId.trim() : null,
+            branchId: finalBranchId,
             isActive: typeof isActive === "boolean" ? isActive : true,
+            isBoss: bossFlag,
           }
         });
 
@@ -88,6 +186,7 @@ export const createStaff = async (req, res) => {
         try {
             await createActivityLog({
                 staffId: req.staffId || null,
+                branchId: newStaff.branchId || null,
                 entityType: "Staff",
                 entityId: newStaff.id,
                 action: "CREATE",
@@ -98,7 +197,9 @@ export const createStaff = async (req, res) => {
                     email: newStaff.email,
                     phone: newStaff.phone,
                     roleId: newStaff.roleId,
-                    isActive: newStaff.isActive
+                    branchId: newStaff.branchId,
+                    isActive: newStaff.isActive,
+                    isBoss: newStaff.isBoss
                 }
             });
         } catch (logError) {
@@ -124,10 +225,11 @@ export const createStaff = async (req, res) => {
 export const updateStaff = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, surName, phone, email, password, roleId, isActive } = req.body;
+        const { name, surName, phone, email, password, roleId, branchId, isActive, isBoss } = req.body;
         
         const existingStaff = await prisma.staff.findUnique({
-          where: { id }
+          where: { id },
+          include: { role: true }
         });
         
         if (!existingStaff) {
@@ -136,7 +238,14 @@ export const updateStaff = async (req, res) => {
                 message: "Staff tapılmadı",
             });
         }
+
+        const requester = await prisma.staff.findUnique({
+            where: { id: req.staffId },
+            include: { role: true }
+        });
         
+        const requesterRole = requester?.role?.name?.toLowerCase();
+
         // Password varsa hash et
         let hashedPassword = existingStaff.password;
         if (password !== undefined) {
@@ -147,6 +256,51 @@ export const updateStaff = async (req, res) => {
           }
         }
         
+        const effectiveRoleId =
+            roleId !== undefined ? (roleId?.trim() || null) : existingStaff.roleId;
+        const effectiveIsBoss =
+            typeof isBoss === "boolean" ? isBoss : existingStaff.isBoss;
+
+        let roleForBranch = existingStaff.role;
+        if (effectiveRoleId && effectiveRoleId !== existingStaff.roleId) {
+            roleForBranch = await prisma.role.findUnique({
+                where: { id: effectiveRoleId },
+            });
+        }
+
+        const targetWasPrivileged = isPrivilegedStaff(
+            existingStaff.role?.name,
+            existingStaff.isBoss
+        );
+        const targetWillBePrivileged = isPrivilegedStaff(
+            roleForBranch?.name,
+            effectiveIsBoss
+        );
+        if (
+            (targetWasPrivileged || targetWillBePrivileged) &&
+            requesterRole !== "superadmin"
+        ) {
+            return res.status(403).json({
+                success: false,
+                message:
+                    "Superadmin və Baş Admin üzrə dəyişiklik yalnız Superadmin tərəfindən edilə bilər",
+            });
+        }
+
+        const forceNoBranch = isPrivilegedStaff(roleForBranch?.name, effectiveIsBoss);
+
+        let nextBranchId;
+        if (forceNoBranch) {
+            nextBranchId = null;
+        } else if (branchId !== undefined) {
+            nextBranchId = branchId?.trim() || null;
+        } else {
+            nextBranchId = existingStaff.branchId;
+        }
+        if (!forceNoBranch && !requesterCanPickAnyBranch(requester) && requester?.branchId) {
+            nextBranchId = requester.branchId;
+        }
+
         const updated = await prisma.staff.update({
           where: { id },
           data: {
@@ -155,8 +309,10 @@ export const updateStaff = async (req, res) => {
             phone: phone !== undefined ? (phone?.trim() || null) : existingStaff.phone,
             email: email !== undefined ? (email?.trim() || null) : existingStaff.email,
             password: hashedPassword,
-            roleId: roleId !== undefined ? (roleId?.trim() || null) : existingStaff.roleId,
+            roleId: effectiveRoleId,
+            branchId: nextBranchId,
             isActive: typeof isActive === "boolean" ? isActive : existingStaff.isActive,
+            isBoss: effectiveIsBoss,
           }
         });
 
@@ -167,12 +323,15 @@ export const updateStaff = async (req, res) => {
             if (surName !== undefined && surName !== existingStaff.surName) changes.surName = { old: existingStaff.surName, new: updated.surName };
             if (phone !== undefined && phone !== existingStaff.phone) changes.phone = { old: existingStaff.phone, new: updated.phone };
             if (email !== undefined && email !== existingStaff.email) changes.email = { old: existingStaff.email, new: updated.email };
-            if (roleId !== undefined && roleId !== existingStaff.roleId) changes.roleId = { old: existingStaff.roleId, new: updated.roleId };
+            if (effectiveRoleId !== existingStaff.roleId) changes.roleId = { old: existingStaff.roleId, new: effectiveRoleId };
+            if (nextBranchId !== existingStaff.branchId) changes.branchId = { old: existingStaff.branchId, new: nextBranchId };
             if (isActive !== undefined && isActive !== existingStaff.isActive) changes.isActive = { old: existingStaff.isActive, new: updated.isActive };
+            if (isBoss !== undefined && isBoss !== existingStaff.isBoss) changes.isBoss = { old: existingStaff.isBoss, new: updated.isBoss };
             if (password !== undefined) changes.password = { changed: true };
 
             await createActivityLog({
                 staffId: req.staffId || null,
+                branchId: updated.branchId || null,
                 entityType: "Staff",
                 entityId: updated.id,
                 action: "UPDATE",
@@ -202,7 +361,8 @@ export const deleteStaff = async (req, res) => {
     try {
         const { id } = req.params;
         const existingStaff = await prisma.staff.findUnique({
-          where: { id }
+          where: { id },
+          include: { role: true }
         });
         
         if (!existingStaff) {
@@ -211,7 +371,24 @@ export const deleteStaff = async (req, res) => {
                 message: "Staff tapılmadı",
             });
         }
+
+        const requester = await prisma.staff.findUnique({
+            where: { id: req.staffId },
+            include: { role: true }
+        });
         
+        const requesterRole = requester?.role?.name?.toLowerCase();
+
+        if (
+            isPrivilegedStaff(existingStaff.role?.name, existingStaff.isBoss) &&
+            requesterRole !== "superadmin"
+        ) {
+            return res.status(403).json({
+                success: false,
+                message: "Superadmin və Baş Admin yalnız Superadmin tərəfindən silinə bilər",
+            });
+        }
+
         await prisma.staff.delete({
           where: { id }
         });
@@ -220,6 +397,7 @@ export const deleteStaff = async (req, res) => {
         try {
             await createActivityLog({
                 staffId: req.staffId || null,
+                branchId: existingStaff.branchId || null,
                 entityType: "Staff",
                 entityId: existingStaff.id,
                 action: "DELETE",
@@ -228,7 +406,8 @@ export const deleteStaff = async (req, res) => {
                     name: existingStaff.name,
                     surName: existingStaff.surName,
                     email: existingStaff.email,
-                    phone: existingStaff.phone
+                    phone: existingStaff.phone,
+                    branchId: existingStaff.branchId
                 }
             });
         } catch (logError) {

@@ -22,6 +22,9 @@ import creditPaymentRoutes from "./src/routes/creditPaymentRoutes.js";
 import notificationRoutes from "./src/routes/notificationRoutes.js";
 import finalDeliveryRoutes from "./src/routes/finalDeliveryRoutes.js";
 import dailySummaryRoutes from "./src/routes/dailySummaryRoutes.js";
+import branchRoutes from "./src/routes/branchRoutes.js";
+import stockTransferRoutes from "./src/routes/stockTransferRoutes.js";
+import convertRoutes from "./src/routes/convertRoutes.js";
 import { seedData } from "./src/seed/seedData.js";
 import { checkCreditPaymentDue } from "./src/controllers/notificationController.js";
 import { generateDailySummaryForDate } from "./src/controllers/dailySummaryController.js";
@@ -80,6 +83,9 @@ app.use("/api/credit-payment", creditPaymentRoutes);
 app.use("/api/notification", notificationRoutes);
 app.use("/api/final-delivery", finalDeliveryRoutes);
 app.use("/api/daily-summary", dailySummaryRoutes);
+app.use("/api/branch", branchRoutes);
+app.use("/api/stock-transfer", stockTransferRoutes);
+app.use("/api/convert", convertRoutes);
 
 app.get("/api/health", (req, res) => {
   res.json({

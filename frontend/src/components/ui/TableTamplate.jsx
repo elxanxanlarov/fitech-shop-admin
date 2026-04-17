@@ -58,14 +58,17 @@ export default function TableTamplate({
   onFilterChange = null,
   onTempFilterChange = null,
   searchPlaceholder = '',
-  headerRightContent = null
+  headerRightContent = null,
+  activeFilters = {}, // Xaricdən gələn aktiv filterlər (localStorage-dan)
+  /** Verilərsə, sətir üzrə əməliyyatlar (redaktə/sil/checkbox) yalnız true qaytaranda aktiv olur; false olanda mətn göstərilmir */
+  rowActionsAllowed = null
 }) {
   const { t } = useTranslation('admin-panel');
   const { t: tProduct } = useTranslation('product');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRows, setSelectedRows] = useState([]);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
-  const [filters, setFilters] = useState({});
+  const [filters, setFilters] = useState(() => activeFilters || {});
   const [tempFilters, setTempFilters] = useState({}); // Temporary filters for dropdown
   const [dateRange, setDateRange] = useState(() => {
     // If server-side pagination with date range value, use it, otherwise default
@@ -939,14 +942,18 @@ export default function TableTamplate({
                     {(() => {
                       const roleName = item.role?.name || item.role || '';
                       const isSuperadmin = roleName.toLowerCase() === 'superadmin';
-                      const isCoreRole = item.isCore === true; // Əsas rol yoxlaması
+                      const isCoreRole = item.isCore === true;
+                      const locked =
+                        typeof rowActionsAllowed === 'function'
+                          ? !rowActionsAllowed(item)
+                          : isSuperadmin || isCoreRole;
 
                       return (
                         <input
                           type="checkbox"
                           checked={selectedRows.includes(item.id)}
                           onChange={() => handleSelectRow(item.id)}
-                          disabled={isSuperadmin || isCoreRole}
+                          disabled={locked}
                           className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                         />
                       );
@@ -968,10 +975,14 @@ export default function TableTamplate({
                     {(() => {
                       const roleName = item.role?.name || item.role || '';
                       const isSuperadmin = roleName.toLowerCase() === 'superadmin';
-                      const isCoreRole = item.isCore === true || item.role?.isCore === true; // Əsas rol yoxlaması
+                      const isCoreRole = item.isCore === true || item.role?.isCore === true;
+                      const locked =
+                        typeof rowActionsAllowed === 'function'
+                          ? !rowActionsAllowed(item)
+                          : isSuperadmin || isCoreRole;
 
-                      if (isSuperadmin || isCoreRole) {
-                        return (
+                      if (locked) {
+                        return typeof rowActionsAllowed === 'function' ? null : (
                           <span className="text-gray-400 text-xs">{t('restricted') || 'Məhdudiyyətli'}</span>
                         );
                       }

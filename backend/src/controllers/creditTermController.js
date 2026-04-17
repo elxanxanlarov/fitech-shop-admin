@@ -4,7 +4,7 @@ import { Prisma } from "@prisma/client";
 // Bütün kredit müddətlərini əldə et
 export const getAllCreditTerms = async (req, res) => {
     try {
-        const terms = await prisma.creditTerm.findMany({
+        const terms = await prisma.creditterm.findMany({
             where: {
                 isActive: true
             },
@@ -37,7 +37,7 @@ export const createCreditTerm = async (req, res) => {
             });
         }
 
-        const term = await prisma.creditTerm.create({
+        const term = await prisma.creditterm.create({
             data: {
                 months: parseInt(months),
                 interestRate: new Prisma.Decimal(interestRate),
@@ -71,7 +71,7 @@ export const updateCreditTerm = async (req, res) => {
         const { id } = req.params;
         const { months, interestRate, description, isActive } = req.body;
 
-        const term = await prisma.creditTerm.update({
+        const term = await prisma.creditterm.update({
             where: { id },
             data: {
                 ...(months !== undefined && { months: parseInt(months) }),
@@ -99,7 +99,7 @@ export const deleteCreditTerm = async (req, res) => {
     try {
         const { id } = req.params;
 
-        await prisma.creditTerm.delete({
+        await prisma.creditterm.delete({
             where: { id }
         });
 

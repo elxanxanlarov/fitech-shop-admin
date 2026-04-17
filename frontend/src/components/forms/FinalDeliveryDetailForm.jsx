@@ -36,7 +36,7 @@ export default function FinalDeliveryDetailForm({ delivery, onClose }) {
                         <p className="text-sm text-gray-600 mt-1">
                             {delivery.title}
                         </p>
-                        <p className="text-xs text-gray-500 mt-1">
+                         <p className="text-xs text-gray-500 mt-1">
                             {t('created_at') || 'Yaradılıb'}: {formatDateTime(delivery.createdAt)}{' '}
                             {delivery.staff && (
                                 <>
@@ -44,6 +44,9 @@ export default function FinalDeliveryDetailForm({ delivery, onClose }) {
                                     {`${delivery.staff.name} ${delivery.staff.surName || ''}`.trim()}
                                 </>
                             )}
+                            {' • '}
+                            {t('branch') || 'Filial'}:{' '}
+                            {delivery.branch?.name || t('central_warehouse') || 'Mərkəzi Anbar'}
                         </p>
                         <p className="text-xs text-gray-500 mt-1">
                             {t('total_products') || 'Ümumi Məhsul Sayı'}: {totalProducts} •{' '}

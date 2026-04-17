@@ -4,28 +4,30 @@ import { useNavigate } from 'react-router-dom';
 import { activityLogApi, staffApi } from '../../api';
 import TableTemplate from '../ui/TableTamplate';
 import Alert from '../ui/Alert';
-import { 
-  Filter, 
-  X, 
-  Trash2, 
-  Eye, 
+import {
+  Filter,
+  X,
+  Trash2,
+  Eye,
   Calendar,
   Activity,
   RefreshCw,
   User,
   FileText
 } from 'lucide-react';
+import { useLocalStorage, useBranch } from '../../hooks';
 
 export default function ActivityLog() {
   const { t } = useTranslation('activityLog');
   const { t: tAlert } = useTranslation('alert');
   const navigate = useNavigate();
+  const { selectedBranchId, selectedBranchName } = useBranch();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [staffList, setStaffList] = useState([]);
 
   // Filters
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useLocalStorage('activityLog_filters', {
     staffId: '',
     entityType: '',
     action: '',
@@ -33,6 +35,16 @@ export default function ActivityLog() {
     endDate: ''
   });
   const [showFilters, setShowFilters] = useState(false);
+
+  /** Əməliyyat filialı: kontekst qeydi → işçinin öz filialı → filialsız */
+  const formatLogBranchLabel = (log) => {
+    if (log.branch?.name) return log.branch.name;
+    if (log.staff?.branch?.name) return log.staff.branch.name;
+    if (log.staff) {
+      return t('branch_not_assigned') || 'Filial təyin edilməyib';
+    }
+    return '—';
+  };
 
   // Cədvəl sütunları
   const columns = [
@@ -61,9 +73,19 @@ export default function ActivityLog() {
             return match[1].trim();
           }
         }
+        // İşçi: "Yeni işçi yaradıldı: Ad Soyad" / yeniləndi / silindi
+        if (log.entityType === 'Staff' && log.description) {
+          const m = log.description.match(/:\s*(.+)$/);
+          if (m && m[1]) return m[1].trim();
+        }
         // Əgər məhsul deyilsə və ya tapılmadısa, entity type göstər
         return t(`entity_types.${log.entityType}`) || log.entityType || '-';
       }
+    },
+    {
+      key: 'contextBranch',
+      label: t('context_branch') || 'Əməliyyat filialı',
+      render: (_value, log) => formatLogBranchLabel(log)
     },
     {
       key: 'changeSummary',
@@ -75,6 +97,13 @@ export default function ActivityLog() {
         // Sahə adları üçün Azərbaycan dilində label-lar
         const fieldLabels = {
           name: 'Ad',
+          surName: 'Soyad',
+          phone: 'Telefon',
+          email: 'E-poçt',
+          roleId: 'Rol',
+          branchId: 'Filial',
+          isBoss: 'Baş admin',
+          password: 'Şifrə',
           description: 'Təsvir',
           purchasePrice: 'Alış qiyməti',
           salePrice: 'Satış qiyməti',
@@ -103,8 +132,7 @@ export default function ActivityLog() {
           // Yekun təslimat (FinalDelivery)
           title: 'Başlıq',
           startDate: 'Başlanğıc tarixi',
-          endDate: 'Son tarix',
-          itemsCount: 'Məhsul sayı'
+          endDate: 'Son tarix'
         };
 
         const formatValue = (key, val) => {
@@ -177,15 +205,18 @@ export default function ActivityLog() {
 
   useEffect(() => {
     fetchStaffList();
-  }, []);
+  }, [selectedBranchId]);
 
   useEffect(() => {
     fetchActivityLogs();
-  }, [filters.staffId, filters.entityType, filters.action, filters.startDate, filters.endDate]);
+  }, [filters.staffId, filters.entityType, filters.action, filters.startDate, filters.endDate, selectedBranchId]);
 
   const fetchStaffList = async () => {
     try {
-      const response = await staffApi.getAll();
+      // Filiala uyğun işçiləri gətir (Center üçün 'null' göndər)
+      const branchQuery = selectedBranchId === 'central' ? 'null' : (selectedBranchId || null);
+      const response = await staffApi.getAll({ branchId: branchQuery });
+
       if (response.success && response.date) {
         setStaffList(response.date);
       }
@@ -209,8 +240,17 @@ export default function ActivityLog() {
       if (filters.startDate) params.startDate = filters.startDate;
       if (filters.endDate) params.endDate = filters.endDate;
 
+      // Filial filtri: seçilmiş filial varsa, o filialın işçilərinin əməliyyatlarını göstər
+      if (selectedBranchId && selectedBranchId !== 'central') {
+        params.branchId = selectedBranchId;
+        // Kürdəxanı seçiləndə köhnə (filialsız) qeydlər də göstərilsin
+        if (selectedBranchName === 'Kürdəxanı') {
+          params.includeUnassigned = 'true';
+        }
+      }
+
       const response = await activityLogApi.getAll(params);
-      
+
       if (response.success) {
         setLogs(response.data || []);
       } else {
@@ -243,11 +283,11 @@ export default function ActivityLog() {
     const result = await Alert.confirm(
       tAlert('delete_confirm') || 'Silinsin?',
       t('confirm_delete'),
-      { 
-        confirmText: tAlert('yes') || 'Bəli', 
-        cancelText: tAlert('no') || 'Xeyr', 
-        confirmColor: '#EF4444', 
-        cancelColor: '#6B7280' 
+      {
+        confirmText: tAlert('yes') || 'Bəli',
+        cancelText: tAlert('no') || 'Xeyr',
+        confirmColor: '#EF4444',
+        cancelColor: '#6B7280'
       }
     );
 
@@ -321,11 +361,10 @@ export default function ActivityLog() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
-              showFilters 
-                ? 'bg-blue-600 text-white' 
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
+            className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${showFilters
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
           >
             <Filter className="w-4 h-4" />
             {t('filter')}

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import Input from '../../ui/Input';
 import SearchDropdown from '../../ui/SearchDropdown';
 import { MdInventory, MdDescription, MdQrCode, MdCloudUpload } from 'react-icons/md';
+import { BiBuildings } from 'react-icons/bi';
 
 export default function ProductBasicInfo({
     formData,
@@ -15,6 +16,9 @@ export default function ProductBasicInfo({
     isEditMode,
     existingProducts = [],
     loadingProducts = false,
+    branches = [],
+    loadingBranches = false,
+    branchPickerDisabled = false,
     onInputChange,
     onCategoryChange,
     onImageSelect,
@@ -42,6 +46,23 @@ export default function ProductBasicInfo({
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="md:col-span-2">
+                    <SearchDropdown
+                        label={t('branch') || 'Filial'}
+                        options={branches}
+                        value={formData.branchId}
+                        onChange={(value) => onInputChange('branchId', value)}
+                        disabled={isLoading || loadingBranches || branchPickerDisabled}
+                        error={!!errors.branchId}
+                        placeholder={t('select_branch') || 'Filial seçin'}
+                        getOptionLabel={(branch) => branch.name}
+                        getOptionValue={(branch) => branch.id}
+                        searchFields={['name']}
+                        icon={<BiBuildings className="text-blue-500" />}
+                        className="w-full"
+                    />
+                </div>
+
                 {isEditMode ? (
                     <Input
                         label={t('name')}

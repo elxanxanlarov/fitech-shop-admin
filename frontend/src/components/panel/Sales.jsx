@@ -4,9 +4,10 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import TableTemplate from '../ui/TableTamplate';
 import Alert from '../ui/Alert';
 import SearchDropdown from '../ui/SearchDropdown';
-import { Edit, Trash2, Eye, Plus, CreditCard, ShoppingCart, DollarSign, Wallet, TrendingUp } from 'lucide-react';
+import { Edit, Trash2, Eye, Plus, CreditCard, ShoppingCart, DollarSign, Wallet, TrendingUp, Banknote, ReceiptText, AlertCircle } from 'lucide-react';
 import { getSaleColumns } from '../../data/table-columns/SaleColumns';
 import { saleApi, receiptApi, productApi, authApi } from '../../api';
+import { useLocalStorage, useBranch } from '../../hooks';
 
 export default function Sales() {
     const { t, i18n } = useTranslation('sale');
@@ -16,11 +17,12 @@ export default function Sales() {
     const [saleData, setSaleData] = useState([]);
     const [filteredData, setFilteredData] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [paymentFilter, setPaymentFilter] = useState('all'); // 'all', 'cash', 'card', 'credit'
+    const [paymentFilter, setPaymentFilter] = useLocalStorage('sales_paymentFilter', 'all'); // 'all', 'cash', 'card', 'credit'
     const [currentUser, setCurrentUser] = useState(null);
     const [products, setProducts] = useState([]);
-    const [selectedProductId, setSelectedProductId] = useState('');
+    const [selectedProductId, setSelectedProductId] = useLocalStorage('sales_selectedProductId', '');
     const [loadingProducts, setLoadingProducts] = useState(false);
+    const { selectedBranchId } = useBranch();
 
     // Tarix filteri üçün state
     const getTodayDate = () => {
@@ -31,9 +33,9 @@ export default function Sales() {
         return `${year}-${month}-${day}`;
     };
 
-    const [startDate, setStartDate] = useState(getTodayDate());
-    const [endDate, setEndDate] = useState(getTodayDate());
-    const [datePreset, setDatePreset] = useState('today'); // 'today', 'week', 'month', 'all', 'custom'
+    const [startDate, setStartDate] = useLocalStorage('sales_startDate', getTodayDate());
+    const [endDate, setEndDate] = useLocalStorage('sales_endDate', getTodayDate());
+    const [datePreset, setDatePreset] = useLocalStorage('sales_datePreset', 'today'); // 'today', 'week', 'month', 'all', 'custom'
 
     const columns = useMemo(() => getSaleColumns(t, i18n.language), [t, i18n.language]);
 
@@ -57,7 +59,7 @@ export default function Sales() {
         const fetchProducts = async () => {
             setLoadingProducts(true);
             try {
-                const response = await productApi.getAll();
+                const response = await productApi.getAll({ branchId: selectedBranchId });
                 if (response.success && response.date) {
                     setProducts(response.date);
                 }
@@ -78,6 +80,10 @@ export default function Sales() {
                 if (startDate && endDate && datePreset !== 'all') {
                     params.startDate = startDate;
                     params.endDate = endDate;
+                }
+
+                if (selectedBranchId) {
+                    params.branchId = selectedBranchId;
                 }
 
                 const response = await saleApi.getAll(params);
@@ -109,7 +115,7 @@ export default function Sales() {
         return () => {
             window.removeEventListener('saleRestored', handleSaleRestored);
         };
-    }, [t, i18n.language, startDate, endDate, datePreset]);
+    }, [t, i18n.language, startDate, endDate, datePreset, selectedBranchId]);
 
     // Date preset handler
     const handleDatePresetChange = (preset) => {
@@ -302,23 +308,40 @@ export default function Sales() {
     }, [paymentFilter, saleData, selectedProductId]);
 
     // Calculate summary statistics
+    // Statistika ilə uyğunluq üçün qaytarılmış (isRefunded) satışlar xaric edilir
     const summaryStats = useMemo(() => {
-        const totalSales = filteredData.length;
-        const totalAmount = filteredData.reduce((sum, sale) => {
-            return sum + parseFloat(sale.totalAmount || 0);
-        }, 0);
-        const totalPaidAmount = filteredData.reduce((sum, sale) => {
-            return sum + parseFloat(sale.paidAmount || 0);
-        }, 0);
-        const totalProfit = filteredData.reduce((sum, sale) => {
-            return sum + parseFloat(sale.profitAmount || 0);
-        }, 0);
+        const refundedData = filteredData.filter(s => s.isRefunded);
+        const activeData = filteredData.filter(s => !s.isRefunded); // Statistika ilə eyni filter
+
+        const totalSales = activeData.length;
+        const refundedCount = refundedData.length;
+        const totalAmount = activeData.reduce((sum, s) => sum + parseFloat(s.totalAmount || 0), 0);
+        const totalPaidAmount = activeData.reduce((sum, s) => sum + parseFloat(s.paidAmount || 0), 0);
+        const totalProfit = activeData.reduce((sum, s) => sum + parseFloat(s.profitAmount || 0), 0);
+
+        // Ödəniş növü üzrə (yalnız aktiv satışlar)
+        const cashSales = activeData.filter(s => s.paymentType === 'cash' && !s.isCredit);
+        const cardSales = activeData.filter(s => s.paymentType === 'card' && !s.isCredit);
+        const creditSales = activeData.filter(s => s.isCredit);
+
+        const cashTotal = cashSales.reduce((sum, s) => sum + parseFloat(s.paidAmount || 0), 0);
+        const cardTotal = cardSales.reduce((sum, s) => sum + parseFloat(s.paidAmount || 0), 0);
+        const creditTotal = creditSales.reduce((sum, s) => sum + parseFloat(s.creditTotalAmount || s.totalAmount || 0), 0);
+        const creditRemaining = creditSales.reduce((sum, s) => sum + parseFloat(s.creditRemainingAmount || 0), 0);
 
         return {
             totalSales,
+            refundedCount,
             totalAmount,
             totalPaidAmount,
-            totalProfit
+            totalProfit,
+            cashTotal,
+            cashCount: cashSales.length,
+            cardTotal,
+            cardCount: cardSales.length,
+            creditTotal,
+            creditCount: creditSales.length,
+            creditRemaining,
         };
     }, [filteredData]);
 
@@ -474,69 +497,107 @@ export default function Sales() {
 
             {/* Summary Statistics */}
             {filteredData.length > 0 && (
-                <div className="mt-6 bg-white rounded-lg shadow-sm p-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('summary') || 'Nəticə'}</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div className="bg-blue-50 rounded-lg p-4 border border-blue-100">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-sm font-medium text-blue-600 mb-1">
-                                        {t('total_sales_count') || 'Ümumi Satış Sayı'}
-                                    </p>
-                                    <p className="text-2xl font-bold text-blue-900">{summaryStats.totalSales}</p>
-                                </div>
-                                <div className="bg-blue-100 rounded-full p-3">
-                                    <ShoppingCart className="w-6 h-6 text-blue-600" />
-                                </div>
+                <div className="mt-4 space-y-4">
+                    {/* Row 1 — main stats */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                            <div className="w-11 h-11 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
+                                <ShoppingCart className="w-5 h-5 text-blue-600" />
+                            </div>
+                            <div>
+                                <p className="text-xs font-medium text-blue-500 uppercase tracking-wide">Satış Sayı</p>
+                                <p className="text-xl font-bold text-blue-700">{summaryStats.totalSales} <span className="text-sm font-semibold">ədəd</span></p>
+                                {summaryStats.refundedCount > 0 && (
+                                    <p className="text-xs text-red-400 mt-0.5">+{summaryStats.refundedCount} qaytarılmış</p>
+                                )}
                             </div>
                         </div>
 
-                        <div className="bg-green-50 rounded-lg p-4 border border-green-100">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-sm font-medium text-green-600 mb-1">
-                                        {t('total_amount') || 'Ümumi Məbləğ'}
-                                    </p>
-                                    <p className="text-2xl font-bold text-green-900">
-                                        {summaryStats.totalAmount.toFixed(2)} ₼
-                                    </p>
-                                </div>
-                                <div className="bg-green-100 rounded-full p-3">
-                                    <DollarSign className="w-6 h-6 text-green-600" />
-                                </div>
+                        <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
+                            <div className="w-11 h-11 rounded-xl bg-green-100 flex items-center justify-center shrink-0">
+                                <DollarSign className="w-5 h-5 text-green-600" />
+                            </div>
+                            <div>
+                                <p className="text-xs font-medium text-green-500 uppercase tracking-wide">Ümumi Məbləğ</p>
+                                <p className="text-xl font-bold text-green-700">{summaryStats.totalAmount.toFixed(2)} <span className="text-sm font-semibold">AZN</span></p>
                             </div>
                         </div>
 
-                        <div className="bg-purple-50 rounded-lg p-4 border border-purple-100">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-sm font-medium text-purple-600 mb-1">
-                                        {t('paid_amount') || 'Ödənilən Məbləğ'}
-                                    </p>
-                                    <p className="text-2xl font-bold text-purple-900">
-                                        {summaryStats.totalPaidAmount.toFixed(2)} ₼
-                                    </p>
-                                </div>
-                                <div className="bg-purple-100 rounded-full p-3">
-                                    <Wallet className="w-6 h-6 text-purple-600" />
-                                </div>
+                        <div className="flex items-center gap-3 p-4 bg-orange-50 border border-orange-200 rounded-xl">
+                            <div className="w-11 h-11 rounded-xl bg-orange-100 flex items-center justify-center shrink-0">
+                                <TrendingUp className="w-5 h-5 text-orange-600" />
+                            </div>
+                            <div>
+                                <p className="text-xs font-medium text-orange-500 uppercase tracking-wide">Ümumi Qazanc</p>
+                                <p className="text-xl font-bold text-orange-700">{summaryStats.totalProfit.toFixed(2)} <span className="text-sm font-semibold">AZN</span></p>
                             </div>
                         </div>
 
-                        <div className="bg-orange-50 rounded-lg p-4 border border-orange-100">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-sm font-medium text-orange-600 mb-1">
-                                        {t('profit') || 'Ümumi Qazanc'}
-                                    </p>
-                                    <p className="text-2xl font-bold text-orange-900">
-                                        {summaryStats.totalProfit.toFixed(2)} ₼
-                                    </p>
+                    </div>
+
+                    {/* Row 2 — payment type breakdown */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        {/* Cash */}
+                        <div className="p-4 bg-emerald-50 border-2 border-emerald-200 rounded-xl">
+                            <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-9 h-9 rounded-lg bg-emerald-100 flex items-center justify-center">
+                                        <Banknote className="w-5 h-5 text-emerald-600" />
+                                    </div>
+                                    <span className="font-semibold text-emerald-800">Nəğd</span>
                                 </div>
-                                <div className="bg-orange-100 rounded-full p-3">
-                                    <TrendingUp className="w-6 h-6 text-orange-600" />
-                                </div>
+                                <span className="text-xs bg-emerald-100 text-emerald-700 font-bold px-2 py-0.5 rounded-full">
+                                    {summaryStats.cashCount} satış
+                                </span>
                             </div>
+                            <p className="text-2xl font-bold text-emerald-700">
+                                {summaryStats.cashTotal.toFixed(2)}
+                                <span className="text-sm font-semibold ml-1">AZN</span>
+                            </p>
+                        </div>
+
+                        {/* Card */}
+                        <div className="p-4 bg-sky-50 border-2 border-sky-200 rounded-xl">
+                            <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-9 h-9 rounded-lg bg-sky-100 flex items-center justify-center">
+                                        <CreditCard className="w-5 h-5 text-sky-600" />
+                                    </div>
+                                    <span className="font-semibold text-sky-800">Kart</span>
+                                </div>
+                                <span className="text-xs bg-sky-100 text-sky-700 font-bold px-2 py-0.5 rounded-full">
+                                    {summaryStats.cardCount} satış
+                                </span>
+                            </div>
+                            <p className="text-2xl font-bold text-sky-700">
+                                {summaryStats.cardTotal.toFixed(2)}
+                                <span className="text-sm font-semibold ml-1">AZN</span>
+                            </p>
+                        </div>
+
+                        {/* Credit */}
+                        <div className="p-4 bg-violet-50 border-2 border-violet-200 rounded-xl">
+                            <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-9 h-9 rounded-lg bg-violet-100 flex items-center justify-center">
+                                        <ReceiptText className="w-5 h-5 text-violet-600" />
+                                    </div>
+                                    <span className="font-semibold text-violet-800">Kredit</span>
+                                </div>
+                                <span className="text-xs bg-violet-100 text-violet-700 font-bold px-2 py-0.5 rounded-full">
+                                    {summaryStats.creditCount} satış
+                                </span>
+                            </div>
+                            <p className="text-2xl font-bold text-violet-700">
+                                {summaryStats.creditTotal.toFixed(2)}
+                                <span className="text-sm font-semibold ml-1">AZN</span>
+                            </p>
+                            {summaryStats.creditRemaining > 0 && (
+                                <div className="mt-2 flex items-center gap-1.5 text-xs text-red-600 font-medium">
+                                    <AlertCircle className="w-3.5 h-3.5" />
+                                    Qalıq: {summaryStats.creditRemaining.toFixed(2)} AZN ödənilməyib
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

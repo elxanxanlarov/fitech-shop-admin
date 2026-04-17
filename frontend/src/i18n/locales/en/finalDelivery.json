@@ -59,6 +59,11 @@
   "opened_box_quantity": "Opened Box Quantity",
   "remaining_stock": "Remaining Stock",
   "loading": "Loading...",
-  "no_products": "No products found"
+  "no_products": "No products found",
+  "branch": "Branch",
+  "select_branch": "Select branch",
+  "branch_not_set": "No branch assigned",
+  "branch_locked_own": "Only your own branch can be assigned",
+  "central_warehouse": "Central warehouse"
 }
 

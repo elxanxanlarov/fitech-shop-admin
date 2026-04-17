@@ -1,4 +1,6 @@
-import { useParams } from "react-router-dom"
+import { useParams, Navigate } from "react-router-dom"
+import { useAuth } from "../context/AuthContext"
+import { isFilialAdmin, FILIAL_ADMIN_BLOCKED_SETTINGS_SLUGS } from "../utils/accessHelpers"
 import Staff from "../components/panel/Staff.jsx"
 import StaffForm from "../components/forms/StaffForm.jsx"
 import Products from "../components/panel/Product.jsx"
@@ -13,6 +15,7 @@ import Settings from "../components/panel/Settings.jsx"
 import RolesManagement from "../components/panel/RolesManagement.jsx"
 import RoleForm from "../components/forms/RoleForm.jsx"
 import CategoryManagement from "../components/panel/CategoryManagement.jsx"
+import SubCategoryManagement from "../components/panel/SubCategoryManagement.jsx"
 import CategoryForm from "../components/forms/CategoryForm.jsx"
 import SubCategoryForm from "../components/forms/SubCategoryForm.jsx"
 import Expenses from "../components/panel/Expenses.jsx"
@@ -25,10 +28,24 @@ import CreditTermManagement from "../components/panel/CreditTermManagement.jsx"
 import InvoiceNameMapping from "../components/panel/InvoiceNameMapping.jsx"
 import FinalDelivery from "../components/panel/FinalDelivery.jsx"
 import FinalDeliveryForm from "../components/forms/FinalDeliveryForm.jsx"
+import BranchManagement from "../components/panel/BranchManagement.jsx"
+import BranchForm from "../components/forms/BranchForm.jsx"
+import StockTransferForm from "../components/forms/StockTransferForm.jsx"
+import BranchDetail from "../components/panel/BranchDetail.jsx"
+import CentralWarehouse from "../components/panel/CentralWarehouse.jsx"
+import ConvertCenter from "../components/panel/ConvertCenter.jsx"
+import DeletedElements from "../components/panel/DeletedElements.jsx"
+import ProductBranchTransfer from "../components/panel/ProductBranchTransfer.jsx"
 
 
 export default function AdminPanel() {
     const { slug } = useParams()
+    const { user } = useAuth()
+
+    if (slug && isFilialAdmin(user) && FILIAL_ADMIN_BLOCKED_SETTINGS_SLUGS.has(slug)) {
+        return <Navigate to="/admin/settings" replace />
+    }
+
     return (
         <div>
             {/* Forms */}
@@ -41,8 +58,10 @@ export default function AdminPanel() {
             {slug === "expense-form" && <ExpenseForm />}
             {slug === "cash-handover-form" && <CashHandoverForm />}
             {slug === "final-delivery-form" && <FinalDeliveryForm />}
+            {slug === "branch-form" && <BranchForm />}
+            {slug === "stock-transfer-form" && <StockTransferForm />}
 
-            
+
             {/* Panels */}
             {slug === "staff" && <Staff />}
             {slug === "products" && <Products />}
@@ -60,6 +79,13 @@ export default function AdminPanel() {
             {slug === "credit-payments" && <CreditPayments />}
             {slug === "invoice-name-mapping" && <InvoiceNameMapping />}
             {slug === "final-delivery" && <FinalDelivery />}
+            {slug === "branch-management" && <BranchManagement />}
+            {slug === "branch-detail" && <BranchDetail />}
+            {slug === "central-warehouse" && <CentralWarehouse />}
+            {slug === "convert-center" && <ConvertCenter />}
+            {slug === "deleted-elements" && <DeletedElements />}
+            {slug === "product-branch-transfer" && <ProductBranchTransfer />}
+            {slug === "subcategory-management" && <SubCategoryManagement />}
             {slug === "profile" && <Profile />}
         </div>
     )

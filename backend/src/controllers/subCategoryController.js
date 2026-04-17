@@ -4,7 +4,7 @@ import { createActivityLog } from "./activityLogController.js";
 // Bütün alt kateqoriyaları gətir
 export const getAllSubCategories = async (req, res) => {
     try {
-        const { categoryId, deleteType, includeDeleted } = req.query;
+        const { categoryId, deleteType, includeDeleted, branchId, includeUnassigned } = req.query;
         
         const where = {};
         
@@ -22,7 +22,9 @@ export const getAllSubCategories = async (req, res) => {
             where.categoryId = categoryId;
         }
 
-        const subCategories = await prisma.subCategory.findMany({
+        // Filial filtri silindi - alt kateqoriyalar artıq hamı üçün görünür
+
+        const subCategories = await prisma.subcategory.findMany({
             where,
             include: {
                 category: {
@@ -54,7 +56,7 @@ export const getAllSubCategories = async (req, res) => {
 export const getSubCategoryById = async (req, res) => {
     try {
         const { id } = req.params;
-        const subCategory = await prisma.subCategory.findUnique({
+        const subCategory = await prisma.subcategory.findUnique({
             where: { id },
             include: {
                 category: {
@@ -96,7 +98,7 @@ export const getSubCategoryById = async (req, res) => {
 // Yeni alt kateqoriya yarat
 export const createSubCategory = async (req, res) => {
     try {
-        const { name, description, categoryId, isActive } = req.body;
+        const { name, description, categoryId, isActive, branchId } = req.body;
 
         if (!name || name.trim() === "") {
             return res.status(400).json({
@@ -125,7 +127,7 @@ export const createSubCategory = async (req, res) => {
         }
 
         // Eyni kateqoriya daxilində eyni adlı alt kateqoriyanın olub olmadığını yoxla
-        const existingSubCategory = await prisma.subCategory.findFirst({
+        const existingSubCategory = await prisma.subcategory.findFirst({
             where: {
                 name: name.trim(),
                 categoryId: categoryId
@@ -139,12 +141,16 @@ export const createSubCategory = async (req, res) => {
             });
         }
 
-        const newSubCategory = await prisma.subCategory.create({
+        // Subkateqoriyalar artıq qlobaldır (branchId mütləq null olur)
+        const effectiveBranchId = null;
+
+        const newSubCategory = await prisma.subcategory.create({
             data: {
                 name: name.trim(),
                 description: description?.trim() || null,
                 categoryId: categoryId,
                 isActive: typeof isActive === "boolean" ? isActive : true,
+                branchId: effectiveBranchId,
             },
             include: {
                 category: {
@@ -197,7 +203,7 @@ export const updateSubCategory = async (req, res) => {
         const { name, description, categoryId, isActive, deleteType } = req.body;
 
         // Alt kateqoriyanın mövcud olub olmadığını yoxla
-        const existingSubCategory = await prisma.subCategory.findUnique({
+        const existingSubCategory = await prisma.subcategory.findUnique({
             where: { id },
             include: {
                 category: true
@@ -229,7 +235,7 @@ export const updateSubCategory = async (req, res) => {
         // Əgər ad dəyişdirilirsə və ya kateqoriya dəyişdirilirsə, unikal olub olmadığını yoxla
         const finalName = name ? name.trim() : existingSubCategory.name;
         if ((name && name.trim() !== existingSubCategory.name) || (categoryId && categoryId !== existingSubCategory.categoryId)) {
-            const duplicateSubCategory = await prisma.subCategory.findFirst({
+            const duplicateSubCategory = await prisma.subcategory.findFirst({
                 where: {
                     name: finalName,
                     categoryId: finalCategoryId,
@@ -255,7 +261,7 @@ export const updateSubCategory = async (req, res) => {
             isActive: existingSubCategory.isActive
         };
 
-        const updatedSubCategory = await prisma.subCategory.update({
+        const updatedSubCategory = await prisma.subcategory.update({
             where: { id },
             data: {
                 name: finalName,
@@ -323,7 +329,7 @@ export const deleteSubCategory = async (req, res) => {
         const validDeleteType = (deleteType && typeof deleteType === 'string' && deleteType.toUpperCase() === 'HARD') ? 'HARD' : 'SOFT';
 
         // Alt kateqoriyanın mövcud olub olmadığını yoxla
-        const existingSubCategory = await prisma.subCategory.findUnique({
+        const existingSubCategory = await prisma.subcategory.findUnique({
             where: { id },
             include: {
                 category: true,
@@ -340,17 +346,31 @@ export const deleteSubCategory = async (req, res) => {
 
         // DeleteType-a görə silmə
         if (validDeleteType === 'HARD') {
-            // Hard delete - əvvəlcə yoxla ki, məhsul var
-            if (existingSubCategory.products.length > 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Bu alt kateqoriyaya aid məhsullar var. Əvvəlcə məhsulları silin və ya başqa alt kateqoriyaya köçürün"
-                });
-            }
-
-            await prisma.subCategory.delete({
-                where: { id }
+            // Hard delete - Bütün əlaqəli məlumatları (məhsullar və onların qeydləri) find və sil
+            // 1. Alt kateqoriyaya aid olan bütün məhsulların ID-lərini gətir
+            const productsInSubCategory = await prisma.product.findMany({
+                where: { subCategoryId: id },
+                select: { id: true }
             });
+            const productIds = productsInSubCategory.map(p => p.id);
+
+            await prisma.$transaction([
+                // 2. Əgər məhsullar varsa, onlara aid olan alt cədvəlləri təmizlə
+                ...(productIds.length > 0 ? [
+                    prisma.salereturnitem.deleteMany({ where: { productId: { in: productIds } } }),
+                    prisma.saleitem.deleteMany({ where: { productId: { in: productIds } } }),
+                    prisma.finaldeliveryitem.deleteMany({ where: { productId: { in: productIds } } }),
+                    prisma.stocktransferitem.deleteMany({ where: { productId: { in: productIds } } }),
+                    prisma.stockmovement.deleteMany({ where: { productId: { in: productIds } } }),
+                    prisma.branchstock.deleteMany({ where: { productId: { in: productIds } } }),
+                    prisma.product.deleteMany({ where: { id: { in: productIds } } })
+                ] : []),
+                
+                // 3. Alt kateqoriyanı sil
+                prisma.subcategory.delete({
+                    where: { id }
+                })
+            ]);
 
             // Activity log yarat
             try {
@@ -359,12 +379,10 @@ export const deleteSubCategory = async (req, res) => {
                     entityType: "SubCategory",
                     entityId: id,
                     action: "HARD_DELETE",
-                    description: `Alt kateqoriya tamamilə silindi: ${existingSubCategory.name} (${existingSubCategory.category.name})`,
+                    description: `Alt kateqoriya və ona bağlı bütün məhsullar tamamilə silindi: ${existingSubCategory.name} (${existingSubCategory.category.name})`,
                     changes: {
                         name: existingSubCategory.name,
-                        description: existingSubCategory.description,
-                        categoryId: existingSubCategory.categoryId,
-                        categoryName: existingSubCategory.category.name
+                        productsDeleted: productIds.length
                     }
                 });
             } catch (logError) {
@@ -372,7 +390,7 @@ export const deleteSubCategory = async (req, res) => {
             }
         } else {
             // Soft delete - deleteType-u dəyiş
-            await prisma.subCategory.update({
+            await prisma.subcategory.update({
                 where: { id },
                 data: {
                     deleteType: 'SOFT',

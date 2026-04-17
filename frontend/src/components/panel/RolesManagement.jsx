@@ -4,13 +4,14 @@ import { useNavigate } from 'react-router-dom';
 import TableTemplate from '../ui/TableTamplate';
 import Alert from '../ui/Alert';
 import { Edit, Trash2, Eye, Plus, Shield } from 'lucide-react';
-import { roleApi } from '../../api';
+import { roleApi, authApi } from '../../api';
 
 export default function RolesManagement() {
     const { t } = useTranslation('role');
     const { t: tAlert } = useTranslation('alert');
     const navigate = useNavigate();
     const [roleData, setRoleData] = useState([]);
+    const [currentUser, setCurrentUser] = useState(null);
     const [loading, setLoading] = useState(true);
 
     const columns = useMemo(() => [
@@ -25,11 +26,10 @@ export default function RolesManagement() {
             key: 'isCore',
             label: t('is_core') || 'Əsas Rol',
             render: (value) => (
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    value 
-                        ? 'bg-green-100 text-green-800' 
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${value
+                        ? 'bg-green-100 text-green-800'
                         : 'bg-gray-100 text-gray-800'
-                }`}>
+                    }`}>
                     {value ? (t('yes') || 'Bəli') : (t('no') || 'Xeyr')}
                 </span>
             )
@@ -56,13 +56,28 @@ export default function RolesManagement() {
         }
     ], [t]);
 
+    // Fetch current user
+    useEffect(() => {
+        const fetchUser = async () => {
+            try {
+                const response = await authApi.me();
+                if (response.success) {
+                    setCurrentUser(response.data);
+                }
+            } catch (error) {
+                console.error('Error fetching current user:', error);
+            }
+        };
+        fetchUser();
+    }, []);
+
     // Fetch roles data
     useEffect(() => {
         const fetchRoles = async () => {
             setLoading(true);
             try {
                 const response = await roleApi.getAll();
-                
+
                 if (response.success && response.date && Array.isArray(response.date)) {
                     // Ensure staff array exists for each role
                     const rolesWithStaff = response.date.map(role => ({
@@ -83,29 +98,31 @@ export default function RolesManagement() {
         };
 
         fetchRoles();
-        
+
         // Custom event dinlə - rol bərpa ediləndə yenilə
         const handleRoleRestored = () => {
             fetchRoles();
         };
-        
+
         window.addEventListener('roleRestored', handleRoleRestored);
-        
+
         return () => {
             window.removeEventListener('roleRestored', handleRoleRestored);
         };
     }, [tAlert, t]);
 
     const handleEdit = async (role) => {
-        // Əgər əsas rol (isCore) isə, redaktə etməyə icazə vermə
-        if (role.isCore) {
+        const isSuperAdmin = currentUser?.role?.name?.toLowerCase() === 'superadmin';
+
+        // Əgər əsas rol (isCore) isə, redaktə etməyə icazə vermə (Superadmin-dən başqa)
+        if (role.isCore && !isSuperAdmin) {
             Alert.error(
                 tAlert('error') || 'Xəta',
                 t('cannot_edit_core_role') || 'Əsas rollar redaktə edilə bilməz'
             );
             return;
         }
-        
+
         navigate(`/admin/role-form?id=${role.id.toString()}`);
     };
 
@@ -142,11 +159,11 @@ export default function RolesManagement() {
         if (result.isConfirmed) {
             try {
                 Alert.loading(t('loading') || 'Yüklənir...');
-                
+
                 await roleApi.delete(role.id);
-                
+
                 setRoleData(prev => prev.filter(item => item.id !== role.id));
-                
+
                 Alert.close();
                 setTimeout(() => {
                     Alert.success(tAlert('delete_success') || 'Uğurlu', tAlert('delete_success_text') || 'Rol uğurla silindi');
@@ -164,7 +181,7 @@ export default function RolesManagement() {
         const staffInfo = role.staff && role.staff.length > 0
             ? `\n${t('staff_list') || 'İşçilər'}:\n${role.staff.map(s => `- ${s.name} ${s.surName || ''} (${s.email})`).join('\n')}`
             : `\n${t('no_staff') || 'İşçi yoxdur'}`;
-        
+
         Alert.info(
             `${t('role')}: ${role.name}`,
             `${t('is_core')}: ${role.isCore ? (t('yes') || 'Bəli') : (t('no') || 'Xeyr')}\n${t('staff_count')}: ${role.staff?.length || 0}${staffInfo}`
@@ -177,7 +194,7 @@ export default function RolesManagement() {
 
     const handleBulkDelete = async (selectedIds) => {
         const selectedRoles = roleData.filter(role => selectedIds.includes(role.id));
-        
+
         // Əgər seçilmiş rollardan hər hansı biri əsas rol (isCore) isə, silməyə icazə vermə
         const coreRoles = selectedRoles.filter(role => role.isCore);
         if (coreRoles.length > 0) {
@@ -212,17 +229,17 @@ export default function RolesManagement() {
         if (result.isConfirmed) {
             try {
                 Alert.loading(t('loading') || 'Yüklənir...');
-                
+
                 // Əsas rolları filter et
                 const idsToDelete = selectedIds.filter(id => {
                     const role = roleData.find(r => r.id === id);
                     return !role?.isCore;
                 });
-                
+
                 await Promise.all(idsToDelete.map(id => roleApi.delete(id)));
-                
+
                 setRoleData(prev => prev.filter(item => !idsToDelete.includes(item.id)));
-                
+
                 Alert.close();
                 setTimeout(() => {
                     Alert.success(tAlert('delete_success') || 'Uğurlu', tAlert('delete_success_text') || 'Rollar uğurla silindi');

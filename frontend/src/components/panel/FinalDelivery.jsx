@@ -3,8 +3,9 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useLocation } from 'react-router-dom';
 import TableTemplate from '../ui/TableTamplate';
 import Alert from '../ui/Alert';
-import { Eye, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { finalDeliveryApi } from '../../api';
+import { useBranch } from '../../hooks';
 
 export default function FinalDelivery() {
     const { t, i18n } = useTranslation('finalDelivery');
@@ -13,11 +14,17 @@ export default function FinalDelivery() {
     const location = useLocation();
     const [deliveryData, setDeliveryData] = useState([]);
     const [loading, setLoading] = useState(true);
+    const { selectedBranchId } = useBranch();
     const [pagination, setPagination] = useState({
         total: 0,
         page: 1,
         limit: 10,
         totalPages: 0
+    });
+    const [searchTerm, setSearchTerm] = useState('');
+    const [dateRange, setDateRange] = useState({
+        startDate: '',
+        endDate: ''
     });
 
     const columns = useMemo(() => [
@@ -35,6 +42,16 @@ export default function FinalDelivery() {
             key: 'totalStockQuantity',
             label: t('total_stock') || 'Ümumi Stok',
             render: (value) => value || 0,
+        },
+        {
+            key: 'branch',
+            label: t('branch') || 'Filial',
+            render: (_value, item) => {
+                if (item.branch) {
+                    return item.branch.name;
+                }
+                return t('central_warehouse') || 'Mərkəzi Anbar';
+            },
         },
         {
             key: 'staff',
@@ -62,10 +79,21 @@ export default function FinalDelivery() {
         },
     ], [t, i18n.language]);
 
-    const fetchDeliveries = async (page = 1) => {
+    const fetchDeliveries = async (page = 1, currentSearch = searchTerm, currentRange = dateRange) => {
         setLoading(true);
         try {
-            const response = await finalDeliveryApi.getAll({ page, limit: pagination.limit });
+            const params = {
+                page,
+                limit: pagination.limit,
+                search: currentSearch || undefined,
+                startDate: currentRange.startDate || undefined,
+                endDate: currentRange.endDate || undefined,
+                branchId:
+                    selectedBranchId && selectedBranchId !== 'central'
+                        ? selectedBranchId
+                        : undefined
+            };
+            const response = await finalDeliveryApi.getAll(params);
             if (response.success && response.data) {
                 // Serverdən gələn məlumatı cədvəl üçün formalaşdırırıq
                 const normalized = response.data.map(delivery => {
@@ -101,7 +129,7 @@ export default function FinalDelivery() {
 
     useEffect(() => {
         fetchDeliveries(1);
-    }, []);
+    }, [selectedBranchId]);
 
     const handleView = (delivery) => {
         const isAdmin = location.pathname.includes('/admin');
@@ -111,6 +139,18 @@ export default function FinalDelivery() {
 
     const handlePageChange = (newPage) => {
         fetchDeliveries(newPage);
+    };
+
+    const handleSearch = (value) => {
+        // value can be passed directly from onSearchSubmit
+        const search = value !== undefined ? value : searchTerm;
+        fetchDeliveries(1, search);
+    };
+
+    const handleDateFilter = (start, end) => {
+        const range = { startDate: start, endDate: end };
+        setDateRange(range);
+        fetchDeliveries(1, searchTerm, range);
     };
 
     const handleCreateNavigate = () => {
@@ -142,8 +182,20 @@ export default function FinalDelivery() {
                 onView={handleView}
                 showBulkActions={false}
                 showFilters={false}
-                showSearch={false}
-                showDateFilter={false}
+                showSearch={true}
+                showDateFilter={true}
+                serverSidePagination={true}
+                onSearchChange={setSearchTerm}
+                onSearchSubmit={handleSearch}
+                searchValue={searchTerm}
+                onDateRangeChange={handleDateFilter}
+                dateRangeValue={{ start: dateRange.startDate, end: dateRange.endDate }}
+                datePresetValue="all"
+                onClearFilters={() => {
+                    setSearchTerm('');
+                    setDateRange({ startDate: '', endDate: '' });
+                    fetchDeliveries(1, '', { startDate: '', endDate: '' });
+                }}
                 loading={loading}
                 pagination={pagination}
                 onPageChange={handlePageChange}

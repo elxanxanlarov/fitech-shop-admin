@@ -1,10 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Input from '../ui/Input';
 import Alert from '../ui/Alert';
+import SearchDropdown from '../ui/SearchDropdown';
 import { MdFolder, MdDescription, MdArrowBack } from 'react-icons/md';
-import { subCategoryApi, categoryApi } from '../../api';
+import { BiBuildings } from 'react-icons/bi';
+import { subCategoryApi, categoryApi, branchApi } from '../../api';
+import { useBranch } from '../../hooks';
 
 export default function SubCategoryForm() {
     const navigate = useNavigate();
@@ -17,18 +20,19 @@ export default function SubCategoryForm() {
 
     const isAdmin = location.pathname.includes('/admin');
     // If categoryId is provided and not in edit mode, go back to category form
-    const subCategoryPagePath = categoryIdParam && !id
+    const subCategoryPagePath = categoryIdParam
         ? `/admin/category-form?id=${categoryIdParam}`
-        : categoryIdParam 
-            ? `/admin/subcategory-management?categoryId=${categoryIdParam}`
-            : '/admin/subcategory-management';
+        : '/admin/category-management';
     const isEditMode = !!id;
+    const { selectedBranchId, selectedBranchName } = useBranch();
+    const initialBranchIdRef = useRef(selectedBranchId);
+    const initialBranchNameRef = useRef(selectedBranchName);
     
     const [formData, setFormData] = useState({
         name: '',
         description: '',
         categoryId: categoryIdParam || '',
-        isActive: true
+        isActive: true,
     });
     
     const [categories, setCategories] = useState([]);
@@ -37,7 +41,9 @@ export default function SubCategoryForm() {
     const [loadingCategories, setLoadingCategories] = useState(false);
     const [initialFormData, setInitialFormData] = useState(null);
 
-    // Fetch categories
+    // Filiallar artıq lazım deyil - Kateqoriyalar qlobaldır
+
+    // Bütün kateqoriyaları gətir (qlobal)
     useEffect(() => {
         const fetchCategories = async () => {
             setLoadingCategories(true);
@@ -68,7 +74,7 @@ export default function SubCategoryForm() {
                             name: subCategory.name || '',
                             description: subCategory.description || '',
                             categoryId: subCategory.categoryId || categoryIdParam || '',
-                            isActive: subCategory.isActive !== undefined ? subCategory.isActive : true
+                            isActive: subCategory.isActive !== undefined ? subCategory.isActive : true,
                         };
                         setFormData(initialData);
                         setInitialFormData(initialData);
@@ -167,7 +173,8 @@ export default function SubCategoryForm() {
                 name: formData.name.trim(),
                 description: formData.description?.trim() || null,
                 categoryId: formData.categoryId,
-                isActive: formData.isActive
+                isActive: formData.isActive,
+                branchId: null
             };
 
             if (isEditMode) {
@@ -234,6 +241,8 @@ export default function SubCategoryForm() {
                     </h3>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Filial seçimi silindi */}
+
                         <div className="md:col-span-2">
                             <label className="block text-sm font-medium text-gray-700 mb-2">
                                 {t('category') || 'Kateqoriya'} <span className="text-red-500">*</span>

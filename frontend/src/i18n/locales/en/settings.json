@@ -1,6 +1,7 @@
 {
   "title": "Settings",
   "subtitle": "Manage system parameters",
+  "filial_admin_settings_hint": "As a branch admin you only have access to category management.",
   "roles_management": "Roles Management",
   "roles_management_desc": "Manage user roles and permissions",
   "category_management": "Category Management",
@@ -8,6 +9,7 @@
   "credit_term_management": "Credit Terms Management",
   "credit_term_management_desc": "Manage credit terms and interest rates",
   "no_settings": "No settings available",
-  "no_settings_desc": "No settings have been added yet."
+  "no_settings_desc": "No settings have been added yet.",
+  "branch_management": "Branch Management",
+  "branch_management_desc": "Manage branches and their stocks"
 }
-

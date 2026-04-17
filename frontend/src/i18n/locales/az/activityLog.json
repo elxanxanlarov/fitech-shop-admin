@@ -48,6 +48,8 @@
   },
   "staff_name": "İşçi adı",
   "entity": "Obyekt",
+  "context_branch": "Əməliyyat filialı",
+  "branch_not_assigned": "Filial yoxdur (ümumi)",
   "view_details": "Detalları gör",
   "delete": "Sil",
   "confirm_delete": "Bu activity log-u silmək istədiyinizə əminsiniz?",

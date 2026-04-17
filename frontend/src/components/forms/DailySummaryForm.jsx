@@ -3,12 +3,14 @@ import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { dailySummaryApi } from '../../api';
 import Alert from '../ui/Alert';
+import { useBranch } from '../../hooks';
 
 export default function DailySummaryForm({ onClose, onCreated }) {
   const { t } = useTranslation('statistics');
   const [searchParams] = useSearchParams();
   const id = searchParams.get('dailySummaryId');
   const isDetail = !!id;
+  const { selectedBranchId } = useBranch();
 
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0];
@@ -62,6 +64,7 @@ export default function DailySummaryForm({ onClose, onCreated }) {
       const res = await dailySummaryApi.create({
         date: formData.date,
         note: formData.note?.trim() || null,
+        branchId: selectedBranchId,
       });
       if (res.success) {
         Alert.success(

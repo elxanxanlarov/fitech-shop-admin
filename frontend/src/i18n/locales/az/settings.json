@@ -1,6 +1,7 @@
 {
   "title": "Tənzimləmələr",
   "subtitle": "Sistem parametrlərini idarə edin",
+  "filial_admin_settings_hint": "Filial admini kimi yalnız kateqoriya idarəetməsinə çıxışınız var.",
   "roles_management": "Rollar İdarəetməsi",
   "roles_management_desc": "İstifadəçi rollarını və icazələrini idarə edin",
   "category_management": "Kateqoriya İdarəetməsi",
@@ -8,6 +9,7 @@
   "credit_term_management": "Kredit Müddətləri İdarəetməsi",
   "credit_term_management_desc": "Kredit müddətlərini və faizləri idarə edin",
   "no_settings": "Tənzimləmələr mövcud deyil",
-  "no_settings_desc": "Hal-hazırda heç bir tənzimləmə əlavə edilməyib."
+  "no_settings_desc": "Hal-hazırda heç bir tənzimləmə əlavə edilməyib.",
+  "branch_management": "Filial İdarəetməsi",
+  "branch_management_desc": "Filialları və onların stoklarını idarə edin"
 }
-

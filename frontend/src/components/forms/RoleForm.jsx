@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import Input from '../ui/Input';
 import Alert from '../ui/Alert';
 import { MdSecurity, MdArrowBack } from 'react-icons/md';
-import { roleApi } from '../../api';
+import { roleApi, authApi } from '../../api';
 
 export default function RoleForm() {
     const navigate = useNavigate();
@@ -13,18 +13,34 @@ export default function RoleForm() {
     const id = searchParams.get('id');
     const { t } = useTranslation('role');
     const { t: tAlert } = useTranslation('alert');
-    
+
     const isAdmin = location.pathname.includes('/admin');
     const rolePagePath = isAdmin ? '/admin/roles-management' : '/reception/roles-management';
     const isEditMode = !!id;
-    
+
     const [formData, setFormData] = useState({
         name: '',
         isCore: false
     });
-    
+
+    const [currentUser, setCurrentUser] = useState(null);
     const [errors, setErrors] = useState({});
     const [isLoading, setIsLoading] = useState(false);
+
+    // Fetch current user
+    useEffect(() => {
+        const fetchUser = async () => {
+            try {
+                const response = await authApi.me();
+                if (response.success) {
+                    setCurrentUser(response.data);
+                }
+            } catch (error) {
+                console.error('Error fetching current user:', error);
+            }
+        };
+        fetchUser();
+    }, []);
 
     // Fetch role data (if edit mode)
     useEffect(() => {
@@ -35,9 +51,10 @@ export default function RoleForm() {
                     const response = await roleApi.getById(id);
                     if (response.success && response.date) {
                         const role = response.date;
-                        
-                        // Əgər əsas rol (isCore) isə, redaktə etməyə icazə vermə
-                        if (role.isCore) {
+
+                        // Əgər əsas rol (isCore) isə, redaktə etməyə icazə vermə (Superadmin-dən başqa)
+                        const isSuperAdmin = currentUser?.role?.name?.toLowerCase() === 'superadmin';
+                        if (role.isCore && !isSuperAdmin) {
                             Alert.error(
                                 tAlert('error') || 'Xəta',
                                 t('cannot_edit_core_role') || 'Əsas rollar redaktə edilə bilməz'
@@ -45,7 +62,7 @@ export default function RoleForm() {
                             navigate(rolePagePath);
                             return;
                         }
-                        
+
                         setFormData({
                             name: role.name || '',
                             isCore: role.isCore || false
@@ -66,13 +83,13 @@ export default function RoleForm() {
 
     const validateForm = () => {
         const newErrors = {};
-        
+
         if (!formData.name.trim()) {
             newErrors.name = t('name_required') || 'Rol adı tələb olunur';
         } else if (formData.name.trim().length < 2) {
             newErrors.name = t('name_min_length') || 'Rol adı ən azı 2 simvol olmalıdır';
         }
-        
+
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -82,7 +99,7 @@ export default function RoleForm() {
             ...prev,
             [field]: value
         }));
-        
+
         // Clear error when user starts typing
         if (errors[field]) {
             setErrors(prev => ({
@@ -94,13 +111,13 @@ export default function RoleForm() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        
+
         if (!validateForm()) {
             return;
         }
-        
+
         setIsLoading(true);
-        
+
         try {
             const payload = {
                 name: formData.name.trim(),
@@ -114,11 +131,11 @@ export default function RoleForm() {
                 await roleApi.create(payload);
                 Alert.success(tAlert('add_success') || 'Uğurlu!', tAlert('add_success_text') || 'Rol uğurla əlavə edildi');
             }
-            
+
             setTimeout(() => {
                 navigate(rolePagePath);
             }, 1500);
-            
+
         } catch (error) {
             console.error('Role operation error:', error);
             const errorMessage = error.response?.data?.message || (tAlert('error_text') || 'Xəta baş verdi. Zəhmət olmasa yenidən cəhd edin.');
@@ -165,6 +182,11 @@ export default function RoleForm() {
                         className={errors.name ? 'border-red-500' : ''}
                         disabled={isLoading}
                     />
+                    {formData.isCore && isEditMode && (
+                        <p className="mt-2 text-sm text-amber-600 font-medium bg-amber-50 p-2 rounded border border-amber-200">
+                            {t('core_role_warning') || 'Xəbərdarlıq: Bu əsas (core) roldur. Rolun adını dəyişmək sistemin bəzi hissələrində yoxlamalara təsir edə bilər.'}
+                        </p>
+                    )}
                     {errors.name && (
                         <p className="mt-1 text-sm text-red-600">{errors.name}</p>
                     )}

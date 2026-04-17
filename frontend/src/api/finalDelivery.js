@@ -23,10 +23,10 @@ export const finalDeliveryApi = {
     });
     return response.data;
   },
-  preview: async (startDate, endDate) => {
-    const response = await api.get('/final-delivery/preview', {
-      params: { startDate, endDate }
-    });
+  preview: async (startDate, endDate, branchId = null) => {
+    const params = { startDate, endDate };
+    if (branchId) params.branchId = branchId;
+    const response = await api.get('/final-delivery/preview', { params });
     return response.data;
   },
   // FinalDeliveryItem əməliyyatları

@@ -1,6 +1,7 @@
 import prisma from "../lib/prisma.js";
 import bcrypt from "bcryptjs";
 import { Prisma } from "@prisma/client";
+import { ensureBranch, migrateStaffToBranch } from "../utils/branchHelper.js";
 
 export const seedData = async () => {
   try {
@@ -14,7 +15,7 @@ export const seedData = async () => {
     ];
 
     for (const roleData of roles) {
-      const existingRole = await prisma.role.findUnique({
+      const existingRole = await prisma.role.findFirst({
         where: { name: roleData.name },
       });
 
@@ -27,7 +28,7 @@ export const seedData = async () => {
         // Əgər rol mövcuddursa, isCore dəyərini yenilə
         if (existingRole.isCore !== roleData.isCore) {
           await prisma.role.update({
-            where: { name: roleData.name },
+            where: { id: existingRole.id },
             data: { isCore: roleData.isCore },
           });
           console.log(`🔄 Role yeniləndi: ${roleData.name} (isCore: ${existingRole.isCore} → ${roleData.isCore})`);
@@ -38,7 +39,7 @@ export const seedData = async () => {
     }
 
     // Superadmin role-ünü tap
-    const superadminRole = await prisma.role.findUnique({
+    const superadminRole = await prisma.role.findFirst({
       where: { name: "superadmin" },
     });
 
@@ -51,7 +52,7 @@ export const seedData = async () => {
     const defaultEmail = "elxanxanlarov@gmail.com";
     const defaultPassword = "admin123"; // Default şifrə
 
-    const existingStaff = await prisma.staff.findUnique({
+    const existingStaff = await prisma.staff.findFirst({
       where: { email: defaultEmail },
     });
 
@@ -84,12 +85,12 @@ export const seedData = async () => {
     ];
 
     for (const termData of creditTerms) {
-      const existingTerm = await prisma.creditTerm.findUnique({
+      const existingTerm = await prisma.creditterm.findFirst({
         where: { months: termData.months },
       });
 
       if (!existingTerm) {
-        await prisma.creditTerm.create({
+        await prisma.creditterm.create({
           data: {
             months: termData.months,
             interestRate: new Prisma.Decimal(termData.interestRate),
@@ -101,6 +102,12 @@ export const seedData = async () => {
       } else {
         console.log(`ℹ️  Credit term artıq mövcuddur: ${termData.description}`);
       }
+    }
+
+    // Kürdəxanı filialını yoxla və yarat (yoxdursa) və işçiləri ora köçür
+    const kurdaxani = await ensureBranch("Kürdəxanı", "Kürdəxanı qəsəbəsi");
+    if (kurdaxani) {
+        await migrateStaffToBranch(kurdaxani.id);
     }
 
     console.log("✅ Seed data tamamlandı!");

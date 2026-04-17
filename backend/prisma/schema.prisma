@@ -7,210 +7,24 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum DeleteType {
-  NONE        // Silinməyib
-  SOFT        // Soft delete (soft silinmə)
-  HARD        // Hard delete (tam silinmə)
-  ARCHIVED    // Arxivləşdirilib
+// === ENUMS ===
+
+enum deletetype {
+  NONE
+  SOFT
+  HARD
+  ARCHIVED
 }
 
-enum UnitType {
-  PIECE       // Ədəd
-  BOX         // Qutu
-  LITER       // Litr
-  METER       // Metr
-  KILOGRAM    // Kiloqram
+enum unittype {
+  PIECE
+  BOX
+  LITER
+  METER
+  KILOGRAM
 }
 
-model Role {
-  id        String   @id @default(uuid())
-  name      String   @unique
-  isCore    Boolean  @default(false)
-  deleteType DeleteType @default(NONE) // Silinmə tipi
-  staff     Staff[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-
-
-model Category {
-  id            String        @id @default(uuid())
-  name          String        @unique
-  description   String?
-  isActive      Boolean       @default(true)
-  deleteType    DeleteType    @default(NONE) // Silinmə tipi
-  
-  subCategories SubCategory[]
-  products      Product[]
-  
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-}
-
-model SubCategory {
-  id          String     @id @default(uuid())
-  name        String
-  description String?
-  categoryId  String
-  category    Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  isActive    Boolean    @default(true)
-  deleteType  DeleteType @default(NONE) // Silinmə tipi
-  
-  products    Product[]
-  
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  
-  @@unique([name, categoryId]) // Eyni category daxilində unikal ad
-}
-
-model Product {
-  id              String   @id @default(uuid())
-
-  name            String   // Vitrindəki ad (display name)
-  invoiceName    String?  // Qaimədə gələn orijinal ad
-  description     String?
-  imageUrl        String?       // Məhsul şəkli
-  purchasePrice   Decimal @db.Decimal(10,2) // Alış qiyməti
-  salePrice       Decimal @db.Decimal(10,2) // Satış qiyməti
-
-  hasDiscount     Boolean  @default(false)   // Endirim var?
-  discountPrice   Decimal? @db.Decimal(10,2) // Endirim qiyməti
-  discountPercent Int?                       // Endirim faizi
-
-  // Ölçü vahidi və qutu məlumatları
-  unitType        UnitType @default(PIECE) // Ölçü vahidi (ədəd, qutu, litr, metr, kq)
-  piecesPerBox    Int?     // Hər qutuda/paketdə neçə ədəd/litr/metr (qutu, litr, metr üçün mütləqdir)
-  openedBoxQuantity Int    @default(0) // Açıq qutu/paketdə neçə ədəd/litr/metr qalan
-  boxPrice        Decimal? @db.Decimal(10,2) // Qutu/paket qiyməti (əgər ədəd qiymətindən fərqlidirsə)
-
-  barcode         String?   @unique
-  stock           Int       @default(0) // Ümumi stok (tam qutular * piecesPerBox + openedBoxQuantity)
-  fullBoxes       Int       @default(0) // Tam qutuların/paketlərin sayı
-  isActive        Boolean   @default(true)
-  isOfficial      Boolean   @default(false) // Rəsmi və ya qeyri-rəsmi
-  deleteType      DeleteType @default(NONE) // Silinmə tipi
-
-  categoryId      String?
-  category        Category? @relation(fields: [categoryId], references: [id])
-  subCategoryId   String?
-  subCategory     SubCategory? @relation(fields: [subCategoryId], references: [id])
-
-  saleItems       SaleItem[]
-  returnItems     SaleReturnItem[]
-  stockMovements  StockMovement[]
-  finalDeliveryItems FinalDeliveryItem[] // Yekun təslimat məhsulları
-
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-}
-
-
-
-model Sale {
-  id              String   @id @default(uuid())
-
-  customerName    String?
-  customerSurname String?
-  customerPhone   String?
-
-  totalAmount     Decimal  @db.Decimal(10,2)
-  paidAmount      Decimal  @db.Decimal(10,2)
-  profitAmount    Decimal? @db.Decimal(10,2)
-
-  paymentType     String?  // "cash" (nagd) və ya "card" (kart)
-  isCredit        Boolean  @default(false) // Kredit satışı?
-  creditTermId    String?  // Kredit müddəti
-  creditTerm      CreditTerm? @relation(fields: [creditTermId], references: [id])
-  creditInterestPercent Decimal? @db.Decimal(5,2) // Kredit faizi (məsələn 4.3%)
-  creditTotalAmount Decimal? @db.Decimal(10,2) // Kredit üzrə ümumi məbləğ (faizlə birlikdə)
-  creditRemainingAmount Decimal? @db.Decimal(10,2) // Qalan məbləğ
-  creditMonthlyPayment Decimal? @db.Decimal(10,2) // Aylıq ödəniş məbləği
-  creditStartDate DateTime? // Kredit başlama tarixi
-  creditEndDate   DateTime? // Kredit bitmə tarixi
-  isCreditPaid    Boolean  @default(false) // Kredit tam ödənilib?
-  
-  isRefunded      Boolean  @default(false)
-  refundedAt      DateTime?
-  note            String?
-  deleteType      DeleteType @default(NONE) // Silinmə tipi
-
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  items           SaleItem[]
-  returns         SaleReturn[]
-  receipt         Receipt?
-  creditPayments  CreditPayment[] // Kredit ödənişləri
-  notifications   Notification[] // Bildirişlər
-}
-
-model SaleItem {
-  id             String   @id @default(uuid())
-
-  saleId         String
-  sale           Sale     @relation(fields: [saleId], references: [id])
-
-  productId      String
-  product        Product  @relation(fields: [productId], references: [id])
-
-  quantity       Int
-
-  pricePerItem   Decimal  @db.Decimal(10,2)
-  totalPrice     Decimal  @db.Decimal(10,2)
-
-  purchasePrice  Decimal  @db.Decimal(10,2)
-  profit         Decimal  @db.Decimal(10,2)
-
-  returnItems   SaleReturnItem[]
-}
-
-model SaleReturn {
-  id              String   @id @default(uuid())
-
-  saleId          String
-  sale            Sale     @relation(fields: [saleId], references: [id])
-
-  customerName    String?
-  customerSurname String?
-  customerPhone   String?
-
-  totalAmount     Decimal  @db.Decimal(10,2)
-  returnedAmount  Decimal  @db.Decimal(10,2)
-
-  reason          String?
-  note            String?
-
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  items           SaleReturnItem[]
-}
-
-model SaleReturnItem {
-  id             String   @id @default(uuid())
-
-  returnId       String
-  return         SaleReturn @relation(fields: [returnId], references: [id])
-
-  saleItemId     String
-  saleItem       SaleItem @relation(fields: [saleItemId], references: [id])
-
-  productId      String
-  product        Product  @relation(fields: [productId], references: [id])
-
-  quantity       Int
-
-  pricePerItem   Decimal  @db.Decimal(10,2)
-  totalPrice     Decimal  @db.Decimal(10,2)
-
-  purchasePrice  Decimal  @db.Decimal(10,2)
-  loss           Decimal  @db.Decimal(10,2)
-}
-
-
-enum ActivityAction {
+enum activityaction {
   CREATE
   UPDATE
   DELETE
@@ -222,232 +36,490 @@ enum ActivityAction {
   RETURN
 }
 
-
-model ActivityLog {
-  id        String   @id @default(uuid())
-  staffId   String?
-  staff     Staff?   @relation(fields: [staffId], references: [id])
-  entityType String           // "Product", "Sale", "SaleReturn" və s.
-  entityId   String           // həmin obyektin id-si
-  action    ActivityAction
-  description String?
-  changes   Json?
-  createdAt DateTime @default(now())
+enum stockmovementtype {
+  IN
+  OUT
+  ADJUSTMENT
 }
 
-model Receipt {
-  id              String   @id @default(uuid())
-  saleId          String   @unique
-  sale            Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  
-  receiptNumber   String   @unique // Qəbz nömrəsi
+enum transferstatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+  SHIPPED
+}
+
+// === MODELS ===
+
+model role {
+  id         String     @id @default(uuid())
+  name       String     @unique(map: "Role_name_key")
+  isCore     Boolean    @default(false)
+  deleteType deletetype @default(NONE)
+  staff      staff[]
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@map("role")
+}
+
+model category {
+  id            String        @id @default(uuid())
+  name          String
+  description   String?
+  isActive      Boolean       @default(true)
+  deleteType    deletetype    @default(NONE)
+  branchId      String?
+  branch        branch?       @relation(fields: [branchId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+  subCategories subcategory[]
+  products      product[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@map("category")
+}
+
+model subcategory {
+  id          String     @id @default(uuid())
+  name        String
+  description String?
+  categoryId  String
+  category    category   @relation(fields: [categoryId], references: [id], onUpdate: Cascade, onDelete: Cascade)
+  isActive    Boolean    @default(true)
+  branchId    String?
+  branch      branch?    @relation(fields: [branchId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+  deleteType  deletetype @default(NONE)
+  products    product[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@unique([name, categoryId], map: "SubCategory_name_categoryId_key")
+  @@map("subcategory")
+}
+
+model product {
+  id                String              @id @default(uuid())
+  name              String
+  invoiceName       String?
+  description       String?
+  imageUrl          String?
+  purchasePrice     Decimal             @db.Decimal(10, 2)
+  salePrice         Decimal             @db.Decimal(10, 2)
+  hasDiscount       Boolean             @default(false)
+  discountPrice     Decimal?            @db.Decimal(10, 2)
+  discountPercent   Int?
+  unitType          unittype            @default(PIECE)
+  piecesPerBox      Int?
+  openedBoxQuantity Int                 @default(0)
+  boxPrice          Decimal?            @db.Decimal(10, 2)
+  barcode           String?             @unique(map: "Product_barcode_key")
+  stock             Int                 @default(0)
+  fullBoxes         Int                 @default(0)
+  isActive          Boolean             @default(true)
+  isOfficial        Boolean             @default(false)
+  deleteType        deletetype          @default(NONE)
+  categoryId        String?
+  category          category?           @relation(fields: [categoryId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+  subCategoryId     String?
+  subCategory       subcategory?        @relation(fields: [subCategoryId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+  saleItems         saleitem[]
+  returnItems       salereturnitem[]
+  stockMovements    stockmovement[]
+  finalDeliveryItems finaldeliveryitem[]
+  branchStocks      branchstock[]
+  transferItems     stocktransferitem[]
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@map("product")
+}
+
+model sale {
+  id                    String          @id @default(uuid())
+  customerName          String?
+  customerSurname       String?
+  customerPhone         String?
+  totalAmount           Decimal         @db.Decimal(10, 2)
+  paidAmount            Decimal         @db.Decimal(10, 2)
+  profitAmount          Decimal?        @db.Decimal(10, 2)
+  paymentType           String?
+  isCredit              Boolean         @default(false)
+  creditTermId          String?
+  creditTerm            creditterm?     @relation(fields: [creditTermId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+  creditInterestPercent Decimal?        @db.Decimal(5, 2)
+  creditTotalAmount     Decimal?        @db.Decimal(10, 2)
+  creditRemainingAmount Decimal?        @db.Decimal(10, 2)
+  creditMonthlyPayment  Decimal?        @db.Decimal(10, 2)
+  creditStartDate       DateTime?
+  creditEndDate         DateTime?
+  isCreditPaid          Boolean         @default(false)
+  isRefunded            Boolean         @default(false)
+  refundedAt            DateTime?
+  note                  String?
+  deleteType            deletetype      @default(NONE)
+  branchId              String?
+  branch                branch?         @relation(fields: [branchId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  items                 saleitem[]
+  returns               salereturn[]
+  receipts              receipt[]
+  creditPayments        creditpayment[]
+  notifications         notification[]
+
+  @@map("sale")
+}
+
+model saleitem {
+  id            String           @id @default(uuid())
+  saleId        String
+  sale          sale             @relation(fields: [saleId], references: [id], onUpdate: Cascade)
+  productId     String
+  product       product          @relation(fields: [productId], references: [id], onUpdate: Cascade)
+  quantity      Int
+  pricePerItem  Decimal          @db.Decimal(10, 2)
+  totalPrice    Decimal          @db.Decimal(10, 2)
+  purchasePrice Decimal          @db.Decimal(10, 2)
+  profit        Decimal          @db.Decimal(10, 2)
+  returnItems   salereturnitem[]
+
+  @@map("saleitem")
+}
+
+model salereturn {
+  id              String           @id @default(uuid())
+  saleId          String
+  sale            sale             @relation(fields: [saleId], references: [id], onUpdate: Cascade)
   customerName    String?
   customerSurname String?
   customerPhone   String?
-  
-  totalAmount     Decimal  @db.Decimal(10,2)
-  paidAmount      Decimal  @db.Decimal(10,2)
-  profitAmount    Decimal? @db.Decimal(10,2)
-  
-  paymentType     String?  // "cash" (nagd) və ya "card" (kart)
+  totalAmount     Decimal          @db.Decimal(10, 2)
+  returnedAmount  Decimal          @db.Decimal(10, 2)
+  reason          String?
   note            String?
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  branchId        String?
+  branch          branch?          @relation(fields: [branchId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+  items           salereturnitem[]
+
+  @@map("salereturn")
 }
 
-model Expense {
+model salereturnitem {
+  id            String     @id @default(uuid())
+  returnId      String
+  return        salereturn @relation(fields: [returnId], references: [id], onUpdate: Cascade)
+  saleItemId    String
+  saleItem      saleitem   @relation(fields: [saleItemId], references: [id], onUpdate: Cascade)
+  productId     String
+  product       product    @relation(fields: [productId], references: [id], onUpdate: Cascade)
+  quantity      Int
+  pricePerItem  Decimal    @db.Decimal(10, 2)
+  totalPrice    Decimal    @db.Decimal(10, 2)
+  purchasePrice Decimal    @db.Decimal(10, 2)
+  loss          Decimal    @db.Decimal(10, 2)
+
+  @@map("salereturnitem")
+}
+
+model activitylog {
+  id          String         @id @default(uuid())
+  staffId     String?
+  staff       staff?         @relation(fields: [staffId], references: [id], onUpdate: Cascade)
+  branchId    String?
+  branch      branch?        @relation(fields: [branchId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+  entityType  String
+  entityId    String
+  action      activityaction
+  description String?
+  changes     Json?
+  createdAt   DateTime       @default(now())
+
+  @@map("activitylog")
+}
+
+model receipt {
+  id              String   @id @default(uuid())
+  saleId          String   @unique(map: "Receipt_saleId_key")
+  sale            sale     @relation(fields: [saleId], references: [id], onUpdate: Cascade, onDelete: Cascade)
+  receiptNumber   String   @unique(map: "Receipt_receiptNumber_key")
+  customerName    String?
+  customerSurname String?
+  customerPhone   String?
+  totalAmount     Decimal  @db.Decimal(10, 2)
+  paidAmount      Decimal  @db.Decimal(10, 2)
+  profitAmount    Decimal? @db.Decimal(10, 2)
+  paymentType     String?
+  note            String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("receipt")
+}
+
+model expense {
+  id          String     @id @default(uuid())
+  title       String
+  description String?
+  amount      Decimal    @db.Decimal(10, 2)
+  category    String?
+  date        DateTime   @default(now())
+  note        String?
+  staffId     String?
+  staff       staff?     @relation(fields: [staffId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+  branchId    String?
+  branch      branch?    @relation(fields: [branchId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+  deleteType  deletetype @default(NONE)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@map("expense")
+}
+
+model cashhandover {
+  id             String     @id @default(uuid())
+  date           DateTime   @default(now())
+  amount         Decimal    @db.Decimal(10, 2)
+  note           String?
+  handedOverToId String
+  handedOverTo   staff      @relation("handedoverto", fields: [handedOverToId], references: [id], onUpdate: Cascade)
+  handedOverById String
+  handedOverBy   staff      @relation("handedoverby", fields: [handedOverById], references: [id], onUpdate: Cascade)
+  branchId       String?
+  branch         branch?    @relation(fields: [branchId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+  deleteType     deletetype @default(NONE)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@map("cashhandover")
+}
+
+model stockmovement {
+  id                        String            @id @default(uuid())
+  productId                 String
+  product                   product           @relation(fields: [productId], references: [id], onUpdate: Cascade, onDelete: Cascade)
+  type                      stockmovementtype
+  quantity                  Int
+  previousStock             Int
+  newStock                  Int
+  previousFullBoxes         Int?
+  newFullBoxes              Int?
+  previousOpenedBoxQuantity Int?
+  newOpenedBoxQuantity      Int?
+  note                      String?
+  staffId                   String?
+  staff                     staff?            @relation(fields: [staffId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+  branchId                  String?
+  branch                    branch?           @relation(fields: [branchId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+  createdAt                 DateTime          @default(now())
+  updatedAt                 DateTime          @updatedAt
+
+  @@map("stockmovement")
+}
+
+model creditterm {
+  id           String   @id @default(uuid())
+  months       Int      @unique(map: "CreditTerm_months_key")
+  interestRate Decimal  @db.Decimal(5, 2)
+  description  String?
+  isActive     Boolean  @default(true)
+  sales        sale[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("creditterm")
+}
+
+model creditpayment {
   id          String   @id @default(uuid())
-  title       String   // Xərc başlığı (məsələn "Yemək", "Nəqliyyat")
-  description String?  // Təsvir
-  amount      Decimal  @db.Decimal(10,2) // Məbləğ
-  category    String?  // Xərc kateqoriyası (məsələn "Yemək", "Nəqliyyat", "Digər")
-  date        DateTime @default(now()) // Xərc tarixi
-  note        String?  // Qeyd
-  
-  staffId     String?  // Kim əlavə edib
-  staff       Staff?   @relation(fields: [staffId], references: [id])
-  deleteType  DeleteType @default(NONE) // Silinmə tipi
-  
+  saleId      String
+  sale        sale     @relation(fields: [saleId], references: [id], onUpdate: Cascade, onDelete: Cascade)
+  amount      Decimal  @db.Decimal(10, 2)
+  paymentDate DateTime @default(now())
+  paymentType String?
+  note        String?
+  staffId     String?
+  staff       staff?   @relation(fields: [staffId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+  branchId    String?
+  branch      branch?  @relation(fields: [branchId], references: [id], onUpdate: Cascade, onDelete: SetNull)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@map("creditpayment")
 }
 
-model CashHandover {
-  id              String   @id @default(uuid())
-  date            DateTime @default(now()) // Hansı gün üçün təslim edildi
-  amount          Decimal  @db.Decimal(10,2) // Təslim edilən məbləğ
-  note            String?  // Qeyd
-  
-  handedOverToId  String   // Kimə təslim edildi
-  handedOverTo    Staff    @relation("HandedOverTo", fields: [handedOverToId], references: [id])
-  
-  handedOverById  String   // Kim təslim etdi
-  handedOverBy    Staff    @relation("HandedOverBy", fields: [handedOverById], references: [id])
-  deleteType      DeleteType @default(NONE) // Silinmə tipi
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+model notification {
+  id        String    @id @default(uuid())
+  type      String
+  title     String
+  message   String
+  saleId    String?
+  sale      sale?     @relation(fields: [saleId], references: [id], onUpdate: Cascade, onDelete: Cascade)
+  isRead    Boolean   @default(false)
+  readAt    DateTime?
+  dueDate   DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@map("notification")
 }
 
-enum StockMovementType {
-  IN          // Stok girişi
-  OUT         // Stok çıxışı
-  ADJUSTMENT  // Stok düzəlişi
+model staff {
+  id                    String          @id @default(uuid())
+  name                  String
+  surName               String?
+  phone                 String?
+  email                 String          @unique(map: "Staff_email_key")
+  password              String?
+  isActive              Boolean         @default(true)
+  roleId                String?
+  role                  role?           @relation(fields: [roleId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+  isBoss                Boolean         @default(false)
+  branchId              String?
+  branch                branch?         @relation(fields: [branchId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+  activities            activitylog[]
+  expenses              expense[]
+  cashHandoversReceived cashhandover[]  @relation("handedoverto")
+  cashHandoversGiven    cashhandover[]  @relation("handedoverby")
+  stockMovements        stockmovement[]
+  creditPayments        creditpayment[]
+  finalDeliveries       finaldelivery[]
+  dailySummaries        dailysummary[]
+  transfers             stocktransfer[]
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  @@map("staff")
 }
 
-model StockMovement {
-  id          String   @id @default(uuid())
-  productId   String
-  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  
-  type        StockMovementType // IN, OUT, ADJUSTMENT
-  quantity    Int               // Miqdar (müsbət və ya mənfi)
-  previousStock Int             // Əvvəlki stok
-  newStock    Int               // Yeni stok
-  
-  // Qutu məlumatları (box-type məhsullar üçün)
-  previousFullBoxes Int?        // Əvvəlki tam qutular
-  newFullBoxes Int?             // Yeni tam qutular
-  previousOpenedBoxQuantity Int? // Əvvəlki açıq qutu miqdarı
-  newOpenedBoxQuantity Int?     // Yeni açıq qutu miqdarı
-  
-  note        String?            // Qeyd
-  staffId     String?            // Kim etdi
-  staff       Staff?             @relation(fields: [staffId], references: [id])
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+model finaldelivery {
+  id         String              @id @default(uuid())
+  title      String
+  startDate  DateTime
+  endDate    DateTime
+  note       String?
+  staffId    String?
+  staff      staff?              @relation(fields: [staffId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+  branchId   String?
+  branch     branch?             @relation(fields: [branchId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+  items      finaldeliveryitem[]
+  deleteType deletetype          @default(NONE)
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  @@map("finaldelivery")
 }
 
-// Kredit müddətləri və faizlər
-model CreditTerm {
-  id              String   @id @default(uuid())
-  months          Int      @unique // Müddət (ay) - 2, 3, 6, 9, 12
-  interestRate    Decimal  @db.Decimal(5,2) // Faiz (məsələn 4.3, 5.3, 9.3, 12.3, 15.3)
-  description     String?  // Təsvir (məsələn "2 ay üçün - 4,3%")
-  isActive        Boolean  @default(true)
-  
-  sales           Sale[]   // Bu müddətə aid satışlar
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+model finaldeliveryitem {
+  id                String        @id @default(uuid())
+  finalDeliveryId   String
+  finalDelivery     finaldelivery @relation(fields: [finalDeliveryId], references: [id], onUpdate: Cascade, onDelete: Cascade)
+  productId         String
+  product           product       @relation(fields: [productId], references: [id], onUpdate: Cascade)
+  remainingStock    Int
+  stock             Int
+  fullBoxes         Int           @default(0)
+  openedBoxQuantity Int           @default(0)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@map("finaldeliveryitem")
 }
 
-// Kredit ödənişləri
-model CreditPayment {
-  id              String   @id @default(uuid())
-  saleId          String
-  sale            Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  
-  amount          Decimal  @db.Decimal(10,2) // Ödənilən məbləğ
-  paymentDate     DateTime @default(now()) // Ödəniş tarixi
-  paymentType     String?  // "cash" (nagd) və ya "card" (kart)
-  note            String?  // Qeyd
-  
-  staffId         String?  // Kim qəbul etdi
-  staff           Staff?   @relation(fields: [staffId], references: [id])
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+model dailysummary {
+  id              String     @id @default(uuid())
+  date            DateTime
+  totalSalesCount Int
+  totalProducts   Int
+  totalQuantity   Int
+  totalRevenue    Decimal    @db.Decimal(10, 2)
+  totalPurchase   Decimal    @db.Decimal(10, 2)
+  totalProfit     Decimal    @db.Decimal(10, 2)
+  note            String?
+  staffId         String?
+  staff           staff?     @relation(fields: [staffId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+  branchId        String?
+  branch          branch?    @relation(fields: [branchId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+  deleteType      deletetype @default(NONE)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@map("dailysummary")
 }
 
-// Bildirişlər (Notifications)
-model Notification {
-  id              String   @id @default(uuid())
-  type            String   // "credit_payment_due", "credit_payment_overdue" və s.
-  title           String   // Başlıq
-  message         String   // Mesaj
-  saleId          String?  // Hansı satışa aid
-  sale            Sale?    @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  
-  isRead          Boolean  @default(false) // Oxunub?
-  readAt          DateTime? // Oxunma tarixi
-  
-  dueDate         DateTime? // Ödəniş tarixi (bildiriş üçün)
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+model branch {
+  id              String          @id @default(uuid())
+  name            String          @unique(map: "Branch_name_key")
+  address         String?
+  phone           String?
+  isActive        Boolean         @default(true)
+  deleteType      deletetype      @default(NONE)
+  stocks          branchstock[]
+  transfersFrom   stocktransfer[] @relation("transferfrom")
+  transfersTo     stocktransfer[] @relation("transferto")
+  staff           staff[]
+  sales           sale[]
+  stockMovements  stockmovement[]
+  expenses        expense[]
+  cashHandovers   cashhandover[]
+  finalDeliveries finaldelivery[]
+  dailySummaries  dailysummary[]
+  creditPayments  creditpayment[]
+  saleReturns     salereturn[]
+  categories      category[]
+  subCategories   subcategory[]
+  activityLogs    activitylog[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@map("branch")
 }
 
-model Staff {
-  id          String   @id @default(uuid())
-  name        String
-  surName     String?
-  phone       String?
-  email       String   @unique
-  password    String?
-  isActive    Boolean  @default(true)
-  roleId      String?
-  role        Role?    @relation(fields: [roleId], references: [id])
+model branchstock {
+  id                String   @id @default(uuid())
+  branchId          String
+  branch            branch   @relation(fields: [branchId], references: [id], onUpdate: Cascade, onDelete: Cascade)
+  productId         String
+  product           product  @relation(fields: [productId], references: [id], onUpdate: Cascade, onDelete: Cascade)
+  stock             Int      @default(0)
+  fullBoxes         Int      @default(0)
+  openedBoxQuantity Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  activities  ActivityLog[]
-  expenses    Expense[]
-  cashHandoversReceived CashHandover[] @relation("HandedOverTo")
-  cashHandoversGiven    CashHandover[] @relation("HandedOverBy")
-  stockMovements         StockMovement[]
-  creditPayments         CreditPayment[] // Kredit ödənişləri
-  finalDeliveries        FinalDelivery[] // Yekun təslimatlar
-  dailySummaries         DailySummary[]  // Günlük statistik təslimatlar
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  @@unique([branchId, productId], map: "BranchStock_branchId_productId_key")
+  @@map("branchstock")
 }
 
-// Yekun təslimat
-model FinalDelivery {
-  id              String   @id @default(uuid())
-  title           String   // Başlıq (məsələn "Yanvar 6 (2026) - Fevral 15 (2026)")
-  startDate       DateTime // Başlanğıc tarixi
-  endDate         DateTime // Son tarixi
-  note            String?  // Qeyd
-  
-  staffId         String?  // Kim yaratdı
-  staff           Staff?   @relation(fields: [staffId], references: [id])
-  
-  items           FinalDeliveryItem[] // Təslimat məhsulları
-  
-  deleteType      DeleteType @default(NONE) // Silinmə tipi
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+model stocktransfer {
+  id           String              @id @default(uuid())
+  fromBranchId String?
+  fromBranch   branch?             @relation("transferfrom", fields: [fromBranchId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+  toBranchId   String
+  toBranch     branch              @relation("transferto", fields: [toBranchId], references: [id], onUpdate: Cascade)
+  staffId      String?
+  staff        staff?              @relation(fields: [staffId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+  status       transferstatus      @default(PENDING)
+  note         String?
+  items        stocktransferitem[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@map("stocktransfer")
 }
 
-// Yekun təslimat məhsulları
-model FinalDeliveryItem {
-  id              String   @id @default(uuid())
-  finalDeliveryId String
-  finalDelivery   FinalDelivery @relation(fields: [finalDeliveryId], references: [id], onDelete: Cascade)
-  
-  productId       String
-  product         Product  @relation(fields: [productId], references: [id])
-  
-  remainingStock  Int      // Qalan stok (tarix aralığının sonunda)
-  stock           Int      // Ümumi stok (tarix aralığının sonunda)
-  fullBoxes       Int      @default(0) // Tam qutular
-  openedBoxQuantity Int    @default(0) // Açıq qutu miqdarı
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+model stocktransferitem {
+  id                String        @id @default(uuid())
+  transferId        String
+  transfer          stocktransfer @relation(fields: [transferId], references: [id], onUpdate: Cascade, onDelete: Cascade)
+  productId         String
+  product           product       @relation(fields: [productId], references: [id], onUpdate: Cascade)
+  quantity          Int
+  fullBoxes         Int?
+  openedBoxQuantity Int?
+  createdAt         DateTime      @default(now())
+
+  @@map("stocktransferitem")
 }
 
-// Günlük statistik təslimat (Statistika üçün günlük yekunlar)
-model DailySummary {
-  id              String   @id @default(uuid())
-  date            DateTime           // Hansı günün yekunu
-  totalSalesCount Int                // Gün ərzində neçə satış olub
-  totalProducts   Int                // Neçə fərqli məhsul satılıb
-  totalQuantity   Int                // Ümumi satılan ədəd (cəmi quantity)
-  totalRevenue    Decimal @db.Decimal(10,2) // Ümumi gəlir (satış məbləği)
-  totalPurchase   Decimal @db.Decimal(10,2) // Ümumi alış dəyəri
-  totalProfit     Decimal @db.Decimal(10,2) // Ümumi mənfəət
-  note            String?            // Qeyd (istəyə bağlı)
-
-  staffId         String?            // Kim yaratdı (opsional)
-  staff           Staff?   @relation(fields: [staffId], references: [id])
-
-  deleteType      DeleteType @default(NONE) // Silinmə tipi
-
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-}

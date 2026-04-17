@@ -44,7 +44,9 @@
   "total_profit": "Ümumi Qazanc",
   "total_expenses": "Ümumi Xərclər",
   "net_profit": "Xalis Qazanc",
-  "reset_to_today": "Bu günə qayıt",
+  "reset_to_today": "Bu gün",
+  "overall_stats": "Ümumi Statistika",
+  "all_time": "Bütün zamanlar",
   "cash_handover": "Məbləğ Təslimi",
   "credits": "Kreditlər",
   "paid_amount": "Ödənilən məbləğ",
@@ -70,5 +72,8 @@
   "print_full": "Ümumi məlumat + məhsullar siyahısını çap et",
   "revenue_calculation": "Gəlir Hesablaması",
   "net_revenue": "Xalis Gəlir",
-  "period_totals": "Seçilmiş dövrün cəmi"
+  "period_totals": "Seçilmiş dövrün cəmi",
+  "cashbox": "Kassa",
+  "cashbox_balance": "Kassa qalığı",
+  "cashbox_info": "Nəqd satışlar, qaytarmalar, xərclər və təslimatlar əsasında hesablanır."
 }

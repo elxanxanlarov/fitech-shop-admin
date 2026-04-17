@@ -234,6 +234,6 @@
   "total_stock": "Total Stock",
   "piece": "Piece",
   "box": "Box",
-  "package": "Package"
+  "package": "Package",
+  "calculated_stock_info": "Stock is automatically calculated from full boxes and open items"
 }
-

@@ -2,11 +2,17 @@ import prisma from "../lib/prisma.js";
 import { Prisma } from "@prisma/client";
 import { createActivityLog } from "./activityLogController.js";
 import { calculateProductStock } from "../utils/productStockHelper.js";
+import { resolveProductStock, formatDeliveryTitle } from "../utils/finalDeliveryHelper.js";
+
+function requesterCanPickAnyBranch(requester) {
+    const r = requester?.role?.name?.toLowerCase();
+    return r === "superadmin" || (r === "admin" && requester?.isBoss === true);
+}
 
 // Bütün yekun təslimatları gətir
 export const getAllFinalDeliveries = async (req, res) => {
     try {
-        const { deleteType, includeDeleted, page = 1, limit = 10 } = req.query;
+        const { deleteType, includeDeleted, page = 1, limit = 10, search, startDate, endDate, branchId } = req.query;
         
         const where = {};
         
@@ -19,11 +25,39 @@ export const getAllFinalDeliveries = async (req, res) => {
             // Default: yalnız silinməyən təslimatları göstər
             where.deleteType = 'NONE';
         }
+
+        // Search filter
+        if (search) {
+            where.OR = [
+                { title: { contains: search } },
+                { note: { contains: search } }
+            ];
+        }
+
+        // Date filter
+        if (startDate || endDate) {
+            where.createdAt = {};
+            if (startDate) {
+                where.createdAt.gte = new Date(startDate);
+            }
+            if (endDate) {
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                where.createdAt.lte = end;
+            }
+        }
+
+        // Branch filter
+        if (branchId === 'central') {
+            where.branchId = null;
+        } else if (branchId) {
+            where.branchId = branchId;
+        }
         
         const skip = (parseInt(page) - 1) * parseInt(limit);
         
         const [deliveries, total] = await Promise.all([
-            prisma.finalDelivery.findMany({
+            prisma.finaldelivery.findMany({
                 where,
                 include: {
                     staff: {
@@ -31,6 +65,12 @@ export const getAllFinalDeliveries = async (req, res) => {
                             id: true,
                             name: true,
                             surName: true
+                        }
+                    },
+                    branch: {
+                        select: {
+                            id: true,
+                            name: true
                         }
                     },
                     items: {
@@ -52,7 +92,7 @@ export const getAllFinalDeliveries = async (req, res) => {
                 skip,
                 take: parseInt(limit)
             }),
-            prisma.finalDelivery.count({ where })
+            prisma.finaldelivery.count({ where })
         ]);
         
         return res.status(200).json({ 
@@ -79,7 +119,7 @@ export const getFinalDeliveryById = async (req, res) => {
     try {
         const { id } = req.params;
         
-        const delivery = await prisma.finalDelivery.findUnique({
+        const delivery = await prisma.finaldelivery.findUnique({
             where: { id },
             include: {
                 staff: {
@@ -87,6 +127,12 @@ export const getFinalDeliveryById = async (req, res) => {
                         id: true,
                         name: true,
                         surName: true
+                    }
+                },
+                branch: {
+                    select: {
+                        id: true,
+                        name: true
                     }
                 },
                 items: {
@@ -132,7 +178,7 @@ export const getFinalDeliveryById = async (req, res) => {
 // Preview - Tarix aralığına görə məhsulları gətir (yaratmadan)
 export const previewFinalDelivery = async (req, res) => {
     try {
-        const { startDate, endDate } = req.query;
+        const { startDate, endDate, branchId } = req.query;
         
         if (!startDate || !endDate) {
             return res.status(400).json({
@@ -156,31 +202,26 @@ export const previewFinalDelivery = async (req, res) => {
             where: {
                 isActive: true,
                 deleteType: 'NONE',
-                // Yalnız bu tarix aralığının sonuna qədər yaradılmış məhsullar
                 createdAt: {
                     lte: end
                 }
             },
             include: {
                 category: {
-                    select: {
-                        id: true,
-                        name: true
-                    }
+                    select: { id: true, name: true }
                 },
                 subCategory: {
-                    select: {
-                        id: true,
-                        name: true
-                    }
-                }
+                    select: { id: true, name: true }
+                },
+                branchStocks: (branchId && branchId !== 'central') ? {
+                    where: { branchId }
+                } : false
             }
         });
         
         // Hər məhsul üçün cari stokunu hesabla
         const previewItems = products.map(product => {
-            const stockValue = calculateProductStock(product);
-            const safeStock = typeof stockValue === 'number' && !isNaN(stockValue) ? stockValue : (product.stock || 0);
+            const { stock, fullBoxes, openedBoxQuantity } = resolveProductStock(product, branchId);
 
             return {
                 productId: product.id,
@@ -192,10 +233,10 @@ export const previewFinalDelivery = async (req, res) => {
                     category: product.category,
                     subCategory: product.subCategory
                 },
-                remainingStock: safeStock,
-                stock: safeStock,
-                fullBoxes: product.fullBoxes || 0,
-                openedBoxQuantity: product.openedBoxQuantity || 0
+                remainingStock: stock,
+                stock: stock,
+                fullBoxes: fullBoxes,
+                openedBoxQuantity: openedBoxQuantity
             };
         });
         
@@ -217,7 +258,23 @@ export const previewFinalDelivery = async (req, res) => {
 // Yekun təslimat yarat
 export const createFinalDelivery = async (req, res) => {
     try {
-        const { startDate, endDate, note } = req.body;
+        const { startDate, endDate, note, branchId } = req.body;
+
+        const requester = await prisma.staff.findUnique({
+            where: { id: req.staffId },
+            include: { role: true },
+        });
+
+        let resolvedBranchId = branchId === "central" ? null : branchId || null;
+        if (!requesterCanPickAnyBranch(requester) && requester?.branchId) {
+            resolvedBranchId = requester.branchId;
+        }
+        if (!resolvedBranchId) {
+            return res.status(400).json({
+                success: false,
+                message: "Filial tələb olunur",
+            });
+        }
         
         if (!startDate || !endDate) {
             return res.status(400).json({
@@ -236,40 +293,26 @@ export const createFinalDelivery = async (req, res) => {
             });
         }
         
-        // Tarix formatını hazırla (məsələn "Yanvar 6 (2026) - Fevral 15 (2026)")
-        const formatDateForTitle = (date) => {
-            const d = new Date(date);
-            const months = [
-                'Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'İyun',
-                'İyul', 'Avqust', 'Sentyabr', 'Oktyabr', 'Noyabr', 'Dekabr'
-            ];
-            return `${months[d.getMonth()]} ${d.getDate()} (${d.getFullYear()})`;
-        };
-        
-        const title = `${formatDateForTitle(start)} - ${formatDateForTitle(end)}`;
+        const title = formatDeliveryTitle(start, end);
         
         // Bu tarix aralığında olan bütün aktiv məhsulları gətir
         const products = await prisma.product.findMany({
             where: {
                 isActive: true,
                 deleteType: 'NONE',
-                // Yalnız bu tarix aralığının sonuna qədər yaradılmış məhsullar
                 createdAt: {
                     lte: end
                 }
             },
             include: {
                 category: {
-                    select: {
-                        id: true,
-                        name: true
-                    }
+                    select: { id: true, name: true }
                 },
                 subCategory: {
-                    select: {
-                        id: true,
-                        name: true
-                    }
+                    select: { id: true, name: true }
+                },
+                branchStocks: {
+                    where: { branchId: resolvedBranchId }
                 }
             }
         });
@@ -279,28 +322,26 @@ export const createFinalDelivery = async (req, res) => {
         // Gələcəkdə StockMovement-ləri nəzərə alaraq daha dəqiq hesablama edilə bilər
         
         const deliveryItems = products.map(product => {
-            // Məhsulun cari stokunu helper ilə hesablayırıq
-            const stockValue = calculateProductStock(product);
-            const safeStock = typeof stockValue === 'number' && !isNaN(stockValue) ? stockValue : (product.stock || 0);
+            const { stock, fullBoxes, openedBoxQuantity } = resolveProductStock(product, resolvedBranchId);
 
             return {
                 productId: product.id,
-                // Tarix aralığının sonundakı qalan stok – hazırda cari stok kimi götürürük
-                remainingStock: safeStock,
-                stock: safeStock,
-                fullBoxes: product.fullBoxes || 0,
-                openedBoxQuantity: product.openedBoxQuantity || 0
+                remainingStock: stock,
+                stock: stock,
+                fullBoxes: fullBoxes,
+                openedBoxQuantity: openedBoxQuantity
             };
         });
         
         // Yekun təslimat yarat
-        const delivery = await prisma.finalDelivery.create({
+        const delivery = await prisma.finaldelivery.create({
             data: {
                 title,
                 startDate: start,
                 endDate: end,
                 note: note?.trim() || null,
                 staffId: req.staffId || null,
+                branchId: resolvedBranchId,
                 items: {
                     create: deliveryItems
                 }
@@ -367,7 +408,7 @@ export const updateFinalDelivery = async (req, res) => {
         const { id } = req.params;
         const { note, deleteType } = req.body;
         
-        const existingDelivery = await prisma.finalDelivery.findUnique({
+        const existingDelivery = await prisma.finaldelivery.findUnique({
             where: { id }
         });
         
@@ -377,12 +418,27 @@ export const updateFinalDelivery = async (req, res) => {
                 message: "Yekun təslimat tapılmadı"
             });
         }
+
+        const requester = await prisma.staff.findUnique({
+            where: { id: req.staffId },
+            include: { role: true },
+        });
+
+        let nextBranchId = existingDelivery.branchId;
+        if (req.body.branchId !== undefined) {
+            let v = req.body.branchId === "central" ? null : req.body.branchId;
+            if (!requesterCanPickAnyBranch(requester) && requester?.branchId) {
+                v = requester.branchId;
+            }
+            nextBranchId = v;
+        }
         
-        const updatedDelivery = await prisma.finalDelivery.update({
+        const updatedDelivery = await prisma.finaldelivery.update({
             where: { id },
             data: {
                 note: note !== undefined ? (note?.trim() || null) : existingDelivery.note,
-                deleteType: deleteType !== undefined ? deleteType.toUpperCase() : existingDelivery.deleteType
+                deleteType: deleteType !== undefined ? deleteType.toUpperCase() : existingDelivery.deleteType,
+                branchId: nextBranchId
             },
             include: {
                 staff: {
@@ -447,7 +503,7 @@ export const deleteFinalDelivery = async (req, res) => {
             ? 'HARD' 
             : 'SOFT';
         
-        const existingDelivery = await prisma.finalDelivery.findUnique({
+        const existingDelivery = await prisma.finaldelivery.findUnique({
             where: { id },
             include: { items: true }
         });
@@ -461,7 +517,7 @@ export const deleteFinalDelivery = async (req, res) => {
         
         if (validDeleteType === 'HARD') {
             // Hard delete - tamamilə sil
-            await prisma.finalDelivery.delete({
+            await prisma.finaldelivery.delete({
                 where: { id }
             });
             
@@ -483,7 +539,7 @@ export const deleteFinalDelivery = async (req, res) => {
             }
         } else {
             // Soft delete
-            await prisma.finalDelivery.update({
+            await prisma.finaldelivery.update({
                 where: { id },
                 data: {
                     deleteType: 'SOFT'
@@ -531,7 +587,7 @@ export const updateFinalDeliveryItem = async (req, res) => {
         const { itemId } = req.params;
         const { remainingStock, stock, fullBoxes, openedBoxQuantity } = req.body;
         
-        const existingItem = await prisma.finalDeliveryItem.findUnique({
+        const existingItem = await prisma.finaldeliveryitem.findUnique({
             where: { id: itemId },
             include: {
                 finalDelivery: true,
@@ -559,7 +615,7 @@ export const updateFinalDeliveryItem = async (req, res) => {
             });
         }
         
-        const updatedItem = await prisma.finalDeliveryItem.update({
+        const updatedItem = await prisma.finaldeliveryitem.update({
             where: { id: itemId },
             data: {
                 remainingStock: newRemainingStock,
@@ -626,7 +682,7 @@ export const addFinalDeliveryItem = async (req, res) => {
             });
         }
         
-        const delivery = await prisma.finalDelivery.findUnique({
+        const delivery = await prisma.finaldelivery.findUnique({
             where: { id: deliveryId }
         });
         
@@ -638,7 +694,7 @@ export const addFinalDeliveryItem = async (req, res) => {
         }
         
         // Məhsulun artıq bu təslimatda olub-olmadığını yoxla
-        const existingItem = await prisma.finalDeliveryItem.findFirst({
+        const existingItem = await prisma.finaldeliveryitem.findFirst({
             where: {
                 finalDeliveryId: deliveryId,
                 productId: productId
@@ -677,7 +733,7 @@ export const addFinalDeliveryItem = async (req, res) => {
             });
         }
         
-        const newItem = await prisma.finalDeliveryItem.create({
+        const newItem = await prisma.finaldeliveryitem.create({
             data: {
                 finalDeliveryId: deliveryId,
                 productId: productId,
@@ -737,7 +793,7 @@ export const deleteFinalDeliveryItem = async (req, res) => {
     try {
         const { itemId } = req.params;
         
-        const existingItem = await prisma.finalDeliveryItem.findUnique({
+        const existingItem = await prisma.finaldeliveryitem.findUnique({
             where: { id: itemId },
             include: {
                 finalDelivery: true,
@@ -752,7 +808,7 @@ export const deleteFinalDeliveryItem = async (req, res) => {
             });
         }
         
-        await prisma.finalDeliveryItem.delete({
+        await prisma.finaldeliveryitem.delete({
             where: { id: itemId }
         });
         

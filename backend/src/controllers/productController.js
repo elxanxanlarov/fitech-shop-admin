@@ -10,7 +10,7 @@ import { calculateProductStock, decreaseProductStock, increaseProductStock } fro
 // In productController.js
 export const getAllProducts = async (req, res) => {
     try {
-        const { 
+        const {
             categoryId,
             categoryName,
             minStock,
@@ -27,7 +27,9 @@ export const getAllProducts = async (req, res) => {
             minSalePrice,
             maxSalePrice,
             subCategoryId,
-            subCategoryName
+            subCategoryName,
+            branchId,
+            includeUnassigned
         } = req.query;
 
         const where = {};
@@ -55,7 +57,7 @@ export const getAllProducts = async (req, res) => {
                 },
                 select: { id: true }
             });
-            
+
             if (category) {
                 where.categoryId = category.id;
             } else {
@@ -69,7 +71,7 @@ export const getAllProducts = async (req, res) => {
             where.subCategoryId = subCategoryId;
         } else if (subCategoryName) {
             // Subcategory filter by name
-            const subCategory = await prisma.subCategory.findFirst({
+            const subCategory = await prisma.subcategory.findFirst({
                 where: {
                     name: subCategoryName
                 },
@@ -83,23 +85,60 @@ export const getAllProducts = async (req, res) => {
             }
         }
 
-        // Stock status filter (in stock, low stock, out of stock)
-        // Note: stockStatus takes precedence over minStock/maxStock
-        if (stockStatus) {
-            const stockStatusLower = stockStatus.toLowerCase().trim();
-            if (stockStatusLower === 'stokda var' || stockStatusLower === 'in stock') {
-                where.stock = { gt: 10 };
-            } else if (stockStatusLower === 'az stok' || stockStatusLower === 'low stock') {
-                where.stock = { gte: 1, lte: 10 };
-            } else if (stockStatusLower === 'stokda yoxdur' || stockStatusLower === 'out of stock') {
-                where.stock = 0;
+        // Stock filters based on branchId
+        if (branchId && branchId !== 'central') {
+            const branchStockFilter = {};
+
+            // Stock status filter for branch
+            if (stockStatus) {
+                const stockStatusLower = stockStatus.toLowerCase().trim();
+                if (stockStatusLower === 'stokda var' || stockStatusLower === 'in stock') {
+                    branchStockFilter.stock = { gt: 10 };
+                } else if (stockStatusLower === 'az stok' || stockStatusLower === 'low stock') {
+                    branchStockFilter.stock = { gte: 1, lte: 10 };
+                } else if (stockStatusLower === 'stokda yoxdur' || stockStatusLower === 'out of stock') {
+                    branchStockFilter.stock = 0;
+                }
+            } else if (minStock !== undefined || maxStock !== undefined) {
+                // Stock range filter for branch
+                branchStockFilter.stock = {};
+                if (minStock !== undefined) branchStockFilter.stock.gte = parseInt(minStock);
+                if (maxStock !== undefined) branchStockFilter.stock.lte = parseInt(maxStock);
+            } else {
+                // Default: həmin filialda olan bütün məhsulları göstər (stok 0 olsa belə)
+                branchStockFilter.stock = { gte: 0 };
+            }
+
+            if (includeUnassigned === 'true') {
+                // Kürdəxanı seçiləndə: həmin filialda stoku olan məhsullar + heç bir filial stoku
+                // olmayan köhnə məhsullar da göstərilsin
+                where.OR = [
+                    { branchStocks: { some: { branchId: branchId, ...branchStockFilter } } },
+                    { branchStocks: { none: {} } }
+                ];
+            } else {
+                where.branchStocks = {
+                    some: {
+                        branchId: branchId,
+                        ...branchStockFilter
+                    }
+                };
             }
         } else {
-            // Stock range filter (only if stockStatus is not set)
-        if (minStock !== undefined || maxStock !== undefined) {
-            where.stock = {};
-            if (minStock !== undefined) where.stock.gte = parseInt(minStock);
-            if (maxStock !== undefined) where.stock.lte = parseInt(maxStock);
+            // Default stock filtering (Central Warehouse)
+            if (stockStatus) {
+                const stockStatusLower = stockStatus.toLowerCase().trim();
+                if (stockStatusLower === 'stokda var' || stockStatusLower === 'in stock') {
+                    where.stock = { gt: 10 };
+                } else if (stockStatusLower === 'az stok' || stockStatusLower === 'low stock') {
+                    where.stock = { gte: 1, lte: 10 };
+                } else if (stockStatusLower === 'stokda yoxdur' || stockStatusLower === 'out of stock') {
+                    where.stock = 0;
+                }
+            } else if (minStock !== undefined || maxStock !== undefined) {
+                where.stock = {};
+                if (minStock !== undefined) where.stock.gte = parseInt(minStock);
+                if (maxStock !== undefined) where.stock.lte = parseInt(maxStock);
             }
         }
 
@@ -152,7 +191,7 @@ export const getAllProducts = async (req, res) => {
                 { invoiceName: { contains: searchTerm } },
                 { barcode: { contains: searchTerm } }
             ];
-            
+
             // Description field null ola bilər, ona görə də null check edirik
             searchConditions.push({
                 AND: [
@@ -160,7 +199,7 @@ export const getAllProducts = async (req, res) => {
                     { description: { contains: searchTerm } }
                 ]
             });
-            
+
             where.OR = searchConditions;
         }
 
@@ -178,7 +217,10 @@ export const getAllProducts = async (req, res) => {
                         id: true,
                         name: true
                     }
-                }
+                },
+                branchStocks: branchId && branchId !== 'central' ? {
+                    where: { branchId: branchId }
+                } : false
             },
             orderBy: {
                 createdAt: 'desc',
@@ -186,12 +228,36 @@ export const getAllProducts = async (req, res) => {
         });
 
         // Format the response to include category name in the product title
-        const formattedProducts = products.map(product => ({
-            ...product,
-            titleWithCategory: product.name,
-            categoryName: product.category?.name || '',
-            subCategoryName: product.subCategory?.name || ''
-        }));
+        const formattedProducts = products.map(product => {
+            let stock = product.stock;
+            let fullBoxes = product.fullBoxes;
+            let openedBoxQuantity = product.openedBoxQuantity;
+
+            if (branchId && branchId !== 'central') {
+                if (product.branchStocks && product.branchStocks.length > 0) {
+                    const bStock = product.branchStocks[0];
+                    stock = bStock.stock;
+                    fullBoxes = bStock.fullBoxes;
+                    openedBoxQuantity = bStock.openedBoxQuantity;
+                } else {
+                    // Branch isolation: if no branch stock record exists, stock is 0
+                    stock = 0;
+                    fullBoxes = 0;
+                    openedBoxQuantity = 0;
+                }
+            }
+
+            return {
+                ...product,
+                stock,
+                fullBoxes,
+                openedBoxQuantity,
+                titleWithCategory: product.name,
+                categoryName: product.category?.name || '',
+                subCategoryName: product.subCategory?.name || '',
+                branchStocks: undefined // Don't leak raw branchStocks array
+            };
+        });
 
         return res.status(200).json({
             success: true,
@@ -215,11 +281,15 @@ export const getAllProducts = async (req, res) => {
 export const getProductById = async (req, res) => {
     try {
         const { id } = req.params;
+        const { branchId } = req.query;
         const product = await prisma.product.findUnique({
             where: { id },
             include: {
                 category: true,
-                subCategory: true
+                subCategory: true,
+                branchStocks: branchId && branchId !== 'central' ? {
+                    where: { branchId: branchId }
+                } : false
             }
         });
 
@@ -228,6 +298,20 @@ export const getProductById = async (req, res) => {
                 success: false,
                 message: "Məhsul tapılmadı",
             });
+        }
+
+        if (branchId && branchId !== 'central') {
+            if (product.branchStocks && product.branchStocks.length > 0) {
+                const bStock = product.branchStocks[0];
+                product.stock = bStock.stock;
+                product.fullBoxes = bStock.fullBoxes;
+                product.openedBoxQuantity = bStock.openedBoxQuantity;
+            } else {
+                // Branch isolation: if no branch stock record exists, stock is 0
+                product.stock = 0;
+                product.fullBoxes = 0;
+                product.openedBoxQuantity = 0;
+            }
         }
 
         return res.json({
@@ -265,7 +349,8 @@ export const createProduct = async (req, res) => {
             piecesPerBox,
             openedBoxQuantity,
             boxPrice,
-            fullBoxes
+            fullBoxes,
+            branchId
         } = req.body;
         if (!name || !purchasePrice || !salePrice) {
             return res.status(400).json({
@@ -363,16 +448,43 @@ export const createProduct = async (req, res) => {
                 barcode: barcode?.trim() || null,
                 unitType: finalUnitType,
                 piecesPerBox: finalPiecesPerBox,
-                openedBoxQuantity: finalOpenedBoxQuantity,
+                openedBoxQuantity: branchId && branchId !== 'central' ? 0 : finalOpenedBoxQuantity,
                 boxPrice: finalBoxPrice,
-                fullBoxes: calculatedFullBoxes,
-                stock: calculatedStock,
+                fullBoxes: branchId && branchId !== 'central' ? 0 : calculatedFullBoxes,
+                stock: branchId && branchId !== 'central' ? 0 : calculatedStock,
                 isActive: typeof isActive === "boolean" ? isActive : true,
                 isOfficial: typeof isOfficial === "boolean" ? isOfficial : false,
                 categoryId: categoryId || null,
                 subCategoryId: subCategoryId || null,
             }
         });
+
+        // Hər bir filial üçün BranchStock yaradılmasını təmin et (0 stok ilə)
+        try {
+            const branches = await prisma.branch.findMany({
+                where: { isActive: true, deleteType: 'NONE' }
+            });
+
+            if (branches.length > 0) {
+                const branchStockData = branches.map(branch => {
+                    const isSelectedBranch = branchId && branchId === branch.id;
+                    return {
+                        branchId: branch.id,
+                        productId: newProduct.id,
+                        stock: isSelectedBranch ? calculatedStock : 0,
+                        fullBoxes: isSelectedBranch ? calculatedFullBoxes : 0,
+                        openedBoxQuantity: isSelectedBranch ? calculatedOpenedBoxQuantity : 0
+                    };
+                });
+
+                await prisma.branchstock.createMany({
+                    data: branchStockData,
+                    skipDuplicates: true
+                });
+            }
+        } catch (branchStockError) {
+            console.error("Filial stokları yaradılarkən xəta:", branchStockError);
+        }
 
         // Activity log yarat
         try {
@@ -397,9 +509,9 @@ export const createProduct = async (req, res) => {
 
         return res.status(200).json({
             success: true,
-            message: "Məhsul yeniləndi",
+            message: "Məhsul yaradıldı",
             data: newProduct,
-            date:newProduct
+            date: newProduct
         });
     } catch (error) {
         console.error("createProduct error", error);
@@ -672,7 +784,7 @@ export const updateProduct = async (req, res) => {
 export const updateStock = async (req, res) => {
     try {
         const { id } = req.params;
-        const { stock, fullBoxes, openedBoxQuantity, note } = req.body;
+        const { stock, fullBoxes, openedBoxQuantity, note, branchId } = req.body;
 
         const existingProduct = await prisma.product.findUnique({
             where: { id }
@@ -685,13 +797,30 @@ export const updateStock = async (req, res) => {
             });
         }
 
+        // Get current stock (central or branch)
+        let previousStockData = existingProduct;
+        if (branchId && branchId !== 'central') {
+            const bStock = await prisma.branchstock.findFirst({
+                where: {
+                    branchId: branchId,
+                    productId: id
+                }
+            });
+            if (bStock) {
+                previousStockData = { ...existingProduct, ...bStock };
+            } else {
+                // If doesn't exist, treat as 0 stock
+                previousStockData = { ...existingProduct, stock: 0, fullBoxes: 0, openedBoxQuantity: 0 };
+            }
+        }
+
         const piecesPerBox = existingProduct.piecesPerBox;
         const unitType = existingProduct.unitType || 'PIECE';
 
         // Calculate new stock values
-        let calculatedStock = stock !== undefined ? parseInt(stock) : existingProduct.stock;
-        let calculatedFullBoxes = fullBoxes !== undefined ? parseInt(fullBoxes) : existingProduct.fullBoxes;
-        let calculatedOpenedBoxQuantity = openedBoxQuantity !== undefined ? parseInt(openedBoxQuantity) : existingProduct.openedBoxQuantity;
+        let calculatedStock = stock !== undefined ? parseInt(stock) : previousStockData.stock;
+        let calculatedFullBoxes = fullBoxes !== undefined ? parseInt(fullBoxes) : previousStockData.fullBoxes;
+        let calculatedOpenedBoxQuantity = openedBoxQuantity !== undefined ? parseInt(openedBoxQuantity) : previousStockData.openedBoxQuantity;
 
         // If box-type product, calculate based on boxes/pieces
         if (unitType !== 'PIECE' && piecesPerBox && piecesPerBox > 0) {
@@ -704,46 +833,74 @@ export const updateStock = async (req, res) => {
         }
 
         // Calculate previous and new stock
-        const previousStock = calculateProductStock(existingProduct);
+        const previousStock = calculateProductStock(previousStockData);
         const newStock = calculatedStock;
         const stockDifference = newStock - previousStock;
 
         // Only create movement if stock changed
-        if (stockDifference === 0 && 
-            calculatedFullBoxes === existingProduct.fullBoxes && 
-            calculatedOpenedBoxQuantity === existingProduct.openedBoxQuantity) {
+        if (stockDifference === 0 &&
+            calculatedFullBoxes === previousStockData.fullBoxes &&
+            calculatedOpenedBoxQuantity === previousStockData.openedBoxQuantity) {
             return res.status(200).json({
                 success: true,
                 message: "Stok dəyişməyib",
-                data: existingProduct
+                data: previousStockData
             });
         }
 
-        // Update product stock
-        const updated = await prisma.product.update({
-            where: { id },
-            data: {
-                stock: calculatedStock,
-                fullBoxes: calculatedFullBoxes,
-                openedBoxQuantity: calculatedOpenedBoxQuantity
+        // Update product stock (central or branch)
+        let updated;
+        if (branchId && branchId !== 'central') {
+            const existingBs = await prisma.branchstock.findFirst({
+                where: { branchId: branchId, productId: id }
+            });
+            if (existingBs) {
+                updated = await prisma.branchstock.update({
+                    where: { id: existingBs.id },
+                    data: {
+                        stock: calculatedStock,
+                        fullBoxes: calculatedFullBoxes,
+                        openedBoxQuantity: calculatedOpenedBoxQuantity
+                    }
+                });
+            } else {
+                updated = await prisma.branchstock.create({
+                    data: {
+                        branchId: branchId,
+                        productId: id,
+                        stock: calculatedStock,
+                        fullBoxes: calculatedFullBoxes,
+                        openedBoxQuantity: calculatedOpenedBoxQuantity
+                    }
+                });
             }
-        });
+        } else {
+            updated = await prisma.product.update({
+                where: { id },
+                data: {
+                    stock: calculatedStock,
+                    fullBoxes: calculatedFullBoxes,
+                    openedBoxQuantity: calculatedOpenedBoxQuantity
+                }
+            });
+        }
 
         // Create stock movement
         try {
-            await prisma.stockMovement.create({
+            await prisma.stockmovement.create({
                 data: {
                     productId: id,
                     type: 'ADJUSTMENT',
                     quantity: stockDifference,
                     previousStock: previousStock,
                     newStock: newStock,
-                    previousFullBoxes: existingProduct.fullBoxes || null,
+                    previousFullBoxes: previousStockData.fullBoxes || null,
                     newFullBoxes: calculatedFullBoxes || null,
-                    previousOpenedBoxQuantity: existingProduct.openedBoxQuantity || null,
+                    previousOpenedBoxQuantity: previousStockData.openedBoxQuantity || null,
                     newOpenedBoxQuantity: calculatedOpenedBoxQuantity || null,
                     note: note?.trim() || 'Məhsul formundan stok yeniləməsi',
-                    staffId: req.staffId || null
+                    staffId: req.staffId || null,
+                    branchId: (branchId && branchId !== 'central') ? branchId : null
                 }
             });
         } catch (movementError) {
@@ -768,12 +925,23 @@ export const deleteProduct = async (req, res) => {
     try {
         const { id } = req.params;
         const { deleteType = 'SOFT' } = req.body; // Default: SOFT delete
-        
+
         // Ensure deleteType is valid
         const validDeleteType = (deleteType && typeof deleteType === 'string' && deleteType.toUpperCase() === 'HARD') ? 'HARD' : 'SOFT';
-        
+
         const existingProduct = await prisma.product.findUnique({
-            where: { id }
+            where: { id },
+            include: {
+                _count: {
+                    select: {
+                        saleItems: true,
+                        returnItems: true,
+                        finalDeliveryItems: true,
+                        transferItems: true,
+                        stockMovements: true,
+                    }
+                }
+            }
         });
 
         if (!existingProduct) {
@@ -785,19 +953,60 @@ export const deleteProduct = async (req, res) => {
 
         // DeleteType-a görə silmə
         if (validDeleteType === 'HARD') {
-            // Hard delete - məhsulu tamamilə sil
-            await prisma.product.delete({
-                where: { id }
+            // Hard delete - Bütün əlaqəli cədvəllərdən məlumatları təmizlə və məhsulu sil
+
+            // 1. Bu məhsulun olduğu bütün satış ID-lərini tap
+            const relatedSaleItems = await prisma.saleitem.findMany({
+                where: { productId: id },
+                select: { saleId: true }
             });
+            const saleIds = [...new Set(relatedSaleItems.map(item => item.saleId))];
+
+            await prisma.$transaction([
+                // 1. Geri qaytarma maddələrini və sənədlərini sil
+                prisma.salereturnitem.deleteMany({ where: { productId: id } }),
+                prisma.salereturn.deleteMany({ where: { saleId: { in: saleIds } } }),
+
+                // 2. Satış maddələrini və satışları sil
+                prisma.saleitem.deleteMany({ where: { productId: id } }),
+                // Qeyd: Digər əlaqəli cədvəllər (Receipt, CreditPayment) cascade deyilse onları da silmek lazım olar
+                prisma.receipt.deleteMany({ where: { saleId: { in: saleIds } } }),
+                prisma.creditpayment.deleteMany({ where: { saleId: { in: saleIds } } }),
+                prisma.notification.deleteMany({ where: { saleId: { in: saleIds } } }),
+                prisma.sale.deleteMany({ where: { id: { in: saleIds } } }),
+
+                // 3. Yekun təslimat və transfer maddələrini sil
+                prisma.finaldeliveryitem.deleteMany({ where: { productId: id } }),
+                prisma.stocktransferitem.deleteMany({ where: { productId: id } }),
+
+                // 4. Məhsulun özünü sil
+                prisma.product.delete({ where: { id } })
+            ]);
         } else {
-            // Soft delete - deleteType-u dəyiş
-            await prisma.product.update({
-                where: { id },
-                data: {
-                    deleteType: 'SOFT',
-                    isActive: false // Soft delete zamanı isActive də false olsun
-                }
+            // Soft delete - Məhsulu və əlaqəli SATIŞLARI soft delete et
+
+            // 1. Bu məhsulun olduğu bütün satış ID-lərini tap
+            const relatedSaleItems = await prisma.saleitem.findMany({
+                where: { productId: id },
+                select: { saleId: true }
             });
+            const saleIds = [...new Set(relatedSaleItems.map(item => item.saleId))];
+
+            await prisma.$transaction([
+                // Əlaqəli satışları soft delete et (statistikada görünməməsi üçün)
+                prisma.sale.updateMany({
+                    where: { id: { in: saleIds } },
+                    data: { deleteType: 'SOFT' }
+                }),
+                // Məhsulu soft delete et
+                prisma.product.update({
+                    where: { id },
+                    data: {
+                        deleteType: 'SOFT',
+                        isActive: false
+                    }
+                })
+            ]);
         }
 
         // Activity log yarat
@@ -829,6 +1038,15 @@ export const deleteProduct = async (req, res) => {
         });
     } catch (error) {
         console.error("deleteProduct error", error);
+
+        // Foreign key constraint error
+        if (error.code === 'P2003') {
+            return res.status(400).json({
+                success: false,
+                message: "Bu məhsul tamamilə silinə bilməz, çünki əlaqəli satış və ya başqa qeydlər mövcuddur. Zəhmət olmasa arxivləşdirmə (soft delete) istifadə edin.",
+            });
+        }
+
         return res.status(500).json({
             success: false,
             message: "Məhsul silinirkən xəta baş verdi",
@@ -972,7 +1190,7 @@ export const importProductsFromExcel = async (req, res) => {
 
         // Fetch all categories and subcategories for mapping
         const categories = await prisma.category.findMany();
-        const subCategories = await prisma.subCategory.findMany();
+        const subCategories = await prisma.subcategory.findMany();
 
         const categoryMap = new Map(categories.map(cat => [cat.name.toLowerCase().trim(), cat.id]));
         const subCategoryMap = new Map(subCategories.map(sub => [sub.name.toLowerCase().trim(), sub.id]));
@@ -1091,6 +1309,30 @@ export const importProductsFromExcel = async (req, res) => {
                 imported.push(product);
                 successCount++;
 
+                // Hər bir filial üçün BranchStock yaradılmasını təmin et (0 stok ilə)
+                try {
+                    const branches = await prisma.branch.findMany({
+                        where: { isActive: true, deleteType: 'NONE' }
+                    });
+
+                    if (branches.length > 0) {
+                        const branchStockData = branches.map(branch => ({
+                            branchId: branch.id,
+                            productId: product.id,
+                            stock: 0,
+                            fullBoxes: 0,
+                            openedBoxQuantity: 0
+                        }));
+
+                        await prisma.branchstock.createMany({
+                            data: branchStockData,
+                            skipDuplicates: true
+                        });
+                    }
+                } catch (branchStockError) {
+                    console.error("Filial stokları yaradılarkən xəta (vBulk):", branchStockError);
+                }
+
                 // Activity log
                 try {
                     await createActivityLog({
@@ -1161,7 +1403,7 @@ export const importProductsFromExcel = async (req, res) => {
 export const getProductSales = async (req, res) => {
     try {
         const { id: productId } = req.params;
-        
+
         if (!productId) {
             return res.status(400).json({
                 success: false,
@@ -1170,23 +1412,15 @@ export const getProductSales = async (req, res) => {
         }
 
         // Məhsulun satış məlumatlarını al
-        const saleItems = await prisma.saleItem.findMany({
+        const saleItems = await prisma.saleitem.findMany({
             where: {
                 productId: productId
             },
             include: {
                 sale: {
                     include: {
-                        receipt: {
-                            include: {
-                                staff: {
-                                    select: {
-                                        id: true,
-                                        name: true,
-                                        surName: true
-                                    }
-                                }
-                            }
+                        receipts: {
+                            take: 1
                         }
                     }
                 },
@@ -1208,7 +1442,7 @@ export const getProductSales = async (req, res) => {
 
         // ActivityLog-dan staff məlumatlarını al və sale-lərə əlavə et
         const saleIds = saleItems.map(item => item.sale.id);
-        const activityLogs = await prisma.activityLog.findMany({
+        const activityLogs = await prisma.activitylog.findMany({
             where: {
                 entityType: 'Sale',
                 entityId: {
@@ -1235,11 +1469,8 @@ export const getProductSales = async (req, res) => {
             }
         });
 
-        // Receipt-dən də staff məlumatını əlavə et (receipt varsa)
         saleItems.forEach(item => {
-            if (item.sale.receipt?.staff) {
-                item.sale.staff = item.sale.receipt.staff;
-            } else if (staffMap[item.sale.id]) {
+            if (staffMap[item.sale.id]) {
                 item.sale.staff = staffMap[item.sale.id];
             }
         });
@@ -1261,7 +1492,7 @@ export const getProductSales = async (req, res) => {
 export const getProductReturns = async (req, res) => {
     try {
         const { id: productId } = req.params;
-        
+
         if (!productId) {
             return res.status(400).json({
                 success: false,
@@ -1270,7 +1501,7 @@ export const getProductReturns = async (req, res) => {
         }
 
         // Məhsulun qaytarma məlumatlarını al
-        const returnItems = await prisma.saleReturnItem.findMany({
+        const returnItems = await prisma.salereturnitem.findMany({
             where: {
                 productId: productId
             },

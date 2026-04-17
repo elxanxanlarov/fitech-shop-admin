@@ -1,31 +1,108 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { productApi } from '../../api';
+import { MdInventory, MdSearch, MdSave, MdRefresh } from 'react-icons/md';
+import { BiBuildings } from 'react-icons/bi';
+import SearchDropdown from '../ui/SearchDropdown';
 import Alert from '../ui/Alert';
 import Input from '../ui/Input';
-import { MdInventory, MdSearch, MdSave, MdRefresh } from 'react-icons/md';
-import SearchDropdown from '../ui/SearchDropdown';
+import { branchApi, productApi, authApi } from '../../api';
+import { useBranch } from '../../hooks';
+
+function canPickInvoiceBranch(user) {
+    if (!user?.role?.name) return false;
+    const r = user.role.name.toLowerCase();
+    return r === 'superadmin' || (r === 'admin' && user.isBoss === true);
+}
 
 export default function InvoiceNameMapping() {
     const { t } = useTranslation('invoice_name');
     const { t: tAlert } = useTranslation('alert');
     
+    const { selectedBranchId } = useBranch();
+    
     const [products, setProducts] = useState([]);
+    const [branches, setBranches] = useState([]);
+    const [localBranchId, setLocalBranchId] = useState('');
+    const [currentUser, setCurrentUser] = useState(null);
     const [selectedProduct, setSelectedProduct] = useState(null);
     const [invoiceName, setInvoiceName] = useState('');
     const [loading, setLoading] = useState(false);
+    const [loadingBranches, setLoadingBranches] = useState(false);
     const [saving, setSaving] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
 
-    // Fetch all products
+    // Fetch products when localBranchId changes
     useEffect(() => {
-        fetchProducts();
+        if (localBranchId) {
+            fetchProducts(localBranchId);
+        }
+    }, [localBranchId]);
+
+    useEffect(() => {
+        const fetchData = async () => {
+            setLoadingBranches(true);
+            try {
+                const [userResp, branchesResp] = await Promise.all([
+                    authApi.me(),
+                    branchApi.getAll()
+                ]);
+                if (userResp.success) {
+                    setCurrentUser(userResp.data);
+                }
+                if (branchesResp.success && branchesResp.data) {
+                    const filtered = branchesResp.data.filter(
+                        (b) => b.name !== 'Mərkəz Anbar' && b.id !== 'central'
+                    );
+                    setBranches(filtered);
+                }
+            } catch (error) {
+                console.error('Error fetching branches/user:', error);
+            } finally {
+                setLoadingBranches(false);
+            }
+        };
+        fetchData();
     }, []);
 
-    const fetchProducts = async () => {
+    useEffect(() => {
+        if (!currentUser || branches.length === 0) return;
+
+        let next = '';
+        if (canPickInvoiceBranch(currentUser)) {
+            next =
+                selectedBranchId && selectedBranchId !== 'central' ? selectedBranchId : '';
+            if (!next) {
+                const k = branches.find((b) => b.name === 'Kürdəxanı');
+                next = k ? k.id : branches[0]?.id || '';
+            }
+        } else {
+            next = currentUser.branchId || '';
+            if (!next && selectedBranchId && selectedBranchId !== 'central') {
+                next = selectedBranchId;
+            }
+        }
+
+        setLocalBranchId((prev) => (prev === next ? prev : next));
+    }, [currentUser, selectedBranchId, branches]);
+
+    const branchOptionsForForm = useMemo(() => {
+        if (!currentUser || canPickInvoiceBranch(currentUser)) return branches;
+        const bid = currentUser.branchId;
+        if (!bid) return branches;
+        const mine = branches.filter((b) => b.id === bid);
+        return mine.length ? mine : branches;
+    }, [branches, currentUser]);
+
+    useEffect(() => {
+        setSelectedProduct(null);
+        setInvoiceName('');
+    }, [localBranchId]);
+
+    const fetchProducts = async (bId) => {
         setLoading(true);
         try {
-            const response = await productApi.getAll();
+            const queryString = bId && bId !== 'central' ? `?branchId=${bId}` : '';
+            const response = await productApi.getAll(queryString);
             if (response.success && response.date) {
                 setProducts(response.date);
             } else {
@@ -113,6 +190,24 @@ export default function InvoiceNameMapping() {
             </div>
 
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 space-y-6">
+                {/* Branch Selection */}
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                        {t('branch') || 'Filial'}
+                    </label>
+                    <SearchDropdown
+                        options={branchOptionsForForm}
+                        value={localBranchId}
+                        onChange={(value) => setLocalBranchId(value)}
+                        placeholder={t('select_branch') || 'Filial seçin'}
+                        getOptionLabel={(branch) => branch.name}
+                        getOptionValue={(branch) => branch.id}
+                        disabled={loadingBranches || !canPickInvoiceBranch(currentUser)}
+                        icon={<BiBuildings className="text-blue-500" />}
+                        searchFields={['name']}
+                    />
+                </div>
+
                 {/* Product Selection */}
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -125,6 +220,7 @@ export default function InvoiceNameMapping() {
                         placeholder={t('search_product') || 'Məhsul axtarın...'}
                         searchValue={searchTerm}
                         onSearchChange={setSearchTerm}
+                        disabled={loading}
                     />
                 </div>
 

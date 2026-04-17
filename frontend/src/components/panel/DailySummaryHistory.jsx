@@ -3,12 +3,14 @@ import { useTranslation } from 'react-i18next';
 import { dailySummaryApi } from '../../api';
 import Alert from '../ui/Alert';
 import { MdClose, MdRefresh, MdSearch, MdChevronRight, MdHistory } from 'react-icons/md';
+import { useBranch } from '../../hooks';
 
 export default function DailySummaryHistory({ onSelect, onClose }) {
   const { t, i18n } = useTranslation('statistics');
   const [data, setData] = useState([]);
   const [totals, setTotals] = useState(null);
   const [loading, setLoading] = useState(false);
+  const { selectedBranchId } = useBranch();
 
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0];
@@ -24,6 +26,7 @@ export default function DailySummaryHistory({ onSelect, onClose }) {
       const res = await dailySummaryApi.getAll({
         startDate: filters.startDate || undefined,
         endDate: filters.endDate || undefined,
+        branchId: selectedBranchId || undefined,
       });
       if (res.success) {
         setData(res.data || []);
@@ -43,7 +46,7 @@ export default function DailySummaryHistory({ onSelect, onClose }) {
   useEffect(() => {
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [selectedBranchId]);
 
   const formatDate = (d) => {
     if (!d) return '-';

@@ -21,7 +21,7 @@ export const login = async (req, res) => {
       });
     }
 
-    const foundStaff = await prisma.staff.findUnique({
+    const foundStaff = await prisma.staff.findFirst({
       where: { email: email.trim().toLowerCase() },
       include: {
         role: true,
@@ -74,6 +74,7 @@ export const login = async (req, res) => {
     try {
         await createActivityLog({
             staffId: foundStaff.id,
+            branchId: foundStaff.branchId || null,
             entityType: "Auth",
             entityId: foundStaff.id,
             action: "LOGIN",
@@ -111,12 +112,13 @@ export const logout = async (req, res) => {
       try {
         const staff = await prisma.staff.findUnique({
           where: { id: staffId },
-          select: { id: true, name: true, surName: true, email: true }
+          select: { id: true, name: true, surName: true, email: true, branchId: true }
         });
         
         if (staff) {
           await createActivityLog({
             staffId: staff.id,
+            branchId: staff.branchId || null,
             entityType: "Auth",
             entityId: staff.id,
             action: "LOGOUT",

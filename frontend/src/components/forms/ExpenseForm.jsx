@@ -1,11 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Input from '../ui/Input';
 import Alert from '../ui/Alert';
-import { MdAttachMoney, MdDescription, MdArrowBack, MdCategory, MdEvent } from 'react-icons/md';
-import { expenseApi } from '../../api';
+import SearchDropdown from '../ui/SearchDropdown';
+import { 
+    DollarSign, 
+    FileText, 
+    ArrowLeft, 
+    Layers, 
+    Calendar as CalendarIcon, 
+    Building2,
+    StickyNote
+} from 'lucide-react';
+import { expenseApi, branchApi, authApi } from '../../api';
 import { createInputChangeHandler, validateNumberInput } from '../../utils/validation';
+import { useBranch } from '../../hooks';
+
+/** Superadmin və baş admin (admin + isBoss) filial seçə bilər — BranchSelector ilə eyni */
+function canPickExpenseBranch(user) {
+    if (!user?.role?.name) return false;
+    const r = user.role.name.toLowerCase();
+    return r === 'superadmin' || (r === 'admin' && user.isBoss === true);
+}
 
 export default function ExpenseForm() {
     const navigate = useNavigate();
@@ -14,23 +31,82 @@ export default function ExpenseForm() {
     const id = searchParams.get('id');
     const { t } = useTranslation('expense');
     const { t: tAlert } = useTranslation('alert');
+    const { selectedBranchId } = useBranch();
 
     const isAdmin = location.pathname.includes('/admin');
     const expensePagePath = isAdmin ? '/admin/expenses' : '/reception/expenses';
     const isEditMode = !!id;
-    
+
+    const getLocalDateString = () => {
+        const today = new Date();
+        return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    };
+
     const [formData, setFormData] = useState({
         title: '',
         description: '',
         amount: '',
         category: '',
-        date: new Date().toISOString().split('T')[0],
-        note: ''
+        date: getLocalDateString(),
+        note: '',
+        branchId: ''
     });
-    
+
+    const [branches, setBranches] = useState([]);
+    const [currentUser, setCurrentUser] = useState(null);
+
     const [errors, setErrors] = useState({});
     const [isLoading, setIsLoading] = useState(false);
     const [initialFormData, setInitialFormData] = useState(null);
+
+    // İstifadəçi və filiallar
+    useEffect(() => {
+        const fetchUserAndBranches = async () => {
+            try {
+                const [userResp, branchesResp] = await Promise.all([
+                    authApi.me(),
+                    branchApi.getAll()
+                ]);
+                if (userResp.success) {
+                    setCurrentUser(userResp.data);
+                }
+                if (branchesResp.success && branchesResp.data) {
+                    setBranches(branchesResp.data);
+                }
+            } catch (error) {
+                console.error('Error fetching data:', error);
+            }
+        };
+        fetchUserAndBranches();
+    }, []);
+
+    // Yaratma rejimində filial default: filiala bağlı admin/reception — yalnız öz filialı; digərləri — header
+    useEffect(() => {
+        if (isEditMode || !currentUser) return;
+
+        let next = '';
+        if (canPickExpenseBranch(currentUser)) {
+            next =
+                selectedBranchId && selectedBranchId !== 'central' ? selectedBranchId : '';
+        } else {
+            next = currentUser.branchId || '';
+            if (!next && selectedBranchId && selectedBranchId !== 'central') {
+                next = selectedBranchId;
+            }
+        }
+
+        setFormData((prev) =>
+            prev.branchId === next ? prev : { ...prev, branchId: next }
+        );
+    }, [isEditMode, currentUser, selectedBranchId]);
+
+    const branchOptionsForForm = useMemo(() => {
+        if (!currentUser || canPickExpenseBranch(currentUser)) return branches;
+        const bid = currentUser.branchId;
+        if (!bid) return branches;
+        const mine = branches.filter((b) => b.id === bid);
+        return mine.length ? mine : branches;
+    }, [branches, currentUser]);
 
     // Expense categories
     const expenseCategories = [
@@ -56,8 +132,9 @@ export default function ExpenseForm() {
                             description: expense.description || '',
                             amount: expense.amount?.toString() || '',
                             category: expense.category || '',
-                            date: expense.date ? new Date(expense.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-                            note: expense.note || ''
+                            date: expense.date ? new Date(expense.date).toISOString().split('T')[0] : getLocalDateString(),
+                            note: expense.note || '',
+                            branchId: expense.branchId || ''
                         };
                         setFormData(initialData);
                         setInitialFormData(initialData);
@@ -76,24 +153,29 @@ export default function ExpenseForm() {
 
     const validateForm = () => {
         const newErrors = {};
-    
+
         // Başlıq
         if (!formData.title.trim()) {
             newErrors.title = t('title_required') || 'Başlıq tələb olunur';
         }
-    
+
         // Məbləğ
         if (!formData.amount || parseFloat(formData.amount) <= 0) {
             newErrors.amount = t('amount_required') || 'Məbləğ tələb olunur və 0-dan böyük olmalıdır';
         }
-    
+
+        // Filial
+        if (!formData.branchId || formData.branchId === 'central') {
+            newErrors.branchId = t('branch_required') || 'Filial seçilməlidir';
+        }
+
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
 
     // Number fields
     const numberFields = ['amount'];
-    
+
     const handleInputChange = createInputChangeHandler(
         setFormData,
         setErrors,
@@ -105,7 +187,7 @@ export default function ExpenseForm() {
     // Check if form has changed (only in edit mode)
     const hasFormChanged = () => {
         if (!isEditMode || !initialFormData) return true; // Always allow submit in create mode
-        
+
         // Compare form data with initial data
         const currentData = {
             title: formData.title.trim(),
@@ -113,9 +195,10 @@ export default function ExpenseForm() {
             amount: formData.amount?.toString() || '',
             category: formData.category || '',
             date: formData.date,
-            note: formData.note?.trim() || ''
+            note: formData.note?.trim() || '',
+            branchId: formData.branchId || 'central'
         };
-        
+
         const initial = {
             title: initialFormData.title.trim(),
             description: initialFormData.description?.trim() || '',
@@ -124,7 +207,7 @@ export default function ExpenseForm() {
             date: initialFormData.date,
             note: initialFormData.note?.trim() || ''
         };
-        
+
         // Check if any field has changed
         const hasChanged = JSON.stringify(currentData) !== JSON.stringify(initial);
         return hasChanged;
@@ -132,19 +215,19 @@ export default function ExpenseForm() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        
+
         if (!validateForm()) {
             return;
         }
-        
+
         // In edit mode, check if form has changed
         if (isEditMode && !hasFormChanged()) {
             Alert.info(t('no_changes') || 'Xəbərdarlıq', t('no_changes_text') || 'Formda heç bir dəyişiklik edilməyib');
             return;
         }
-        
+
         setIsLoading(true);
-        
+
         try {
             const payload = {
                 title: formData.title.trim(),
@@ -152,7 +235,8 @@ export default function ExpenseForm() {
                 amount: parseFloat(formData.amount),
                 category: formData.category || null,
                 date: formData.date ? new Date(formData.date).toISOString() : new Date().toISOString(),
-                note: formData.note?.trim() || null
+                note: formData.note?.trim() || null,
+                branchId: formData.branchId || selectedBranchId
             };
 
             if (isEditMode) {
@@ -162,11 +246,11 @@ export default function ExpenseForm() {
                 await expenseApi.create(payload);
                 Alert.success(t('add_success') || 'Uğurlu!', t('add_success_text') || 'Xərc uğurla əlavə edildi');
             }
-            
+
             setTimeout(() => {
                 navigate(expensePagePath);
             }, 1500);
-            
+
         } catch (error) {
             console.error('Expense operation error:', error);
             Alert.error(
@@ -198,7 +282,7 @@ export default function ExpenseForm() {
                     className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                     title={t('back') || 'Geri'}
                 >
-                    <MdArrowBack className="w-5 h-5 text-gray-600" />
+                    <ArrowLeft className="w-5 h-5 text-gray-600" />
                 </button>
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">
@@ -214,10 +298,10 @@ export default function ExpenseForm() {
                 {/* Basic Information */}
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                     <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3 mb-4">
-                        <MdAttachMoney className="inline w-5 h-5 mr-2" />
+                        <DollarSign className="inline w-5 h-5 mr-2 text-blue-600" />
                         {t('basic_info') || 'Əsas Məlumatlar'}
                     </h3>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="md:col-span-2">
                             <Input
@@ -227,9 +311,28 @@ export default function ExpenseForm() {
                                 onChange={(e) => handleInputChange('title', e.target.value)}
                                 error={errors.title}
                                 placeholder={t('title_placeholder') || 'Xərc başlığını daxil edin (məsələn: Yemək)'}
-                                icon={<MdAttachMoney />}
+                                icon={<FileText />}
                                 required
                             />
+                        </div>
+
+                        {/* Branch Selection */}
+                        <div>
+                            <SearchDropdown
+                                label={t('branch') || 'Filial'}
+                                options={branchOptionsForForm}
+                                value={formData.branchId}
+                                onChange={(value) => handleInputChange('branchId', value)}
+                                error={errors.branchId}
+                                disabled={isLoading || !canPickExpenseBranch(currentUser)}
+                                placeholder={t('select_branch') || 'Filial seçin'}
+                                icon={<Building2 />}
+                            />
+                            {errors.branchId && (
+                                <p className="mt-1 text-xs font-medium text-red-500 animate-in fade-in slide-in-from-top-1 duration-200 pl-1">
+                                    {errors.branchId}
+                                </p>
+                            )}
                         </div>
 
                         <div>
@@ -240,7 +343,7 @@ export default function ExpenseForm() {
                                 onChange={(e) => handleInputChange('amount', e.target.value)}
                                 error={errors.amount}
                                 placeholder="0.00"
-                                icon={<MdAttachMoney />}
+                                icon={<DollarSign />}
                                 required
                             />
                         </div>
@@ -253,9 +356,8 @@ export default function ExpenseForm() {
                                 value={formData.category}
                                 onChange={(e) => handleInputChange('category', e.target.value)}
                                 disabled={isLoading}
-                                className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                                    errors.category ? 'border-red-500' : 'border-gray-300'
-                                }`}
+                                className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.category ? 'border-red-500' : 'border-gray-300'
+                                    }`}
                             >
                                 <option value="">{t('select_category') || 'Kateqoriya seçin'}</option>
                                 {expenseCategories.map(cat => (
@@ -274,15 +376,14 @@ export default function ExpenseForm() {
                                 {t('date') || 'Tarix'} <span className="text-red-500">*</span>
                             </label>
                             <div className="relative">
-                                <MdEvent className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                                <CalendarIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                                 <input
                                     type="date"
                                     value={formData.date}
                                     onChange={(e) => handleInputChange('date', e.target.value)}
                                     disabled={isLoading}
-                                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                                        errors.date ? 'border-red-500' : 'border-gray-300'
-                                    }`}
+                                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.date ? 'border-red-500' : 'border-gray-300'
+                                        }`}
                                     required
                                 />
                             </div>
@@ -290,7 +391,7 @@ export default function ExpenseForm() {
                                 <p className="mt-1 text-sm text-red-600">{errors.date}</p>
                             )}
                         </div>
-                        
+
                         <div className="md:col-span-2">
                             <Input
                                 label={t('description') || 'Təsvir'}
@@ -299,7 +400,7 @@ export default function ExpenseForm() {
                                 onChange={(e) => handleInputChange('description', e.target.value)}
                                 error={errors.description}
                                 placeholder={t('description_placeholder') || 'Xərc təsvirini daxil edin (istəyə bağlı)'}
-                                icon={<MdDescription />}
+                                icon={<StickyNote />}
                             />
                         </div>
 
@@ -312,9 +413,8 @@ export default function ExpenseForm() {
                                 onChange={(e) => handleInputChange('note', e.target.value)}
                                 disabled={isLoading}
                                 rows={3}
-                                className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                                    errors.note ? 'border-red-500' : 'border-gray-300'
-                                }`}
+                                className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.note ? 'border-red-500' : 'border-gray-300'
+                                    }`}
                                 placeholder={t('note_placeholder') || 'Qeyd daxil edin (istəyə bağlı)'}
                             />
                             {errors.note && (

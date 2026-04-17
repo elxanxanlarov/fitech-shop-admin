@@ -4,14 +4,17 @@
   "logout": "Çıxış",
   "staff_management": "İşçi İdarəetməsi",
   "final_delivery": "Yekun Təslimat",
+  "branch_management": "Filial İdarəetməsi",
   "customer_management": "Müştəri İdarəetməsi",
   "product_management": "Məhsul İdarəetməsi",
+  "product_branch_transfer": "Məhsul köçürməsi",
   "invoice_name_mapping": "Qaimə Adları",
   "sale_management": "Satış",
   "expense_management": "Xərclər",
   "cash_handover_management": "Məbləğ Təslimi",
   "activity_log": "Son Əməliyyatlar",
   "statistics": "Statistikalar",
+  "convert_center": "Convert",
+  "deleted_elements": "Silinmiş Elementlər",
   "settings": "Tənzimləmələr"
 }
-

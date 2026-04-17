@@ -69,10 +69,10 @@ export default function ProductUnitInfo({
                             <Input
                                 label={
                                     formData.unitType === 'BOX' ? (t('pieces_per_box_box') || 'Hər Qutuda Neçə Ədəd') :
-                                    formData.unitType === 'METER' ? (t('pieces_per_box_meter') || 'Hər Paketdə Neçə Metr') :
-                                    formData.unitType === 'LITER' ? (t('pieces_per_box_liter') || 'Hər Paketdə Neçə Litr') :
-                                    formData.unitType === 'KILOGRAM' ? (t('pieces_per_box_kilogram') || 'Hər Paketdə Neçə Kiloqram') :
-                                    (t('pieces_per_box') || 'Hər Qutu/Paketdəki Miqdar')
+                                        formData.unitType === 'METER' ? (t('pieces_per_box_meter') || 'Hər Paketdə Neçə Metr') :
+                                            formData.unitType === 'LITER' ? (t('pieces_per_box_liter') || 'Hər Paketdə Neçə Litr') :
+                                                formData.unitType === 'KILOGRAM' ? (t('pieces_per_box_kilogram') || 'Hər Paketdə Neçə Kiloqram') :
+                                                    (t('pieces_per_box') || 'Hər Qutu/Paketdəki Miqdar')
                                 }
                                 type="text"
                                 value={formData.piecesPerBox}
@@ -85,10 +85,10 @@ export default function ProductUnitInfo({
                                 disabled={isEditMode}
                                 placeholder={
                                     formData.unitType === 'BOX' ? (t('pieces_per_box_box_placeholder') || 'Məs: 12 (hər qutuda 12 ədəd)') :
-                                    formData.unitType === 'METER' ? (t('pieces_per_box_meter_placeholder') || 'Məs: 500 (hər paketdə 500 metr)') :
-                                    formData.unitType === 'LITER' ? (t('pieces_per_box_liter_placeholder') || 'Məs: 5 (hər paketdə 5 litr)') :
-                                    formData.unitType === 'KILOGRAM' ? (t('pieces_per_box_kilogram_placeholder') || 'Məs: 25 (hər paketdə 25 kq)') :
-                                    (t('pieces_per_box_placeholder') || 'Məs: 12 (hər qutuda 12 ədəd)')
+                                        formData.unitType === 'METER' ? (t('pieces_per_box_meter_placeholder') || 'Məs: 500 (hər paketdə 500 metr)') :
+                                            formData.unitType === 'LITER' ? (t('pieces_per_box_liter_placeholder') || 'Məs: 5 (hər paketdə 5 litr)') :
+                                                formData.unitType === 'KILOGRAM' ? (t('pieces_per_box_kilogram_placeholder') || 'Məs: 25 (hər paketdə 25 kq)') :
+                                                    (t('pieces_per_box_placeholder') || 'Məs: 12 (hər qutuda 12 ədəd)')
                                 }
                                 icon={<MdStorage />}
                                 required
@@ -99,7 +99,7 @@ export default function ProductUnitInfo({
                             <Input
                                 label={
                                     formData.unitType === 'BOX' ? (t('full_boxes_box') || 'Tam Qutular') :
-                                    (t('full_boxes_meter') || 'Tam Paketlər')
+                                        (t('full_boxes_meter') || 'Tam Paketlər')
                                 }
                                 type="text"
                                 value={formData.fullBoxes}
@@ -119,7 +119,7 @@ export default function ProductUnitInfo({
                                 error={errors.fullBoxes}
                                 placeholder={
                                     formData.unitType === 'BOX' ? (t('full_boxes_placeholder') || 'Tam qutuların sayı') :
-                                    (t('full_boxes_placeholder') || 'Tam paketlərin sayı')
+                                        (t('full_boxes_placeholder') || 'Tam paketlərin sayı')
                                 }
                                 icon={<MdStorage />}
                                 disabled={isEditMode}
@@ -130,10 +130,10 @@ export default function ProductUnitInfo({
                             <Input
                                 label={
                                     formData.unitType === 'BOX' ? (t('opened_box_quantity_box') || 'Açıq Ədəd (Qutu Daxilində Olmayan)') :
-                                    formData.unitType === 'METER' ? (t('opened_box_quantity_meter') || 'Açıq Metr (Paket Daxilində Olmayan)') :
-                                    formData.unitType === 'LITER' ? (t('opened_box_quantity_liter') || 'Açıq Litr (Paket Daxilində Olmayan)') :
-                                    formData.unitType === 'KILOGRAM' ? (t('opened_box_quantity_kilogram') || 'Açıq Kiloqram (Paket Daxilində Olmayan)') :
-                                    (t('opened_box_quantity') || 'Açıq Məhsul (Qutu Daxilində Olmayan)')
+                                        formData.unitType === 'METER' ? (t('opened_box_quantity_meter') || 'Açıq Metr (Paket Daxilində Olmayan)') :
+                                            formData.unitType === 'LITER' ? (t('opened_box_quantity_liter') || 'Açıq Litr (Paket Daxilində Olmayan)') :
+                                                formData.unitType === 'KILOGRAM' ? (t('opened_box_quantity_kilogram') || 'Açıq Kiloqram (Paket Daxilində Olmayan)') :
+                                                    (t('opened_box_quantity') || 'Açıq Məhsul (Qutu Daxilində Olmayan)')
                                 }
                                 type="text"
                                 value={formData.openedBoxQuantity}
@@ -151,10 +151,10 @@ export default function ProductUnitInfo({
                                 error={errors.openedBoxQuantity}
                                 placeholder={
                                     formData.unitType === 'BOX' ? (t('opened_box_quantity_box_placeholder') || 'Məs: 5 (qutu daxilində olmayan 5 ədəd)') :
-                                    formData.unitType === 'METER' ? (t('opened_box_quantity_meter_placeholder') || 'Məs: 40 (paket daxilində olmayan 40 metr)') :
-                                    formData.unitType === 'LITER' ? (t('opened_box_quantity_liter_placeholder') || 'Məs: 2 (paket daxilində olmayan 2 litr)') :
-                                    formData.unitType === 'KILOGRAM' ? (t('opened_box_quantity_kilogram_placeholder') || 'Məs: 3 (paket daxilində olmayan 3 kq)') :
-                                    (t('opened_box_quantity_placeholder') || 'Məs: 5 (qutu daxilində olmayan 5 ədəd)')
+                                        formData.unitType === 'METER' ? (t('opened_box_quantity_meter_placeholder') || 'Məs: 40 (paket daxilində olmayan 40 metr)') :
+                                            formData.unitType === 'LITER' ? (t('opened_box_quantity_liter_placeholder') || 'Məs: 2 (paket daxilində olmayan 2 litr)') :
+                                                formData.unitType === 'KILOGRAM' ? (t('opened_box_quantity_kilogram_placeholder') || 'Məs: 3 (paket daxilində olmayan 3 kq)') :
+                                                    (t('opened_box_quantity_placeholder') || 'Məs: 5 (qutu daxilində olmayan 5 ədəd)')
                                 }
                                 icon={<MdStorage />}
                                 disabled={isEditMode}
@@ -165,7 +165,7 @@ export default function ProductUnitInfo({
                             <Input
                                 label={
                                     formData.unitType === 'BOX' ? (t('box_price_box') || 'Qutu Qiyməti') :
-                                    (t('box_price_meter') || 'Paket Qiyməti')
+                                        (t('box_price_meter') || 'Paket Qiyməti')
                                 }
                                 type="text"
                                 value={(() => {
@@ -187,15 +187,15 @@ export default function ProductUnitInfo({
                                 disabled={true}
                             />
                             <p className="mt-1 text-xs text-gray-500">
-                                {formData.unitType === 'BOX' 
+                                {formData.unitType === 'BOX'
                                     ? (t('box_price_info') || 'Qutu qiyməti ədəd qiymətindən avtomatik hesablanır (Satış Qiyməti × Hər Qutudakı Miqdar)')
-                                    : formData.unitType === 'METER' 
-                                    ? (t('box_price_info_meter') || 'Paket qiyməti metr qiymətindən avtomatik hesablanır (Satış Qiyməti × Hər Paketdəki Metr)')
-                                    : formData.unitType === 'LITER' 
-                                    ? (t('box_price_info_liter') || 'Paket qiyməti litr qiymətindən avtomatik hesablanır (Satış Qiyməti × Hər Paketdəki Litr)')
-                                    : formData.unitType === 'KILOGRAM' 
-                                    ? (t('box_price_info_kilogram') || 'Paket qiyməti kiloqram qiymətindən avtomatik hesablanır (Satış Qiyməti × Hər Paketdəki Kiloqram)')
-                                    : (t('box_price_info') || 'Paket qiyməti ədəd qiymətindən avtomatik hesablanır (Satış Qiyməti × Hər Paketdəki Miqdar)')
+                                    : formData.unitType === 'METER'
+                                        ? (t('box_price_info_meter') || 'Paket qiyməti metr qiymətindən avtomatik hesablanır (Satış Qiyməti × Hər Paketdəki Metr)')
+                                        : formData.unitType === 'LITER'
+                                            ? (t('box_price_info_liter') || 'Paket qiyməti litr qiymətindən avtomatik hesablanır (Satış Qiyməti × Hər Paketdəki Litr)')
+                                            : formData.unitType === 'KILOGRAM'
+                                                ? (t('box_price_info_kilogram') || 'Paket qiyməti kiloqram qiymətindən avtomatik hesablanır (Satış Qiyməti × Hər Paketdəki Kiloqram)')
+                                                : (t('box_price_info') || 'Paket qiyməti ədəd qiymətindən avtomatik hesablanır (Satış Qiyməti × Hər Paketdəki Miqdar)')
                                 }
                             </p>
                         </div>
@@ -236,7 +236,7 @@ export default function ProductUnitInfo({
                     />
                     {formData.unitType !== 'PIECE' && formData.piecesPerBox && parseInt(formData.piecesPerBox) > 0 && (
                         <p className="mt-1 text-xs text-gray-500">
-                            {t('calculated_stock_info') || 'Stok tam qutular və açıq məhsullardan avtomatik hesablanır'}
+                            {t('stock_calculation_info') || 'Stok tam qutular və açıq məhsullardan avtomatik hesablanır'}
                         </p>
                     )}
                 </div>

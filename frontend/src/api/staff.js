@@ -2,8 +2,8 @@ import api from './axios.js';
 
 export const staffApi = {
   // Get all staff
-  getAll: async () => {
-    const response = await api.get('/staff');
+  getAll: async (params = {}) => {
+    const response = await api.get('/staff', { params });
     return response.data;
   },
 

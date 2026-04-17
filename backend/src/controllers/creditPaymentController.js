@@ -56,13 +56,14 @@ export const makeCreditPayment = async (req, res) => {
         }
 
         // Ödəniş yarat
-        const payment = await prisma.creditPayment.create({
+        const payment = await prisma.creditpayment.create({
             data: {
                 saleId,
                 amount: paymentAmount,
                 paymentType: paymentType || 'cash',
                 note: note?.trim() || null,
-                staffId: staffId || null
+                staffId: staffId || null,
+                branchId: sale.branchId // Satış olan filialı qeyd et
             }
         });
 
@@ -128,7 +129,7 @@ export const getSaleCreditPayments = async (req, res) => {
     try {
         const { saleId } = req.params;
 
-        const payments = await prisma.creditPayment.findMany({
+        const payments = await prisma.creditpayment.findMany({
             where: { saleId },
             include: {
                 staff: {

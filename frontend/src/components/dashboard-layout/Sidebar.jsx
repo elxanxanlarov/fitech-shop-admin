@@ -53,7 +53,11 @@ const Sidebar = ({ sidebarData, onItemClick, collapsed, onToggleCollapse, isMobi
       </div>
 
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-        {sidebarData.map((item, index) => (
+        {sidebarData.filter(item => {
+          if (!item.requiredRole) return true;
+          const userRole = currentUser?.role?.name?.toUpperCase();
+          return userRole === item.requiredRole.toUpperCase();
+        }).map((item, index) => (
           <NavLink
             key={index}
             to={item.path}

@@ -4,7 +4,7 @@ import { createActivityLog } from "./activityLogController.js";
 // Bütün məbləğ təslimlərini gətir
 export const getAllCashHandovers = async (req, res) => {
     try {
-        const { startDate, endDate, deleteType, includeDeleted } = req.query;
+        const { startDate, endDate, deleteType, includeDeleted, branchId } = req.query;
         
         const where = {};
         
@@ -32,8 +32,15 @@ export const getAllCashHandovers = async (req, res) => {
                 where.date.lte = end;
             }
         }
+
+        // Branch filter
+        if (branchId === 'central') {
+            where.branchId = null;
+        } else if (branchId) {
+            where.branchId = branchId;
+        }
         
-        const cashHandovers = await prisma.cashHandover.findMany({
+        const cashHandovers = await prisma.cashhandover.findMany({
             where,
             include: {
                 handedOverTo: {
@@ -77,7 +84,7 @@ export const getCashHandoverById = async (req, res) => {
     try {
         const { id } = req.params;
         
-        const cashHandover = await prisma.cashHandover.findUnique({
+        const cashHandover = await prisma.cashhandover.findUnique({
             where: { id },
             include: {
                 handedOverTo: {
@@ -123,7 +130,7 @@ export const getCashHandoverById = async (req, res) => {
 // Yeni məbləğ təslimi yarat
 export const createCashHandover = async (req, res) => {
     try {
-        const { date, amount, handedOverToId, handedOverById, note } = req.body;
+        const { date, amount, handedOverToId, handedOverById, note, branchId } = req.body;
         const staffId = req.user?.id;
 
         // Validation
@@ -186,72 +193,57 @@ export const createCashHandover = async (req, res) => {
             handoverDate.setHours(0, 0, 0, 0);
         }
 
-        // Mövcud gəliri yoxla
-        const nextDate = new Date(handoverDate);
-        nextDate.setDate(nextDate.getDate() + 1);
+        const currentBranchFilter = (branchId && branchId !== 'central') ? { branchId } : { branchId: null };
 
-        const salesAggregation = await prisma.sale.aggregate({
-            where: {
-                deleteType: 'NONE',
-                isRefunded: false,
-                createdAt: {
-                    gte: handoverDate,
-                    lt: nextDate
-                }
-            },
-            _sum: {
-                totalAmount: true
-            }
+        // Ümumi təslim edilməmiş (payout gözləyən) gəliri hesabla (bütün tarixlər üzrə)
+        const totalSalesCashAgg = await prisma.sale.aggregate({
+            where: { deleteType: 'NONE', isRefunded: false, paymentType: 'cash', ...currentBranchFilter },
+            _sum: { paidAmount: true }
+        });
+        const totalCreditCashAgg = await prisma.creditpayment.aggregate({
+            where: { paymentType: 'cash', ...currentBranchFilter },
+            _sum: { amount: true }
+        });
+        const totalReturnsAgg = await prisma.salereturn.aggregate({
+            where: { sale: { deleteType: 'NONE', paymentType: 'cash', ...currentBranchFilter } },
+            _sum: { returnedAmount: true }
+        });
+        const totalExpensesAgg = await prisma.expense.aggregate({
+            where: { deleteType: 'NONE', ...currentBranchFilter },
+            _sum: { amount: true }
+        });
+        const allHandoversAgg = await prisma.cashhandover.aggregate({
+            where: { deleteType: 'NONE', ...currentBranchFilter },
+            _sum: { amount: true }
         });
 
-        const returnsAggregation = await prisma.saleReturn.aggregate({
-            where: {
-                createdAt: {
-                    gte: handoverDate,
-                    lt: nextDate
-                },
-                sale: {
-                    deleteType: 'NONE'
-                }
-            },
-            _sum: {
-                returnedAmount: true
-            }
-        });
+        const totalAvailableAllTime = 
+            (parseFloat(totalSalesCashAgg._sum.paidAmount || 0) + 
+            parseFloat(totalCreditCashAgg._sum.amount || 0)) - 
+            (parseFloat(totalReturnsAgg._sum.returnedAmount || 0) + 
+            parseFloat(totalExpensesAgg._sum.amount || 0) + 
+            parseFloat(allHandoversAgg._sum.amount || 0));
 
-        const existingHandovers = await prisma.cashHandover.aggregate({
-            where: {
-                date: {
-                    gte: handoverDate,
-                    lt: nextDate
-                },
-                deleteType: 'NONE'
-            },
-            _sum: {
-                amount: true
-            }
-        });
+        const roundedTotalAvailable = Math.round(totalAvailableAllTime * 100) / 100;
+        const roundedAmount = Math.round(parseFloat(amount) * 100) / 100;
 
-        const totalRevenue = parseFloat(salesAggregation._sum.totalAmount || 0);
-        const totalReturns = parseFloat(returnsAggregation._sum.returnedAmount || 0);
-        const totalHandedOver = parseFloat(existingHandovers._sum.amount || 0);
-        const availableRevenue = totalRevenue - totalReturns - totalHandedOver;
-
-        if (parseFloat(amount) > availableRevenue) {
+        // Validation against total available all time
+        if (roundedAmount > (roundedTotalAvailable + 0.01)) {
             return res.status(400).json({
                 success: false,
-                message: `Seçilən tarixdə maksimum ${availableRevenue.toFixed(2)} AZN təslim edə bilərsiniz`,
-                availableRevenue: availableRevenue
+                message: `Ümumi təslim edilməmiş gəlir (${roundedTotalAvailable.toFixed(2)} AZN) məbləğindən çox təslim edə bilməzsiniz`,
+                availableRevenue: roundedTotalAvailable
             });
         }
 
-        const cashHandover = await prisma.cashHandover.create({
+        const cashHandover = await prisma.cashhandover.create({
             data: {
                 date: handoverDate,
                 amount: parseFloat(amount),
                 handedOverToId,
                 handedOverById,
-                note: note || null
+                note: note || null,
+                branchId: (branchId && branchId !== 'central') ? branchId : null
             },
             include: {
                 handedOverTo: {
@@ -301,11 +293,11 @@ export const createCashHandover = async (req, res) => {
 export const updateCashHandover = async (req, res) => {
     try {
         const { id } = req.params;
-        const { date, amount, handedOverToId, handedOverById, note } = req.body;
+        const { date, amount, handedOverToId, handedOverById, note, branchId } = req.body;
         const staffId = req.user?.id;
 
         // Məbləğ təsliminin mövcud olduğunu yoxla
-        const existingCashHandover = await prisma.cashHandover.findUnique({
+        const existingCashHandover = await prisma.cashhandover.findUnique({
             where: { id }
         });
 
@@ -366,69 +358,49 @@ export const updateCashHandover = async (req, res) => {
             handoverDate.setHours(0, 0, 0, 0);
         }
 
-        // Əgər məbləğ və ya tarix dəyişirsə, mövcud gəliri yoxla
+        // Əgər məbləğ və ya tarix dəyişirsə, ümumi gəliri yoxla
         if (amount !== undefined || date !== undefined) {
-            const checkDate = new Date(handoverDate);
-            checkDate.setHours(0, 0, 0, 0);
-            const nextDate = new Date(checkDate);
-            nextDate.setDate(nextDate.getDate() + 1);
+            const currentBranchId = branchId || existingCashHandover.branchId;
+            const currentBranchFilter = (currentBranchId && currentBranchId !== 'central') ? { branchId: currentBranchId } : { branchId: null };
+            const saleBranchFilter = (currentBranchId && currentBranchId !== 'central') ? { branchId: currentBranchId } : { branchId: null };
 
-            const salesAggregation = await prisma.sale.aggregate({
-                where: {
-                    deleteType: 'NONE',
-                    isRefunded: false,
-                    createdAt: {
-                        gte: checkDate,
-                        lt: nextDate
-                    }
-                },
-                _sum: {
-                    totalAmount: true
-                }
+            // Ümumi gəlir və təslimləri hesabla (cari record istisna olmaqla)
+            const totalSalesCashAgg = await prisma.sale.aggregate({
+                where: { deleteType: 'NONE', isRefunded: false, paymentType: 'cash', ...saleBranchFilter },
+                _sum: { paidAmount: true }
+            });
+            const totalCreditCashAgg = await prisma.creditpayment.aggregate({
+                where: { paymentType: 'cash', ...currentBranchFilter },
+                _sum: { amount: true }
+            });
+            const totalReturnsAgg = await prisma.salereturn.aggregate({
+                where: { sale: { deleteType: 'NONE', paymentType: 'cash', ...saleBranchFilter } },
+                _sum: { returnedAmount: true }
+            });
+            const totalExpensesAgg = await prisma.expense.aggregate({
+                where: { deleteType: 'NONE', ...currentBranchFilter },
+                _sum: { amount: true }
+            });
+            const otherHandoversAgg = await prisma.cashhandover.aggregate({
+                where: { deleteType: 'NONE', id: { not: id }, ...currentBranchFilter },
+                _sum: { amount: true }
             });
 
-            const returnsAggregation = await prisma.saleReturn.aggregate({
-                where: {
-                    createdAt: {
-                        gte: checkDate,
-                        lt: nextDate
-                    },
-                    sale: {
-                        deleteType: 'NONE'
-                    }
-                },
-                _sum: {
-                    returnedAmount: true
-                }
-            });
+            const totalAvailableAllTime = 
+                (parseFloat(totalSalesCashAgg._sum.paidAmount || 0) + 
+                parseFloat(totalCreditCashAgg._sum.amount || 0)) - 
+                (parseFloat(totalReturnsAgg._sum.returnedAmount || 0) + 
+                parseFloat(totalExpensesAgg._sum.amount || 0) + 
+                parseFloat(otherHandoversAgg._sum.amount || 0));
 
-            const existingHandovers = await prisma.cashHandover.aggregate({
-                where: {
-                    date: {
-                        gte: checkDate,
-                        lt: nextDate
-                    },
-                    deleteType: 'NONE',
-                    id: {
-                        not: id // Cari cash handover-i çıxar
-                    }
-                },
-                _sum: {
-                    amount: true
-                }
-            });
+            const roundedTotalAvailable = Math.round(totalAvailableAllTime * 100) / 100;
+            const roundedAmount = Math.round((amount !== undefined ? parseFloat(amount) : parseFloat(existingCashHandover.amount)) * 100) / 100;
 
-            const totalRevenue = parseFloat(salesAggregation._sum.totalAmount || 0);
-            const totalReturns = parseFloat(returnsAggregation._sum.returnedAmount || 0);
-            const totalHandedOver = parseFloat(existingHandovers._sum.amount || 0);
-            const availableRevenue = totalRevenue - totalReturns - totalHandedOver;
-            const newAmount = amount !== undefined ? parseFloat(amount) : parseFloat(existingCashHandover.amount);
-
-            if (newAmount > availableRevenue) {
+            if (roundedAmount > (roundedTotalAvailable + 0.01)) {
                 return res.status(400).json({
                     success: false,
-                    message: `Seçilən tarixdə maksimum ${availableRevenue.toFixed(2)} AZN təslim edə bilərsiniz`,
-                    availableRevenue: availableRevenue
+                    message: `Ümumi təslim edilməmiş gəlir (${roundedTotalAvailable.toFixed(2)} AZN) məbləğindən çox təslim edə bilməzsiniz`,
+                    availableRevenue: roundedTotalAvailable
                 });
             }
         }
@@ -439,8 +411,9 @@ export const updateCashHandover = async (req, res) => {
         if (handedOverToId !== undefined) updateData.handedOverToId = handedOverToId;
         if (handedOverById !== undefined) updateData.handedOverById = handedOverById;
         if (note !== undefined) updateData.note = note || null;
+        if (branchId !== undefined) updateData.branchId = (branchId && branchId !== 'central') ? branchId : null;
 
-        const cashHandover = await prisma.cashHandover.update({
+        const cashHandover = await prisma.cashhandover.update({
             where: { id },
             data: updateData,
             include: {
@@ -498,7 +471,7 @@ export const deleteCashHandover = async (req, res) => {
         const validDeleteType = (deleteType && typeof deleteType === 'string' && deleteType.toUpperCase() === 'HARD') ? 'HARD' : 'SOFT';
 
         // Məbləğ təsliminin mövcud olduğunu yoxla
-        const cashHandover = await prisma.cashHandover.findUnique({
+        const cashHandover = await prisma.cashhandover.findUnique({
             where: { id },
             include: {
                 handedOverTo: {
@@ -526,7 +499,7 @@ export const deleteCashHandover = async (req, res) => {
         // DeleteType-a görə silmə
         if (validDeleteType === 'HARD') {
             // Hard delete - məbləğ təslimini tamamilə sil
-            await prisma.cashHandover.delete({
+            await prisma.cashhandover.delete({
                 where: { id }
             });
 
@@ -549,7 +522,7 @@ export const deleteCashHandover = async (req, res) => {
             }
         } else {
             // Soft delete - deleteType-u dəyiş
-            await prisma.cashHandover.update({
+            await prisma.cashhandover.update({
                 where: { id },
                 data: {
                     deleteType: 'SOFT'
@@ -593,7 +566,7 @@ export const deleteCashHandover = async (req, res) => {
 // Seçilən tarixə görə mövcud gəliri əldə et (təslim üçün)
 export const getAvailableRevenueByDate = async (req, res) => {
     try {
-        const { date, excludeId } = req.query;
+        const { date, excludeId, branchId } = req.query;
         
         if (!date) {
             return res.status(400).json({
@@ -614,35 +587,72 @@ export const getAvailableRevenueByDate = async (req, res) => {
         const nextDate = new Date(selectedDate);
         nextDate.setDate(nextDate.getDate() + 1);
 
-        // Həmin günün satışlarını hesabla (yalnız silinməyən satışlar)
+        const currentBranchFilter = (branchId && branchId !== 'central') ? { branchId } : { branchId: null };
+        const saleBranchFilter = (branchId && branchId !== 'central') ? { branchId } : { branchId: null };
+
+        // Həmin günün satışlarını hesabla (Nəğd)
         const salesAggregation = await prisma.sale.aggregate({
             where: {
                 deleteType: 'NONE',
                 isRefunded: false,
+                paymentType: 'cash',
+                ...saleBranchFilter,
                 createdAt: {
                     gte: selectedDate,
                     lt: nextDate
                 }
             },
             _sum: {
-                totalAmount: true,
+                paidAmount: true,
                 profitAmount: true
             }
         });
 
-        // Həmin günün qaytarmalarını hesabla (yalnız silinməmiş satışlara aid)
-        const returnsAggregation = await prisma.saleReturn.aggregate({
+        // Həmin günün kredit ödənişlərini hesabla (Nəğd)
+        const creditPaymentsAggregation = await prisma.creditpayment.aggregate({
+            where: {
+                paymentType: 'cash',
+                sale: saleBranchFilter,
+                paymentDate: {
+                    gte: selectedDate,
+                    lt: nextDate
+                }
+            },
+            _sum: {
+                amount: true
+            }
+        });
+
+        // Həmin günün qaytarmalarını hesabla
+        const returnsAggregation = await prisma.salereturn.aggregate({
             where: {
                 createdAt: {
                     gte: selectedDate,
                     lt: nextDate
                 },
                 sale: {
-                    deleteType: 'NONE'
+                    deleteType: 'NONE',
+                    paymentType: 'cash',
+                    ...saleBranchFilter
                 }
             },
             _sum: {
                 returnedAmount: true
+            }
+        });
+
+        // Həmin günün xərclərini hesabla
+        const expensesAggregation = await prisma.expense.aggregate({
+            where: {
+                deleteType: 'NONE',
+                ...currentBranchFilter,
+                date: {
+                    gte: selectedDate,
+                    lt: nextDate
+                }
+            },
+            _sum: {
+                amount: true
             }
         });
 
@@ -652,7 +662,8 @@ export const getAvailableRevenueByDate = async (req, res) => {
                 gte: selectedDate,
                 lt: nextDate
             },
-            deleteType: 'NONE'
+            deleteType: 'NONE',
+            ...currentBranchFilter
         };
 
         // Əgər edit modundadırsa, cari cash handover-i çıxar
@@ -662,7 +673,7 @@ export const getAvailableRevenueByDate = async (req, res) => {
             };
         }
 
-        const cashHandoverAggregation = await prisma.cashHandover.aggregate({
+        const cashHandoverAggregation = await prisma.cashhandover.aggregate({
             where: cashHandoverWhere,
             _sum: {
                 amount: true
@@ -670,25 +681,32 @@ export const getAvailableRevenueByDate = async (req, res) => {
         });
 
         // Hesablamalar
-        const totalRevenue = salesAggregation._sum.totalAmount || 0;
-        const totalReturns = returnsAggregation._sum.returnedAmount || 0;
-        const totalHandedOver = cashHandoverAggregation._sum.amount || 0;
+        const totalSalesCash = parseFloat(salesAggregation._sum.paidAmount || 0);
+        const totalCreditCash = parseFloat(creditPaymentsAggregation._sum.amount || 0);
+        const totalInflow = totalSalesCash + totalCreditCash;
         
-        // Xalis gəlir (qaytarmalar çıxıldıqdan sonra)
-        const netRevenue = parseFloat(totalRevenue) - parseFloat(totalReturns);
+        const totalReturns = parseFloat(returnsAggregation._sum.returnedAmount || 0);
+        const totalExpenses = parseFloat(expensesAggregation._sum.amount || 0);
+        const totalOutflow = totalReturns + totalExpenses;
+        
+        const totalHandedOver = parseFloat(cashHandoverAggregation._sum.amount || 0);
+        
+        // Xalis gəlir (nəğd)
+        const netRevenue = totalInflow - totalOutflow;
         
         // Mövcud gəlir (artıq təslim edilənlər çıxıldıqdan sonra)
-        const availableRevenue = netRevenue - parseFloat(totalHandedOver);
+        const availableRevenue = netRevenue - totalHandedOver;
 
         return res.status(200).json({
             success: true,
             data: {
                 date: selectedDate,
-                totalRevenue: parseFloat(totalRevenue),
-                totalReturns: parseFloat(totalReturns),
+                totalRevenue: totalInflow,
+                totalReturns: totalReturns,
+                totalExpenses: totalExpenses,
                 netRevenue: netRevenue,
-                totalHandedOver: parseFloat(totalHandedOver),
-                availableRevenue: Math.max(0, availableRevenue), // Mənfi ola bilməz
+                totalHandedOver: totalHandedOver,
+                availableRevenue: Math.max(0, parseFloat((availableRevenue).toFixed(2))), // Mənfi ola bilməz və yuvarlaqlaşdır
                 profit: parseFloat(salesAggregation._sum.profitAmount || 0)
             }
         });
@@ -697,6 +715,218 @@ export const getAvailableRevenueByDate = async (req, res) => {
         return res.status(500).json({
             success: false,
             message: "Gəlir məlumatları alınarkən xəta baş verdi",
+            error: error.message
+        });
+    }
+};
+
+// Təslim edilməmiş (payout gözləyən) tarixləri gətir
+export const getPayoutPendingDates = async (req, res) => {
+    try {
+        const { branchId } = req.query;
+        const currentBranchFilter = (branchId && branchId !== 'central') ? { branchId } : { branchId: null };
+        const saleBranchFilter = (branchId && branchId !== 'central') ? { branchId } : { branchId: null };
+        // Son 180 günü yoxlayaq (təxminən 6 ay)
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - 180);
+        startDate.setHours(0, 0, 0, 0);
+
+        // Satışları gətir (Nəğd)
+        const sales = await prisma.sale.findMany({
+            where: {
+                deleteType: 'NONE',
+                isRefunded: false,
+                paymentType: 'cash',
+                ...saleBranchFilter,
+                createdAt: {
+                    gte: startDate
+                }
+            },
+            select: {
+                paidAmount: true,
+                createdAt: true
+            }
+        });
+
+        // Kredit ödənişlərini gətir (Nəğd)
+        const creditPayments = await prisma.creditpayment.findMany({
+            where: {
+                paymentType: 'cash',
+                sale: saleBranchFilter,
+                paymentDate: {
+                    gte: startDate
+                }
+            },
+            select: {
+                amount: true,
+                paymentDate: true
+            }
+        });
+
+        // Qaytarmaları gətir
+        const returns = await prisma.salereturn.findMany({
+            where: {
+                createdAt: {
+                    gte: startDate
+                },
+                sale: {
+                    deleteType: 'NONE',
+                    paymentType: 'cash',
+                    ...saleBranchFilter
+                }
+            },
+            select: {
+                returnedAmount: true,
+                createdAt: true
+            }
+        });
+
+        // Xərcləri gətir
+        const expenses = await prisma.expense.findMany({
+            where: {
+                deleteType: 'NONE',
+                ...currentBranchFilter,
+                date: {
+                    gte: startDate
+                }
+            },
+            select: {
+                amount: true,
+                date: true
+            }
+        });
+
+        // Artıq edilmiş təslimləri gətir
+        const handovers = await prisma.cashhandover.findMany({
+            where: {
+                deleteType: 'NONE',
+                ...currentBranchFilter,
+                date: {
+                    gte: startDate
+                }
+            },
+            select: {
+                amount: true,
+                date: true
+            }
+        });
+
+        const dailyData = {};
+        
+        // Helper to get local date string YYYY-MM-DD
+        const getLocalDateStr = (d) => {
+            const date = new Date(d);
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        };
+
+        // Satışları günlərə böl
+        sales.forEach(sale => {
+            const dateStr = getLocalDateStr(sale.createdAt);
+            if (!dailyData[dateStr]) dailyData[dateStr] = { totalRevenue: 0, totalReturns: 0, totalExpenses: 0, totalHandedOver: 0 };
+            dailyData[dateStr].totalRevenue += parseFloat(sale.paidAmount);
+        });
+
+        // Kredit ödənişlərini günlərə böl
+        creditPayments.forEach(cp => {
+            const dateStr = getLocalDateStr(cp.paymentDate);
+            if (!dailyData[dateStr]) dailyData[dateStr] = { totalRevenue: 0, totalReturns: 0, totalExpenses: 0, totalHandedOver: 0 };
+            dailyData[dateStr].totalRevenue += parseFloat(cp.amount);
+        });
+
+        // Qaytarmaları günlərə böl
+        returns.forEach(ret => {
+            const dateStr = getLocalDateStr(ret.createdAt);
+            if (!dailyData[dateStr]) dailyData[dateStr] = { totalRevenue: 0, totalReturns: 0, totalExpenses: 0, totalHandedOver: 0 };
+            dailyData[dateStr].totalReturns += parseFloat(ret.returnedAmount);
+        });
+
+        // Xərcləri günlərə böl
+        expenses.forEach(exp => {
+            const dateStr = getLocalDateStr(exp.date);
+            if (!dailyData[dateStr]) dailyData[dateStr] = { totalRevenue: 0, totalReturns: 0, totalExpenses: 0, totalHandedOver: 0 };
+            dailyData[dateStr].totalExpenses += parseFloat(exp.amount);
+        });
+
+        // Təslimləri günlərə böl
+        handovers.forEach(h => {
+            const dateStr = getLocalDateStr(h.date);
+            if (!dailyData[dateStr]) dailyData[dateStr] = { totalRevenue: 0, totalReturns: 0, totalExpenses: 0, totalHandedOver: 0 };
+            dailyData[dateStr].totalHandedOver += parseFloat(h.amount);
+        });
+
+        const pendingDates = Object.keys(dailyData)
+            .map(date => {
+                const data = dailyData[date];
+                const availableRevenue = data.totalRevenue - data.totalReturns - data.totalExpenses - data.totalHandedOver;
+                return {
+                    date,
+                    ...data,
+                    availableRevenue: parseFloat(availableRevenue.toFixed(2))
+                };
+            })
+            .filter(item => item.availableRevenue > 0.01) // Keep showing individual positive days
+            .sort((a, b) => b.date.localeCompare(a.date));
+
+        // Calculate the real total available revenue across ALL time (matching create/update logic)
+        // We aggregate EVERYTHING to get the true balance of the cash box
+        const [salesAgg, creditAgg, returnsAgg, expensesAgg, handoversAgg] = await Promise.all([
+            prisma.sale.aggregate({
+                where: { deleteType: 'NONE', isRefunded: false, paymentType: 'cash', ...saleBranchFilter },
+                _sum: { paidAmount: true, profitAmount: true }
+            }),
+            prisma.creditpayment.aggregate({
+                where: { paymentType: 'cash', sale: saleBranchFilter },
+                _sum: { amount: true }
+            }),
+            prisma.salereturn.aggregate({
+                where: { sale: { deleteType: 'NONE', paymentType: 'cash', ...saleBranchFilter } },
+                _sum: { returnedAmount: true }
+            }),
+            prisma.expense.aggregate({
+                where: { deleteType: 'NONE', ...currentBranchFilter },
+                _sum: { amount: true }
+            }),
+            prisma.cashhandover.aggregate({
+                where: { deleteType: 'NONE', ...currentBranchFilter },
+                _sum: { amount: true }
+            })
+        ]);
+
+        const allSalesCash = parseFloat(salesAgg._sum.paidAmount || 0);
+        const allSalesProfit = parseFloat(salesAgg._sum.profitAmount || 0); // Get profit
+        const allCreditCash = parseFloat(creditAgg._sum.amount || 0);
+        const allReturnsCash = parseFloat(returnsAgg._sum.returnedAmount || 0);
+        const allExpensesCash = parseFloat(expensesAgg._sum.amount || 0);
+        const allHandoversCash = parseFloat(handoversAgg._sum.amount || 0);
+
+        const totalCashIn = allSalesCash + allCreditCash;
+        const totalCashOut = allReturnsCash + allExpensesCash;
+        const netCashBalance = totalCashIn - totalCashOut - allHandoversCash;
+
+        return res.status(200).json({
+            success: true,
+            data: pendingDates,
+            totalAvailable: Math.max(0, parseFloat(netCashBalance.toFixed(2))),
+            breakdown: {
+                cashIn: totalCashIn,
+                cashOut: totalCashOut,
+                sales: allSalesCash,
+                profit: allSalesProfit, // Add to breakdown
+                credits: allCreditCash,
+                returns: allReturnsCash,
+                expenses: allExpensesCash,
+                handovers: allHandoversCash,
+                netBalance: netCashBalance
+            }
+        });
+    } catch (error) {
+        console.error("getPayoutPendingDates error", error);
+        return res.status(500).json({
+            success: false,
+            message: "Təslim edilməmiş günlərin siyahısı alınarkən xəta baş verdi",
             error: error.message
         });
     }

@@ -36,6 +36,21 @@
   "error_fetching_text": "Unable to fetch cash handover information",
   "no_cash_handovers_found": "No cash handovers found",
   "no_cash_handovers_description": "There are currently no cash handovers",
-  "add_first_cash_handover": "Add first cash handover"
+  "add_first_cash_handover": "Add first cash handover",
+  "revenue_summary": "Revenue Summary",
+  "total_revenue": "Total Revenue",
+  "returns": "Returns",
+  "expenses": "Expenses",
+  "already_handed_over": "Already Handed Over",
+  "available_to_handover": "Available to Handover",
+  "net_cash": "Net Cash",
+  "loaded": "Loaded",
+  "net_revenue": "Net Revenue",
+  "cash_revenue": "Cash Revenue",
+  "total_unhanded_revenue": "Total Un-handed Revenue",
+  "total_across_all_dates": "Total across all dates",
+  "use_all": "Use All",
+  "revenue_calculation": "Revenue Calculation",
+  "previous_handovers": "Previous Handovers",
+  "net_balance": "Net Balance"
 }
-

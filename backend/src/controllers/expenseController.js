@@ -4,10 +4,10 @@ import { createActivityLog } from "./activityLogController.js";
 // Bütün xərcləri gətir
 export const getAllExpenses = async (req, res) => {
     try {
-        const { startDate, endDate, category, deleteType, includeDeleted } = req.query;
-        
+        const { startDate, endDate, category, deleteType, includeDeleted, branchId } = req.query;
+
         const where = {};
-        
+
         // DeleteType filter - default olaraq yalnız silinməyən xərcləri göstər
         if (includeDeleted === 'true') {
             // Bütün xərcləri göstər (silinmişlər də daxil)
@@ -17,7 +17,7 @@ export const getAllExpenses = async (req, res) => {
             // Default: yalnız silinməyən xərcləri göstər
             where.deleteType = 'NONE';
         }
-        
+
         // Tarix filter
         if (startDate || endDate) {
             where.date = {};
@@ -32,32 +32,60 @@ export const getAllExpenses = async (req, res) => {
                 where.date.lte = e;
             }
         }
-        
+
         // Kateqoriya filter
         if (category) {
             where.category = category;
         }
-        
-        const expenses = await prisma.expense.findMany({
-            where,
-            include: {
-                staff: {
-                    select: {
-                        id: true,
-                        name: true,
-                        surName: true,
-                        email: true
-                    }
+
+        // Branch filter - if 'central' is selected in global, show ALL expenses as per user request
+        if (branchId && branchId !== 'central') {
+            where.branchId = branchId;
+        }
+
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const skip = (page - 1) * limit;
+
+        const [expenses, total, totalAmountResult] = await Promise.all([
+            prisma.expense.findMany({
+                where,
+                include: {
+                    staff: {
+                        select: {
+                            id: true,
+                            name: true,
+                            surName: true,
+                            email: true
+                        }
+                    },
+                    branch: true
+                },
+                orderBy: {
+                    date: 'desc'
+                },
+                skip,
+                take: limit
+            }),
+            prisma.expense.count({ where }),
+            prisma.expense.aggregate({
+                where,
+                _sum: {
+                    amount: true
                 }
-            },
-            orderBy: {
-                date: 'desc'
-            }
-        });
+            })
+        ]);
 
         return res.status(200).json({
             success: true,
             date: expenses,
+            pagination: {
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit),
+                totalAmount: Number(totalAmountResult._sum.amount || 0)
+            }
         });
     } catch (error) {
         console.error("getAllExpenses error", error);
@@ -109,7 +137,7 @@ export const getExpenseById = async (req, res) => {
 // Yeni xərc yarat
 export const createExpense = async (req, res) => {
     try {
-        const { title, description, amount, category, date, note } = req.body;
+        const { title, description, amount, category, date, note, branchId } = req.body;
 
         if (!title || title.trim() === "") {
             return res.status(400).json({
@@ -134,6 +162,7 @@ export const createExpense = async (req, res) => {
                 date: date ? new Date(date) : new Date(),
                 note: note?.trim() || null,
                 staffId: req.staffId || null,
+                branchId: (branchId && branchId !== 'central') ? branchId : null,
             },
             include: {
                 staff: {
@@ -233,6 +262,7 @@ export const updateExpense = async (req, res) => {
                 date: date !== undefined ? new Date(date) : existingExpense.date,
                 note: note !== undefined ? (note?.trim() || null) : existingExpense.note,
                 deleteType: deleteType !== undefined ? deleteType.toUpperCase() : existingExpense.deleteType,
+                branchId: req.body.branchId !== undefined ? (req.body.branchId === 'central' ? null : req.body.branchId) : existingExpense.branchId
             },
             include: {
                 staff: {
@@ -291,7 +321,7 @@ export const deleteExpense = async (req, res) => {
     try {
         const { id } = req.params;
         const { deleteType = 'SOFT' } = req.body; // Default: SOFT delete
-        
+
         // Ensure deleteType is valid
         const validDeleteType = (deleteType && typeof deleteType === 'string' && deleteType.toUpperCase() === 'HARD') ? 'HARD' : 'SOFT';
 

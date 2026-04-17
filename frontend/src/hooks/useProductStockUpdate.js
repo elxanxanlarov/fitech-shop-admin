@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import Alert from '../components/ui/Alert';
 import { productApi } from '../api';
+import { useBranch } from '../context/BranchContext';
 
 export function useProductStockUpdate(productId, formData, setFormData, setInitialFormData, initialFormData, isEditMode, t, tAlert) {
     const [updatingStock, setUpdatingStock] = useState(false);
+    const { selectedBranchId } = useBranch();
 
     const hasStockChanged = () => {
         if (!isEditMode || !initialFormData) return false;
@@ -33,13 +35,14 @@ export function useProductStockUpdate(productId, formData, setFormData, setIniti
                 type: 'ADJUSTMENT',
                 fullBoxes: parseInt(formData.fullBoxes) || 0,
                 openedBoxQuantity: parseInt(formData.openedBoxQuantity) || 0,
-                note: 'Məhsul formundan stok yeniləməsi'
+                note: 'Məhsul formundan stok yeniləməsi',
+                branchId: (selectedBranchId && selectedBranchId !== 'central') ? selectedBranchId : null
             };
 
             await productApi.updateStock(productId, payload);
 
             // Refresh product data
-            const productResponse = await productApi.getById(productId);
+            const productResponse = await productApi.getById(productId, { branchId: selectedBranchId });
             if (productResponse.success && productResponse.date) {
                 const updatedProduct = productResponse.date;
                 setFormData(prev => ({

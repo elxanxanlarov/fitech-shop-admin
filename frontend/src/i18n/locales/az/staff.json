@@ -35,6 +35,9 @@
   "error_delete_core_role_text": "Əsas rollara aid işçilər silinə bilməz",
   "error_bulk_delete_core_role": "Xəta!",
   "error_bulk_delete_core_role_text": "Əsas rollara aid işçilər silinə bilməz. Zəhmət olmasa seçimdən çıxarın.",
+  "error_edit_privileged_text": "Superadmin və Baş Admin yalnız Superadmin tərəfindən redaktə oluna bilər",
+  "error_delete_privileged_text": "Superadmin və Baş Admin yalnız Superadmin tərəfindən silinə bilər",
+  "error_bulk_delete_privileged_text": "Seçimdə Superadmin və ya Baş Admin var; onları yalnız Superadmin silə bilər.",
   "items_selected": "element seçilib",
   "edit_staff": "İşçi Məlumatlarını Redaktə Et",
   "new_staff": "Yeni İşçi",
@@ -68,6 +71,14 @@
   "profile_description": "Profil məlumatlarınızı idarə edin",
   "edit": "Redaktə Et",
   "save": "Saxla",
-  "password_change_superadmin": "Superadmin olaraq bu işçinin parolunu dəyişdirə bilərsiniz"
+  "password_change_superadmin": "Superadmin olaraq bu işçinin parolunu dəyişdirə bilərsiniz",
+  "branch": "Filial",
+  "select_branch": "Filial seçin",
+  "branch_locked_own": "Başqa filial seçilə bilməz — yalnız sizin filialınız təyin olunur",
+  "is_boss": "Baş Admin?",
+  "boss_description": "Baş Adminlər filial seçmirlər və hər yerə girişləri olur",
+  "head_admin": "Baş Admin (Superadmin-dən aşağı, Admin-dən yuxarı)",
+  "head_admin_short": "Baş Admin",
+  "admin_role": "Admin (Filial üzrə)",
+  "branch_required": "Filial seçilməlidir"
 }
-

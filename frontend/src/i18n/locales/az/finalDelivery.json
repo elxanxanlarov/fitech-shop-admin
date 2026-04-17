@@ -76,6 +76,11 @@
   "add_success_text": "Məhsul əlavə edildi",
   "actions": "Əməliyyatlar",
   "stock": "Ümumi Stok",
-  "only_superadmin_can_delete": "Yalnız Superadmin məhsul silə bilər"
+  "only_superadmin_can_delete": "Yalnız Superadmin məhsul silə bilər",
+  "branch": "Filial",
+  "select_branch": "Filial seçin",
+  "branch_not_set": "Filial təyin edilməyib",
+  "branch_locked_own": "Yalnız öz filialınız üçün təyin olunur",
+  "central_warehouse": "Mərkəzi Anbar"
 }
 

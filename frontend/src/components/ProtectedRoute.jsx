@@ -2,7 +2,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from './ui/LoadingSpinner';
 
-const ProtectedRoute = ({ children }) => {
+const ProtectedRoute = ({ children, requiredRole }) => {
   const { user, loading } = useAuth();
   const location = useLocation();
   const token = sessionStorage.getItem('token');
@@ -21,25 +21,26 @@ const ProtectedRoute = ({ children }) => {
     return <Navigate to="/dashboard/login" replace />;
   }
 
-  const roleName = user.role?.name?.toLowerCase();
+  const roleName = user.role?.name?.toUpperCase();
+
+  // Xüsusi rol tələbi varsa yoxla
+  if (requiredRole && roleName !== requiredRole.toUpperCase()) {
+    // Əgər tələb olunan rolu yoxdursa, geri (və ya başqa yerə) at
+    return <Navigate to={roleName === 'RECEPTION' ? "/reception/sales" : "/admin/statistics"} replace />;
+  }
+
   const isAdminPath = location.pathname.startsWith('/admin');
   const isReceptionPath = location.pathname.startsWith('/reception');
 
   // Rola görə giriş icazəsi yoxlaması (Middleware)
-  if (isAdminPath && !(roleName === 'admin' || roleName === 'superadmin')) {
+  if (isAdminPath && !(roleName === 'ADMIN' || roleName === 'SUPERADMIN')) {
     // Əgər admin yolundadırsa amma admin deyilsə, reception-a at
     return <Navigate to="/reception/sales" replace />;
   }
 
-  if (isReceptionPath && roleName !== 'reception' && roleName !== 'admin' && roleName !== 'superadmin') {
+  if (isReceptionPath && roleName !== 'RECEPTION' && roleName !== 'ADMIN' && roleName !== 'SUPERADMIN') {
     // Əgər reception yolundadırsa və uyğun rolu yoxdursa
     return <Navigate to="/dashboard/login" replace />;
-  }
-
-  // Admin və superadmin hər yerə girə bilər, amma reception yalnız öz yerinə
-  if (isReceptionPath && (roleName === 'admin' || roleName === 'superadmin')) {
-    // Admin reception səhifələrinə də baxa bilər
-    return children;
   }
 
   return children;

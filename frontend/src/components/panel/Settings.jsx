@@ -1,12 +1,16 @@
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { MdSettings, MdArrowRight, MdSecurity, MdFolder, MdCreditCard } from 'react-icons/md';
+import { MdSettings, MdArrowRight, MdSecurity, MdFolder, MdCreditCard, MdBusiness } from 'react-icons/md';
+import { useAuth } from '../../context/AuthContext';
+import { isFilialAdmin } from '../../utils/accessHelpers';
 
 export default function Settings() {
     const navigate = useNavigate();
     const { t } = useTranslation('settings');
+    const { user } = useAuth();
+    const filialAdminOnlyCategories = isFilialAdmin(user);
 
-    const settingsItems = [
+    const allSettingsItems = [
         {
             id: 'roles-management',
             title: t('roles_management') || 'Rollar İdarəetməsi',
@@ -33,8 +37,21 @@ export default function Settings() {
             bgColor: 'bg-purple-100',
             iconColor: 'text-purple-600',
             navigatePath: '/admin/credit-term-management'
+        },
+        {
+            id: 'branch-management',
+            title: t('branch_management') || 'Filial İdarəetməsi',
+            description: t('branch_management_desc') || 'Filialları və onların stoklarını idarə edin',
+            icon: <MdBusiness className="w-6 h-6" />,
+            bgColor: 'bg-orange-100',
+            iconColor: 'text-orange-600',
+            navigatePath: '/admin/branch-management'
         }
     ];
+
+    const settingsItems = filialAdminOnlyCategories
+        ? allSettingsItems.filter((item) => item.id === 'category-management')
+        : allSettingsItems;
 
     const handleNavigate = (path) => {
         navigate(path);
@@ -46,6 +63,12 @@ export default function Settings() {
             <div className="mb-6">
                 <h1 className="text-2xl font-bold text-gray-900 mb-2">{t('title') || 'Tənzimləmələr'}</h1>
                 <p className="text-gray-600">{t('subtitle') || 'Sistem parametrlərini idarə edin'}</p>
+                {filialAdminOnlyCategories && (
+                    <p className="mt-2 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                        {t('filial_admin_settings_hint') ||
+                            'Filial admini kimi yalnız kateqoriya idarəetməsinə çıxışınız var.'}
+                    </p>
+                )}
             </div>
 
             {/* Settings Cards */}

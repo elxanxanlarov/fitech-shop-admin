@@ -315,7 +315,14 @@ export default function ActivityLogDetail() {
                   {t(`entity_types.${log.entityType}`) || log.entityType}
                 </p>
               </div>
-              {/* Məlumat ID göstərmə */}
+              <div>
+                <p className="text-sm text-gray-600 mb-1">{t('context_branch') || 'Əməliyyat filialı'}:</p>
+                <p className="text-base text-gray-900">
+                  {log.branch?.name ||
+                    log.staff?.branch?.name ||
+                    (log.staff ? (t('branch_not_assigned') || 'Filial təyin edilməyib') : '—')}
+                </p>
+              </div>
             </div>
           </div>
         </div>

@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Input from '../ui/Input';
+import SearchDropdown from '../ui/SearchDropdown';
 import Alert from '../ui/Alert';
 import { MdPerson, MdEmail, MdPhone, MdSecurity } from 'react-icons/md';
 import PhoneInput from 'react-phone-input-2';
 import 'react-phone-input-2/lib/style.css';
-import { staffApi, roleApi, authApi } from '../../api'; 
+import { staffApi, roleApi, authApi, branchApi } from '../../api';
+import { useBranch } from '../../context/BranchContext';
 
 export default function StaffForm() {
     const navigate = useNavigate();
@@ -15,12 +17,13 @@ export default function StaffForm() {
     const id = searchParams.get('id');
     const { t } = useTranslation('staff');
     const { t: tAlert } = useTranslation('alert');
-    
+    const { selectedBranchId } = useBranch();
+
     // Check if coming from admin or reception
     const isAdmin = location.pathname.includes('/admin');
     const staffPagePath = isAdmin ? '/admin/staff' : '/reception/staff';
     const isEditMode = !!id;
-    
+
     const [formData, setFormData] = useState({
         name: '',
         surName: '',
@@ -29,10 +32,13 @@ export default function StaffForm() {
         password: '',
         confirmPassword: '',
         roleId: '',
-        isActive: true
+        branchId: '',
+        isActive: true,
+        isBoss: false
     });
-    
+
     const [roles, setRoles] = useState([]);
+    const [branches, setBranches] = useState([]);
     const [currentUser, setCurrentUser] = useState(null);
     const [errors, setErrors] = useState({});
     const [isLoading, setIsLoading] = useState(false);
@@ -53,6 +59,45 @@ export default function StaffForm() {
         fetchCurrentUser();
     }, []);
 
+    const canPickAnyBranch = useMemo(() => {
+        const r = currentUser?.role?.name?.toLowerCase() || '';
+        const boss = currentUser?.isBoss === true;
+        return r === 'superadmin' || (r === 'admin' && boss);
+    }, [currentUser]);
+
+    const branchChoices = useMemo(() => {
+        if (!branches.length) return [];
+        if (canPickAnyBranch) return branches;
+        const onlyId =
+            currentUser?.branchId ||
+            (selectedBranchId && selectedBranchId !== 'central' ? selectedBranchId : null);
+        if (!onlyId) return branches;
+        const filtered = branches.filter((b) => b.id === onlyId);
+        return filtered.length ? filtered : branches;
+    }, [branches, currentUser, selectedBranchId, canPickAnyBranch]);
+
+    // Filial admin / reception: yalnız öz filialı; rol filial tələb edəndə branchId həmişə həmin filial
+    useEffect(() => {
+        if (canPickAnyBranch || !currentUser) return;
+        const pin =
+            currentUser.branchId ||
+            (selectedBranchId && selectedBranchId !== 'central' ? selectedBranchId : null);
+        if (!pin || !formData.roleId || !roles.length) return;
+        const selectedRole = roles.find((x) => x.id?.toString() === formData.roleId?.toString());
+        const rn = selectedRole?.name?.toLowerCase() || '';
+        const needsBranch =
+            rn !== 'superadmin' && !(rn === 'admin' && formData.isBoss === true);
+        if (!needsBranch) return;
+        setFormData((p) => (p.branchId === pin ? p : { ...p, branchId: pin }));
+    }, [
+        canPickAnyBranch,
+        currentUser,
+        selectedBranchId,
+        roles,
+        formData.roleId,
+        formData.isBoss,
+    ]);
+
     // Fetch roles and staff data (if edit mode)
     useEffect(() => {
         const fetchRoles = async () => {
@@ -62,7 +107,7 @@ export default function StaffForm() {
                     // Filter out Superadmin role if current user is not Superadmin
                     let filteredRoles = response.date;
                     if (currentUser && currentUser.role?.name?.toLowerCase() !== 'superadmin') {
-                        filteredRoles = response.date.filter(role => 
+                        filteredRoles = response.date.filter(role =>
                             role.name.toLowerCase() !== 'superadmin'
                         );
                     }
@@ -77,10 +122,10 @@ export default function StaffForm() {
             if (isEditMode && id) {
                 try {
                     setIsLoading(true);
-                    const response = await staffApi.getById(id);
+                    const response = await staffApi.getById(id.toString());
                     if (response.success && response.date) {
                         const staff = response.date;
-                        
+
                         // Superadmin-i edit etməyə icazə vermə (yalnız superadmin üçün)
                         const roleName = staff.role?.name || '';
                         if (roleName.toLowerCase() === 'superadmin') {
@@ -90,7 +135,7 @@ export default function StaffForm() {
                                 return;
                             }
                         }
-                        
+
                         setFormData({
                             name: staff.name || '',
                             surName: staff.surName || '',
@@ -99,7 +144,9 @@ export default function StaffForm() {
                             password: '',
                             confirmPassword: '',
                             roleId: staff.roleId || '',
-                            isActive: staff.isActive !== undefined ? staff.isActive : true
+                            branchId: staff.branchId || '',
+                            isActive: staff.isActive !== undefined ? staff.isActive : true,
+                            isBoss: staff.isBoss || false
                         });
                     }
                 } catch (error) {
@@ -111,29 +158,41 @@ export default function StaffForm() {
             }
         };
 
+        const fetchBranches = async () => {
+            try {
+                const response = await branchApi.getAll();
+                if (response.success && response.data) {
+                    setBranches(response.data);
+                }
+            } catch (error) {
+                console.error('Error fetching branches:', error);
+            }
+        };
+
         if (currentUser) {
             fetchRoles();
+            fetchBranches();
             fetchStaff();
         }
     }, [id, isEditMode, currentUser, navigate, staffPagePath, t]);
 
     const validateForm = () => {
         const newErrors = {};
-        
+
         if (!formData.name.trim()) {
             newErrors.name = t('name_required') || 'Ad tələb olunur';
         }
-        
+
         if (!formData.surName?.trim()) {
             newErrors.surName = t('surname_required') || 'Soyad tələb olunur';
         }
-        
+
         if (!formData.email.trim()) {
             newErrors.email = t('email_required') || 'Email tələb olunur';
         } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
             newErrors.email = t('email_invalid') || 'Düzgün email formatı daxil edin';
         }
-        
+
         // Password validation (only for create mode or if password is provided)
         if (!isEditMode) {
             if (!formData.password.trim()) {
@@ -141,7 +200,7 @@ export default function StaffForm() {
             } else if (formData.password.length < 6) {
                 newErrors.password = t('password_min_length') || 'Parol ən azı 6 simvol olmalıdır';
             }
-            
+
             if (formData.password !== formData.confirmPassword) {
                 newErrors.confirmPassword = t('password_mismatch') || 'Parollar uyğun gəlmir';
             }
@@ -150,7 +209,20 @@ export default function StaffForm() {
         } else if (formData.password && formData.password !== formData.confirmPassword) {
             newErrors.confirmPassword = t('password_mismatch') || 'Parollar uyğun gəlmir';
         }
-        
+
+        // Branch validation
+        const selectedRole = roles.find(r => r.id.toString() === formData.roleId.toString());
+        const roleName = selectedRole?.name?.toLowerCase() || '';
+        const isSuperAdminRole = roleName === 'superadmin';
+        const isAdminRole = roleName === 'admin';
+        const isBoss = formData.isBoss;
+
+        const branchRequired = formData.roleId && !isSuperAdminRole && (!isAdminRole || (isAdminRole && !isBoss));
+
+        if (branchRequired && !formData.branchId) {
+            newErrors.branchId = t('branch_required') || 'Filial seçilməlidir';
+        }
+
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -160,7 +232,7 @@ export default function StaffForm() {
             ...prev,
             [field]: value
         }));
-        
+
         // Clear error when user starts typing
         if (errors[field]) {
             setErrors(prev => ({
@@ -172,23 +244,25 @@ export default function StaffForm() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        
+
         if (!validateForm()) {
             return;
         }
-        
-        // Check if user is trying to assign Superadmin role
+
         const selectedRole = roles.find(role => role.id.toString() === formData.roleId.toString());
-        if (selectedRole && selectedRole.name.toLowerCase() === 'superadmin') {
-            // Double check - even if Superadmin role is in the list, verify current user is Superadmin
-            if (!currentUser || currentUser.role?.name?.toLowerCase() !== 'superadmin') {
-                Alert.error(t('error_edit_superadmin'), t('error_edit_superadmin_text'));
-                return;
-            }
+        const isSuperAdminRolePick = selectedRole?.name?.toLowerCase() === 'superadmin';
+        const isHeadAdminPick =
+            selectedRole?.name?.toLowerCase() === 'admin' && formData.isBoss === true;
+        if (
+            (isSuperAdminRolePick || isHeadAdminPick) &&
+            currentUser?.role?.name?.toLowerCase() !== 'superadmin'
+        ) {
+            Alert.error(t('error_edit_superadmin'), t('error_edit_privileged_text'));
+            return;
         }
-        
+
         setIsLoading(true);
-        
+
         try {
             const payload = {
                 name: formData.name.trim(),
@@ -196,7 +270,9 @@ export default function StaffForm() {
                 email: formData.email.trim(),
                 phone: formData.phone?.trim() || null,
                 roleId: formData.roleId || null,
-                isActive: formData.isActive
+                branchId: (formData.isBoss || selectedRole?.name?.toLowerCase() === 'superadmin') ? null : (formData.branchId || null),
+                isActive: formData.isActive,
+                isBoss: formData.isBoss
             };
 
             // Add password only if provided (create mode or update with password change)
@@ -211,12 +287,12 @@ export default function StaffForm() {
                 await staffApi.create(payload);
                 Alert.success(tAlert('add_success') || 'Uğurlu!', tAlert('add_success_text') || 'İşçi uğurla əlavə edildi');
             }
-            
+
             // Navigate back after success
             setTimeout(() => {
                 navigate(staffPagePath);
             }, 1500);
-            
+
         } catch (error) {
             console.error('Staff operation error:', error);
             const errorMessage = error.response?.data?.message || (tAlert('error_text') || 'Xəta baş verdi. Zəhmət olmasa yenidən cəhd edin.');
@@ -245,7 +321,7 @@ export default function StaffForm() {
                         <MdPerson className="inline w-5 h-5 mr-2" />
                         {t('personal_info') || 'Şəxsi Məlumatlar'}
                     </h3>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <Input
                             label={t('name')}
@@ -257,7 +333,7 @@ export default function StaffForm() {
                             icon={<MdPerson />}
                             required
                         />
-                        
+
                         <Input
                             label={t('surname') || 'Soyad'}
                             type="text"
@@ -268,7 +344,7 @@ export default function StaffForm() {
                             icon={<MdPerson />}
                             required
                         />
-                        
+
                         <Input
                             label={t('email')}
                             type="email"
@@ -279,7 +355,7 @@ export default function StaffForm() {
                             icon={<MdEmail />}
                             required
                         />
-                        
+
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
                                 {t('phone')} <span className="text-red-500">*</span>
@@ -321,30 +397,73 @@ export default function StaffForm() {
                         <MdSecurity className="inline w-5 h-5 mr-2" />
                         {t('role_info') || 'İcazə Məlumatları'}
                     </h3>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 {t('role')} <span className="text-red-500">*</span>
                             </label>
                             <select
-                                value={formData.roleId}
-                                onChange={(e) => handleInputChange('roleId', e.target.value)}
-                                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                                    errors.roleId ? 'border-red-500' : 'border-gray-300'
-                                }`}
+                                value={(() => {
+                                    const selectedRole = roles.find(r => r.id.toString() === formData.roleId.toString());
+                                    if (selectedRole?.name?.toLowerCase() === 'admin') {
+                                        return formData.isBoss ? 'admin_boss' : 'admin_normal';
+                                    }
+                                    return formData.roleId;
+                                })()}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val === 'admin_boss') {
+                                        const adminRole = roles.find(r => r.name.toLowerCase() === 'admin');
+                                        handleInputChange('roleId', adminRole.id);
+                                        handleInputChange('isBoss', true);
+                                        handleInputChange('branchId', '');
+                                    } else if (val === 'admin_normal') {
+                                        const adminRole = roles.find(r => r.name.toLowerCase() === 'admin');
+                                        handleInputChange('roleId', adminRole.id);
+                                        handleInputChange('isBoss', false);
+                                    } else {
+                                        handleInputChange('roleId', val);
+                                        handleInputChange('isBoss', false);
+                                        const picked = roles.find(r => r.id.toString() === val.toString());
+                                        if (picked?.name?.toLowerCase() === 'superadmin') {
+                                            handleInputChange('branchId', '');
+                                        }
+                                    }
+                                }}
+                                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.roleId ? 'border-red-500' : 'border-gray-300'
+                                    }`}
                             >
                                 <option value="">{t('select_role') || 'Rol seçin'}</option>
-                                {roles.map(role => (
-                                    <option key={role.id} value={role.id.toString()}>
-                                        {role.name}
-                                    </option>
-                                ))}
+                                {roles.map(role => {
+                                    if (role.name.toLowerCase() === 'admin') {
+                                        const isSuperAdminUser = currentUser?.role?.name?.toLowerCase() === 'superadmin';
+                                        return (
+                                            <React.Fragment key={role.id}>
+                                                {isSuperAdminUser && (
+                                                    <option value="admin_boss">
+                                                        {t('head_admin') || 'Baş Admin (Superadmin-dən aşağı, Admin-dən yuxarı)'}
+                                                    </option>
+                                                )}
+                                                <option value="admin_normal">
+                                                    {t('admin_role') || 'Admin (Filial üzrə)'}
+                                                </option>
+                                            </React.Fragment>
+                                        );
+                                    }
+                                    return (
+                                        <option key={role.id} value={role.id.toString()}>
+                                            {role.name}
+                                        </option>
+                                    );
+                                })}
                             </select>
                             {errors.roleId && (
                                 <p className="mt-1 text-sm text-red-600">{errors.roleId}</p>
                             )}
                         </div>
+
+
 
                         {/* Active Status - Only in edit mode */}
                         {isEditMode && (
@@ -365,6 +484,50 @@ export default function StaffForm() {
                                 </p>
                             </div>
                         )}
+
+                        {/* Branch Selection - Only for non-boss/non-superadmin roles */}
+                        {(() => {
+                            const selectedRole = roles.find(r => r.id.toString() === formData.roleId.toString());
+                            const roleName = selectedRole?.name?.toLowerCase() || '';
+                            const isSuperAdminRole = roleName === 'superadmin';
+                            const isAdminRole = roleName === 'admin';
+                            const isBoss = formData.isBoss;
+
+                            // Branch selection should show if:
+                            // 1. role is NOT superadmin AND (role is NOT admin OR (role is admin AND isBoss is FALSE))
+                            const shouldShowBranch = !isSuperAdminRole && (!isAdminRole || (isAdminRole && !isBoss));
+
+                            if (shouldShowBranch && formData.roleId) {
+                                return (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            {t('branch') || 'Filial'}
+                                        </label>
+                                        <SearchDropdown
+                                            options={branchChoices}
+                                            value={formData.branchId ? formData.branchId.toString() : ''}
+                                            onChange={(val) => handleInputChange('branchId', val)}
+                                            placeholder={t('select_branch') || 'Filial seçin...'}
+                                            getOptionLabel={(option) => option.name || ''}
+                                            getOptionValue={(option) => option.id?.toString() || ''}
+                                            searchFields={['name']}
+                                            disabled={!canPickAnyBranch}
+                                        />
+                                        {!canPickAnyBranch && (
+                                            <p className="mt-1 text-xs text-gray-500">
+                                                {t('branch_locked_own') || 'Yalnız öz filialınız üçün təyin olunur'}
+                                            </p>
+                                        )}
+                                        {errors.branchId && (
+                                            <p className="mt-1 text-sm text-red-600 font-medium">
+                                                {errors.branchId}
+                                            </p>
+                                        )}
+                                    </div>
+                                );
+                            }
+                            return null;
+                        })()}
                     </div>
                 </div>
 
@@ -375,7 +538,7 @@ export default function StaffForm() {
                             <MdSecurity className="inline w-5 h-5 mr-2" />
                             {t('password_info') || 'Parol Məlumatları'}
                         </h3>
-                        
+
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <Input
                                 label={t('password') || 'Parol'}
@@ -387,7 +550,7 @@ export default function StaffForm() {
                                 icon={<MdSecurity />}
                                 required={!isEditMode}
                             />
-                            
+
                             <Input
                                 label={t('confirm_password') || 'Parolu Təsdiqlə'}
                                 type="password"

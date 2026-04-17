@@ -4,10 +4,10 @@ import { createActivityLog } from "./activityLogController.js";
 // Bütün kateqoriyaları gətir
 export const getAllCategories = async (req, res) => {
     try {
-        const { deleteType, includeDeleted } = req.query;
-        
+        const { deleteType, includeDeleted, branchId, includeUnassigned } = req.query;
+
         const where = {};
-        
+
         // DeleteType filter - default olaraq yalnız silinməyən kateqoriyaları göstər
         if (includeDeleted === 'true') {
             // Bütün kateqoriyaları göstər (silinmişlər də daxil)
@@ -17,10 +17,15 @@ export const getAllCategories = async (req, res) => {
             // Default: yalnız silinməyən kateqoriyaları göstər
             where.deleteType = 'NONE';
         }
-        
+
+        // Filial filtri silindi - kateqoriyalar artıq hamı üçün görünür
+
         const categories = await prisma.category.findMany({
             where,
             include: {
+                branch: {
+                    select: { id: true, name: true }
+                },
                 subCategories: {
                     where: {
                         isActive: true
@@ -102,7 +107,7 @@ export const getCategoryById = async (req, res) => {
 // Yeni kateqoriya yarat
 export const createCategory = async (req, res) => {
     try {
-        const { name, description, isActive } = req.body;
+        const { name, description, isActive, branchId } = req.body;
 
         if (!name || name.trim() === "") {
             return res.status(400).json({
@@ -111,9 +116,13 @@ export const createCategory = async (req, res) => {
             });
         }
 
-        // Eyni adlı kateqoriyanın olub olmadığını yoxla
-        const existingCategory = await prisma.category.findUnique({
-            where: { name: name.trim() }
+        // Kateqoriyalar artıq qlobaldır (branchId mütləq null olur)
+        const effectiveBranchId = null;
+        const existingCategory = await prisma.category.findFirst({
+            where: {
+                name: name.trim(),
+                branchId: effectiveBranchId
+            }
         });
 
         if (existingCategory) {
@@ -128,6 +137,7 @@ export const createCategory = async (req, res) => {
                 name: name.trim(),
                 description: description?.trim() || null,
                 isActive: typeof isActive === "boolean" ? isActive : true,
+                branchId: effectiveBranchId,
             }
         });
 
@@ -163,11 +173,41 @@ export const createCategory = async (req, res) => {
     }
 };
 
+// Bütün kateqoriyaları qlobal et (branchId = null)
+export const makeCategoriesGlobal = async (req, res) => {
+    try {
+        const [catResult, subCatResult] = await Promise.all([
+            prisma.category.updateMany({
+                where: { NOT: { branchId: null } },
+                data: { branchId: null }
+            }),
+            prisma.subcategory.updateMany({
+                where: { NOT: { branchId: null } },
+                data: { branchId: null }
+            })
+        ]);
+
+        return res.status(200).json({
+            success: true,
+            message: `Bütün ${catResult.count} kateqoriya və ${subCatResult.count} alt kateqoriya qlobal edildi (Mərkəzi Banka keçirildi)`,
+            categoriesUpdated: catResult.count,
+            subCategoriesUpdated: subCatResult.count
+        });
+    } catch (error) {
+        console.error("makeCategoriesGlobal error", error);
+        return res.status(500).json({
+            success: false,
+            message: "Kateqoriyalar qlobal edilərkən xəta baş verdi",
+            error: error.message
+        });
+    }
+};
+
 // Kateqoriyanı yenilə
 export const updateCategory = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, description, isActive, deleteType } = req.body;
+        const { name, description, isActive, deleteType, branchId } = req.body;
 
         // Kateqoriyanın mövcud olub olmadığını yoxla
         const existingCategory = await prisma.category.findUnique({
@@ -181,10 +221,16 @@ export const updateCategory = async (req, res) => {
             });
         }
 
-        // Əgər ad dəyişdirilirsə, yeni adın unikal olub olmadığını yoxla
+        // Kateqoriyalar artıq qlobaldır (branchId mütləq null olur)
+        const effectiveBranchId = null;
+
         if (name && name.trim() !== existingCategory.name) {
-            const duplicateCategory = await prisma.category.findUnique({
-                where: { name: name.trim() }
+            const duplicateCategory = await prisma.category.findFirst({
+                where: {
+                    name: name.trim(),
+                    branchId: effectiveBranchId,
+                    id: { not: id }
+                }
             });
 
             if (duplicateCategory) {
@@ -198,7 +244,8 @@ export const updateCategory = async (req, res) => {
         const oldData = {
             name: existingCategory.name,
             description: existingCategory.description,
-            isActive: existingCategory.isActive
+            isActive: existingCategory.isActive,
+            branchId: existingCategory.branchId
         };
 
         const updatedCategory = await prisma.category.update({
@@ -208,6 +255,7 @@ export const updateCategory = async (req, res) => {
                 description: description !== undefined ? (description?.trim() || null) : existingCategory.description,
                 isActive: isActive !== undefined ? isActive : existingCategory.isActive,
                 deleteType: deleteType !== undefined ? deleteType.toUpperCase() : existingCategory.deleteType,
+                branchId: effectiveBranchId,
             }
         });
 
@@ -253,7 +301,7 @@ export const deleteCategory = async (req, res) => {
     try {
         const { id } = req.params;
         const { deleteType = 'SOFT' } = req.body; // Default: SOFT delete
-        
+
         // Ensure deleteType is valid
         const validDeleteType = (deleteType && typeof deleteType === 'string' && deleteType.toUpperCase() === 'HARD') ? 'HARD' : 'SOFT';
 
@@ -275,24 +323,36 @@ export const deleteCategory = async (req, res) => {
 
         // DeleteType-a görə silmə
         if (validDeleteType === 'HARD') {
-            // Hard delete - əvvəlcə yoxla ki, məhsul və ya alt kateqoriya var
-            if (existingCategory.products.length > 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Bu kateqoriyaya aid məhsullar var. Əvvəlcə məhsulları silin və ya başqa kateqoriyaya köçürün"
-                });
-            }
-
-            if (existingCategory.subCategories.length > 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Bu kateqoriyaya aid alt kateqoriyalar var. Əvvəlcə alt kateqoriyaları silin"
-                });
-            }
-
-            await prisma.category.delete({
-                where: { id }
+            // Hard delete - Bütün əlaqəli məlumatları (alt kateqoriyalar, məhsullar və onların qeydləri) tap və sil
+            // 1. Kateqoriyaya aid olan bütün məhsulların ID-lərini gətir
+            const productsInCategory = await prisma.product.findMany({
+                where: { categoryId: id },
+                select: { id: true }
             });
+            const productIds = productsInCategory.map(p => p.id);
+
+            await prisma.$transaction([
+                // 2. Əgər məhsullar varsa, onlara aid olan alt cədvəlləri təmizlə
+                ...(productIds.length > 0 ? [
+                    prisma.salereturnitem.deleteMany({ where: { productId: { in: productIds } } }),
+                    prisma.saleitem.deleteMany({ where: { productId: { in: productIds } } }),
+                    prisma.finaldeliveryitem.deleteMany({ where: { productId: { in: productIds } } }),
+                    prisma.stocktransferitem.deleteMany({ where: { productId: { in: productIds } } }),
+                    prisma.stockmovement.deleteMany({ where: { productId: { in: productIds } } }),
+                    prisma.branchstock.deleteMany({ where: { productId: { in: productIds } } }),
+                    prisma.product.deleteMany({ where: { id: { in: productIds } } })
+                ] : []),
+
+                // 3. Alt kateqoriyaları sil
+                prisma.subcategory.deleteMany({
+                    where: { categoryId: id }
+                }),
+
+                // 4. Kateqoriyanı sil
+                prisma.category.delete({
+                    where: { id }
+                })
+            ]);
 
             // Activity log yarat
             try {
@@ -301,10 +361,10 @@ export const deleteCategory = async (req, res) => {
                     entityType: "Category",
                     entityId: id,
                     action: "HARD_DELETE",
-                    description: `Kateqoriya tamamilə silindi: ${existingCategory.name}`,
+                    description: `Kateqoriya və ona bağlı bütün məlumatlar (məhsullar, alt kateqoriyalar) tamamilə silindi: ${existingCategory.name}`,
                     changes: {
                         name: existingCategory.name,
-                        description: existingCategory.description
+                        productsDeleted: productIds.length
                     }
                 });
             } catch (logError) {

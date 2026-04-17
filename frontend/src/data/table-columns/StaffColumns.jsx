@@ -6,16 +6,16 @@ export const getStaffColumns = (t, language = 'az') => [
         label: t('name'),
         render: (value, item) => (
             <div className="flex items-center">
-        <div className="h-8 w-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-sm font-medium">
-          {(value || `${item.firstName || ''} ${item.lastName || ''}` || '-')
-            .trim()
-            .split(' ')
-            .filter(Boolean)
-            .map(n => n[0])
-            .join('') || '-'}
-        </div>
+                <div className="h-8 w-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-sm font-medium">
+                    {(value || `${item.firstName || ''} ${item.lastName || ''}` || '-')
+                        .trim()
+                        .split(' ')
+                        .filter(Boolean)
+                        .map(n => n[0])
+                        .join('') || '-'}
+                </div>
                 <div className="ml-3">
-          <div className="text-sm font-medium text-gray-900">{value || `${item.firstName || ''} ${item.lastName || ''}`}</div>
+                    <div className="text-sm font-medium text-gray-900">{value || `${item.firstName || ''} ${item.lastName || ''}`}</div>
                     <div className="text-sm text-gray-500">{item.email}</div>
                 </div>
             </div>
@@ -35,18 +35,34 @@ export const getStaffColumns = (t, language = 'az') => [
         key: 'role',
         label: t('role'),
         render: (value, item) => {
-            const roleName = item.role?.name || value || 'Staff';
+            let roleName = item.role?.name || value || 'Staff';
+            const isBoss = item.isBoss === true;
+
+            if (roleName.toLowerCase() === 'admin' && isBoss) {
+                roleName = t('head_admin_short') || 'Baş Admin';
+            }
             return (
-                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                    roleName.toLowerCase() === 'admin' || roleName === 'Admin' ? 'bg-red-100 text-red-800' :
-                    roleName.toLowerCase() === 'reception' || roleName === 'Reception' ? 'bg-blue-100 text-blue-800' :
-                    roleName.toLowerCase() === 'manager' || roleName === 'Manager' ? 'bg-purple-100 text-purple-800' :
-                    'bg-green-100 text-green-800'
-                }`}>
-                    {roleName}
-                </span>
+                <div className="flex flex-col gap-1">
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${roleName === (t('head_admin_short') || 'Baş Admin') || roleName.toLowerCase() === 'admin' || roleName === 'Admin' ? 'bg-red-100 text-red-800' :
+                        roleName.toLowerCase() === 'reception' || roleName === 'Reception' ? 'bg-blue-100 text-blue-800' :
+                            roleName.toLowerCase() === 'manager' || roleName === 'Manager' ? 'bg-purple-100 text-purple-800' :
+                                'bg-green-100 text-green-800'
+                        }`}>
+                        {roleName}
+                    </span>
+
+                </div>
             );
         }
+    },
+    {
+        key: 'branch',
+        label: t('branch') || 'Filial',
+        render: (value, item) => (
+            <span className="text-sm font-medium text-blue-600">
+                {item.branch?.name || '-'}
+            </span>
+        )
     },
     {
         key: 'status',
@@ -54,9 +70,8 @@ export const getStaffColumns = (t, language = 'az') => [
         render: (value, item) => {
             const isActive = item.isActive !== undefined ? item.isActive : (value === 'Active' || value === t('active'));
             return (
-                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                    isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                }`}>
+                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                    }`}>
                     {isActive ? t('active') : t('inactive')}
                 </span>
             );

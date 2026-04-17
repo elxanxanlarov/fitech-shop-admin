@@ -48,6 +48,8 @@
   },
   "staff_name": "Staff Name",
   "entity": "Entity",
+  "context_branch": "Operation branch",
+  "branch_not_assigned": "No branch (global)",
   "view_details": "View Details",
   "delete": "Delete",
   "confirm_delete": "Are you sure you want to delete this activity log?",

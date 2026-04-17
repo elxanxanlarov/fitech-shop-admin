@@ -17,8 +17,19 @@ import {
   Calendar,
   PieChart,
   HandCoins,
-  CreditCard
+  CreditCard,
+  Banknote,
+  Wallet,
+  PiggyBank,
+  ReceiptText,
+  AlertCircle,
+  CheckCircle,
+  ArrowDownCircle,
+  ArrowUpCircle,
+  Hash,
+  BarChart3
 } from 'lucide-react';
+import { useBranch } from '../../hooks';
 
 export default function Statistics() {
   const { t } = useTranslation('statistics');
@@ -29,6 +40,7 @@ export default function Statistics() {
   const [showDailyForm, setShowDailyForm] = useState(false);
   const [showDailyHistory, setShowDailyHistory] = useState(false);
   const [selectedSummaryId, setSelectedSummaryId] = useState(null);
+  const { selectedBranchId, selectedBranchName } = useBranch();
 
   // Default tarixləri bu günə təyin et
   const getTodayDate = () => {
@@ -47,18 +59,18 @@ export default function Statistics() {
     fetchTopProducts();
     fetchPaymentTypeStatistics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [selectedBranchId]);
 
   useEffect(() => {
     fetchOverallStatistics();
     fetchTopProducts();
     fetchPaymentTypeStatistics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startDate, endDate]);
+  }, [startDate, endDate, selectedBranchId]);
 
   const fetchOverallStatistics = async () => {
     try {
-      const response = await statisticsApi.getOverall(startDate || null, endDate || null);
+      const response = await statisticsApi.getOverall(startDate || null, endDate || null, selectedBranchId);
       if (response.success) {
         setOverallData(response.data);
       }
@@ -77,7 +89,7 @@ export default function Statistics() {
         params.startDate = startDate;
         params.endDate = endDate;
       }
-      const response = await statisticsApi.getTopProducts(10, startDate || null, endDate || null);
+      const response = await statisticsApi.getTopProducts(10, startDate || null, endDate || null, selectedBranchId);
       if (response.success) {
         setTopProducts(response.data);
       }
@@ -88,7 +100,7 @@ export default function Statistics() {
 
   const fetchPaymentTypeStatistics = async () => {
     try {
-      const response = await statisticsApi.getByPaymentType(startDate || null, endDate || null);
+      const response = await statisticsApi.getByPaymentType(startDate || null, endDate || null, selectedBranchId);
       if (response.success) {
         setPaymentTypeData(response.data);
       }
@@ -113,7 +125,17 @@ export default function Statistics() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-bold text-gray-800">{t('title')}</h1>
+        <div>
+          <h1 className="text-3xl font-bold text-gray-800">{t('title')}</h1>
+          {selectedBranchName && (
+            <div className="mt-1 flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 border border-blue-200 text-blue-700 text-xs font-semibold rounded-full">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                {selectedBranchName}
+              </span>
+            </div>
+          )}
+        </div>
         <div className="flex gap-2">
           <button
             type="button"
@@ -170,10 +192,17 @@ export default function Statistics() {
 
       {/* Date Range Filter - Page başında */}
       <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
-          <Calendar className="w-5 h-5" />
-          {t('select_date_range')}
-        </h2>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+            <Calendar className="w-5 h-5" />
+            {t('select_date_range')}
+          </h2>
+          {(!startDate || !endDate) && (
+            <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-bold rounded-full animate-pulse uppercase tracking-wider">
+              {t('all_time') || 'Bütün zamanlar'}
+            </span>
+          )}
+        </div>
         <div className="flex flex-wrap gap-4 items-end">
           <div className="flex-1 min-w-[200px]">
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -206,7 +235,17 @@ export default function Statistics() {
               }}
               className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
             >
-              {t('reset_to_today') || 'Bu günə qayıt'}
+              {t('reset_to_today') || 'Bu gün'}
+            </button>
+            <button
+              onClick={() => {
+                setStartDate("");
+                setEndDate("");
+              }}
+              className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg font-bold hover:bg-blue-200 transition-colors flex items-center gap-2"
+            >
+              <PieChart className="w-4 h-4" />
+              {t('overall_stats') || 'Ümumi Statistika'}
             </button>
           </div>
         </div>
@@ -214,254 +253,305 @@ export default function Statistics() {
 
       {/* Overall Statistics Cards */}
       {overallData && (
-        <div className="space-y-6">
-          {/* Total Revenue & Profit Summary */}
-          <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg shadow-lg p-6 text-white">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Sol tərəf - Gəlir hesablaması */}
-              <div className="space-y-3">
-                <p className="text-blue-100 text-sm font-medium mb-3">{t('revenue_calculation') || 'Gəlir Hesablaması'}</p>
+        <div className="space-y-4">
 
-                {/* Satışlar */}
-                <div className="flex justify-between items-center">
-                  <span className="text-blue-100 text-sm">{t('sales') || 'Satışlar'}:</span>
-                  <span className="text-xl font-semibold">+{formatCurrency(overallData.sales.totalAmount)} AZN</span>
-                </div>
-
-                {/* Qaytarmalar */}
-                {overallData.returns && overallData.returns.returnedAmount > 0 && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-blue-100 text-sm">{t('returns') || 'Qaytarmalar'}:</span>
-                    <span className="text-xl font-semibold text-red-200">-{formatCurrency(overallData.returns.returnedAmount)} AZN</span>
-                  </div>
-                )}
-
-                {/* Təslim edilmiş məbləğ */}
-                {overallData.cashHandover && overallData.cashHandover.totalAmount > 0 && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-blue-100 text-sm">{t('cash_handover') || 'Məbləğ Təslimi'}:</span>
-                    <span className="text-xl font-semibold text-orange-200">{formatCurrency(overallData.cashHandover.totalAmount)} AZN</span>
-                  </div>
-                )}
-
-                {/* Ümumi Gəlir */}
-                <div className="flex justify-between items-center pt-3 border-t border-blue-400">
-                  <span className="text-yellow-100 font-semibold">{t('total_revenue') || 'Ümumi Gəlir'}:</span>
-                  <span className="text-2xl font-bold text-yellow-200">
-                    {formatCurrency(overallData.sales.netRevenueAfterHandover || overallData.sales.totalAmount)} AZN
-                  </span>
-                </div>
-
-                {(!startDate || !endDate) && overallData.sales.today && (
-                  <p className="text-xs text-blue-100 mt-2">
-                    {t('today')}: {formatCurrency(overallData.sales.today.netRevenueAfterHandover || overallData.sales.today.amount)} AZN
-                  </p>
-                )}
+          {/* ── TOP BANNER: key financial figures ── */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Ümumi Satış Məbləği */}
+            <div className="flex items-center gap-4 p-5 bg-blue-50 border-2 border-blue-200 rounded-2xl">
+              <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
+                <ShoppingCart className="w-6 h-6 text-blue-600" />
               </div>
-
-              {/* Sağ tərəf - Qazanc və Xərclər */}
-              <div className="space-y-3">
-                {/* Xalis Qazanc */}
-                <div>
-                  <p className="text-green-100 text-sm font-medium mb-2">{t('net_profit') || 'Xalis Qazanc'}</p>
-                  <p className="text-3xl font-bold text-green-200">{formatCurrency(
-                    parseFloat(overallData.sales.totalProfit || 0) - parseFloat(overallData.expenses?.totalAmount || 0)
-                  )} AZN</p>
-                  {(!startDate || !endDate) && overallData.sales.today && (
-                    <p className="text-xs text-blue-100 mt-1">
-                      {t('today')}: {formatCurrency(
-                        parseFloat(overallData.sales.today.profit || 0) - parseFloat(overallData.expenses?.today?.amount || 0)
-                      )} AZN
-                    </p>
-                  )}
-                </div>
-
-                {/* Xərclər */}
-                <div className="pt-3 border-t border-blue-400">
-                  <p className="text-red-100 text-sm font-medium mb-2">{t('total_expenses') || 'Ümumi Xərclər'}</p>
-                  <p className="text-3xl font-bold text-red-200">
-                    {formatCurrency(overallData.expenses?.totalAmount || 0)} AZN
-                  </p>
-                  {(!startDate || !endDate) && overallData.expenses?.today && (
-                    <p className="text-xs text-blue-100 mt-1">
-                      {t('today')}: {formatCurrency(overallData.expenses.today.amount || 0)} AZN
-                    </p>
-                  )}
-                </div>
-
-
+              <div>
+                <p className="text-xs font-semibold text-blue-500 uppercase tracking-wide">Ümumi Satış</p>
+                <p className="text-2xl font-bold text-blue-700">{formatCurrency(overallData.sales.totalAmount)}<span className="text-sm font-semibold ml-1">AZN</span></p>
+                <p className="text-xs text-blue-400">{overallData.sales.total} satış</p>
+                {(!startDate || !endDate) && overallData.sales.today && (
+                  <p className="text-xs text-blue-400">Bu gün: {formatCurrency(overallData.sales.today.amount)} AZN</p>
+                )}
               </div>
             </div>
 
+            {/* Xalis Qazanc */}
+            <div className="flex items-center gap-4 p-5 bg-emerald-50 border-2 border-emerald-200 rounded-2xl">
+              <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
+                <TrendingUp className="w-6 h-6 text-emerald-600" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-emerald-500 uppercase tracking-wide">Xalis Qazanc</p>
+                <p className="text-2xl font-bold text-emerald-700">
+                  {formatCurrency(parseFloat(overallData.sales.totalProfit || 0) - parseFloat(overallData.expenses?.totalAmount || 0))}
+                  <span className="text-sm font-semibold ml-1">AZN</span>
+                </p>
+                <p className="text-xs text-emerald-400">Qazanc - Xərclər</p>
+                {(!startDate || !endDate) && overallData.sales.today && (
+                  <p className="text-xs text-emerald-400">Bu gün: {formatCurrency(parseFloat(overallData.sales.today.profit || 0) - parseFloat(overallData.expenses?.today?.amount || 0))} AZN</p>
+                )}
+              </div>
+            </div>
 
+            {/* Ümumi Xərclər */}
+            <div className="flex items-center gap-4 p-5 bg-red-50 border-2 border-red-200 rounded-2xl">
+              <div className="w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+                <ReceiptText className="w-6 h-6 text-red-600" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-red-500 uppercase tracking-wide">Ümumi Xərclər</p>
+                <p className="text-2xl font-bold text-red-700">{formatCurrency(overallData.expenses?.totalAmount || 0)}<span className="text-sm font-semibold ml-1">AZN</span></p>
+                {(!startDate || !endDate) && overallData.expenses?.today && (
+                  <p className="text-xs text-red-400">Bu gün: {formatCurrency(overallData.expenses.today.amount)} AZN</p>
+                )}
+              </div>
+            </div>
+
+            {/* Kassada Qalan */}
+            {overallData.cashbox && (
+              <div className={`flex items-center gap-4 p-5 border-2 rounded-2xl ${
+                parseFloat(overallData.cashbox.balance) > 0
+                  ? 'bg-amber-50 border-amber-300'
+                  : 'bg-green-50 border-green-200'
+              }`}>
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
+                  parseFloat(overallData.cashbox.balance) > 0 ? 'bg-amber-100' : 'bg-green-100'
+                }`}>
+                  <PiggyBank className={`w-6 h-6 ${parseFloat(overallData.cashbox.balance) > 0 ? 'text-amber-600' : 'text-green-600'}`} />
+                </div>
+                <div>
+                  <p className={`text-xs font-semibold uppercase tracking-wide ${parseFloat(overallData.cashbox.balance) > 0 ? 'text-amber-500' : 'text-green-500'}`}>
+                    Kassada Qalan
+                  </p>
+                  <p className={`text-2xl font-bold ${parseFloat(overallData.cashbox.balance) > 0 ? 'text-amber-700' : 'text-green-700'}`}>
+                    {formatCurrency(overallData.cashbox.balance)}<span className="text-sm font-semibold ml-1">AZN</span>
+                  </p>
+                  <p className={`text-xs ${parseFloat(overallData.cashbox.balance) > 0 ? 'text-amber-400' : 'text-green-400'}`}>
+                    {parseFloat(overallData.cashbox.balance) > 0 ? 'Hələ təslim edilməyib' : 'Hamısı təslim edilib'}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-            {/* Sales Card */}
-            <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-600 text-sm font-medium">{t('sales')}</p>
-                  <p className="text-2xl font-bold text-gray-800 mt-2">
-                    {overallData.sales.total.toLocaleString()}
-                  </p>
-                  <p className="text-sm text-gray-500 mt-1">
-                    {t('amount')}: {formatCurrency(overallData.sales.totalAmount)} AZN
-                  </p>
-                  <p className="text-sm text-green-600 mt-1 flex items-center gap-1">
-                    <TrendingUp className="w-4 h-4" />
-                    {t('profit')}: {formatCurrency(overallData.sales.totalProfit)} AZN
-                  </p>
-                  {(!startDate || !endDate) && overallData.sales.today && (
-                    <p className="text-xs text-gray-400 mt-2">
-                      {t('today')}: {overallData.sales.today.count} ({formatCurrency(overallData.sales.today.amount)} AZN)
-                    </p>
-                  )}
+          {/* ── REVENUE BREAKDOWN BANNER ── */}
+          <div className="p-5 bg-gray-800 rounded-2xl text-white">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Gəlir Hesablaması</p>
+            <div className="flex flex-wrap gap-4 items-center">
+              <div className="flex items-center gap-2">
+                <ArrowDownCircle className="w-4 h-4 text-green-400" />
+                <span className="text-sm text-gray-300">Satışlar:</span>
+                <span className="font-bold text-green-300">+{formatCurrency(overallData.sales.totalAmount)} AZN</span>
+              </div>
+              {overallData.returns?.returnedAmount > 0 && (
+                <div className="flex items-center gap-2">
+                  <ArrowUpCircle className="w-4 h-4 text-red-400" />
+                  <span className="text-sm text-gray-300">Qaytarmalar:</span>
+                  <span className="font-bold text-red-300">−{formatCurrency(overallData.returns.returnedAmount)} AZN</span>
                 </div>
-                <div className="bg-blue-100 rounded-full p-3">
-                  <ShoppingCart className="w-8 h-8 text-blue-600" />
+              )}
+              {overallData.cashHandover?.totalAmount > 0 && (
+                <div className="flex items-center gap-2">
+                  <HandCoins className="w-4 h-4 text-orange-400" />
+                  <span className="text-sm text-gray-300">Məbləğ Təslimi:</span>
+                  <span className="font-bold text-orange-300">{formatCurrency(overallData.cashHandover.totalAmount)} AZN</span>
                 </div>
+              )}
+              <div className="ml-auto flex items-center gap-2 pl-4 border-l border-gray-600">
+                <span className="text-sm text-gray-300">Net Gəlir:</span>
+                <span className="text-xl font-bold text-yellow-300">
+                  {formatCurrency(overallData.sales.netRevenueAfterHandover || overallData.sales.totalAmount)} AZN
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* ── DETAIL CARDS GRID ── */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+
+            {/* Satışlar */}
+            <div className="p-5 bg-white border-2 border-blue-100 rounded-2xl shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center">
+                    <ShoppingCart className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <span className="font-bold text-gray-800">Satışlar</span>
+                </div>
+                <span className="text-xs bg-blue-100 text-blue-700 font-bold px-2 py-0.5 rounded-full">{overallData.sales.total} ədəd</span>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Ümumi məbləğ</span>
+                  <span className="font-semibold text-gray-800">{formatCurrency(overallData.sales.totalAmount)} AZN</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Qazanc</span>
+                  <span className="font-semibold text-emerald-600">{formatCurrency(overallData.sales.totalProfit)} AZN</span>
+                </div>
+                {(!startDate || !endDate) && overallData.sales.today && (
+                  <div className="pt-2 mt-2 border-t border-gray-100 flex justify-between text-xs text-gray-400">
+                    <span>Bu gün ({overallData.sales.today.count} satış)</span>
+                    <span>{formatCurrency(overallData.sales.today.amount)} AZN</span>
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Returns Card */}
-            <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-red-500">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-600 text-sm font-medium">{t('returns')}</p>
-                  <p className="text-2xl font-bold text-gray-800 mt-2">
-                    {overallData.returns.total.toLocaleString()}
-                  </p>
-                  <p className="text-sm text-gray-500 mt-1">
-                    {t('amount')}: {formatCurrency(overallData.returns.totalAmount)} AZN
-                  </p>
-                  <p className="text-sm text-red-600 mt-1">
-                    {t('returned_amount')}: {formatCurrency(overallData.returns.returnedAmount)} AZN
-                  </p>
-                  {(!startDate || !endDate) && overallData.returns.today && (
-                    <p className="text-xs text-gray-400 mt-2">
-                      {t('today')}: {overallData.returns.today.count} ({formatCurrency(overallData.returns.today.amount)} AZN)
-                    </p>
-                  )}
+            {/* Qaytarmalar */}
+            <div className="p-5 bg-white border-2 border-red-100 rounded-2xl shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-9 h-9 rounded-lg bg-red-100 flex items-center justify-center">
+                    <TrendingDown className="w-5 h-5 text-red-600" />
+                  </div>
+                  <span className="font-bold text-gray-800">Qaytarmalar</span>
                 </div>
-                <div className="bg-red-100 rounded-full p-3">
-                  <TrendingDown className="w-8 h-8 text-red-600" />
+                <span className="text-xs bg-red-100 text-red-700 font-bold px-2 py-0.5 rounded-full">{overallData.returns.total} ədəd</span>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Satış məbləği</span>
+                  <span className="font-semibold text-gray-800">{formatCurrency(overallData.returns.totalAmount)} AZN</span>
                 </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Qaytarılan məbləğ</span>
+                  <span className="font-semibold text-red-600">{formatCurrency(overallData.returns.returnedAmount)} AZN</span>
+                </div>
+                {(!startDate || !endDate) && overallData.returns.today && (
+                  <div className="pt-2 mt-2 border-t border-gray-100 flex justify-between text-xs text-gray-400">
+                    <span>Bu gün ({overallData.returns.today.count} qaytarma)</span>
+                    <span>{formatCurrency(overallData.returns.today.amount)} AZN</span>
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Products Card */}
-            <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-green-500">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-600 text-sm font-medium">{t('products')}</p>
-                  <p className="text-2xl font-bold text-gray-800 mt-2">
-                    {overallData.products.total.toLocaleString()}
-                  </p>
-                  <p className="text-sm text-green-600 mt-1">
-                    {t('active')}: {overallData.products.active}
-                  </p>
-                  <p className="text-sm text-gray-500 mt-1">
-                    {t('stock')}: {overallData.products.totalStock.toLocaleString()}
-                  </p>
-                  {overallData.products.deleted && overallData.products.deleted.total > 0 && (
-                    <div className="mt-2 pt-2 border-t border-gray-200">
-                      <p className="text-xs text-red-600 font-medium">
-                        {t('deleted')}: {overallData.products.deleted.total}
-                      </p>
-                      <div className="text-xs text-gray-500 mt-1 space-y-0.5">
-                        {overallData.products.deleted.soft > 0 && (
-                          <p>• {t('soft_deleted')}: {overallData.products.deleted.soft}</p>
-                        )}
-                        {overallData.products.deleted.archived > 0 && (
-                          <p>• {t('archived')}: {overallData.products.deleted.archived}</p>
-                        )}
-                      </div>
+            {/* Məbləğ Təslimi */}
+            {overallData.cashHandover && (
+              <div className="p-5 bg-white border-2 border-orange-100 rounded-2xl shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-9 h-9 rounded-lg bg-orange-100 flex items-center justify-center">
+                      <HandCoins className="w-5 h-5 text-orange-600" />
+                    </div>
+                    <span className="font-bold text-gray-800">Məbləğ Təslimi</span>
+                  </div>
+                  <span className="text-xs bg-orange-100 text-orange-700 font-bold px-2 py-0.5 rounded-full">{overallData.cashHandover.total} ədəd</span>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Cəmi təslim</span>
+                    <span className="font-semibold text-gray-800">{formatCurrency(overallData.cashHandover.totalAmount)} AZN</span>
+                  </div>
+                  {(!startDate || !endDate) && overallData.cashHandover.today && (
+                    <div className="pt-2 mt-2 border-t border-gray-100 flex justify-between text-xs text-gray-400">
+                      <span>Bu gün ({overallData.cashHandover.today.count} təslim)</span>
+                      <span>{formatCurrency(overallData.cashHandover.today.amount)} AZN</span>
                     </div>
                   )}
                 </div>
-                <div className="bg-green-100 rounded-full p-3">
-                  <Package className="w-8 h-8 text-green-600" />
-                </div>
-              </div>
-            </div>
-
-            {/* Staff Card */}
-            <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-purple-500">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-600 text-sm font-medium">{t('staff')}</p>
-                  <p className="text-2xl font-bold text-gray-800 mt-2">
-                    {overallData.staff.total.toLocaleString()}
-                  </p>
-                  <p className="text-sm text-purple-600 mt-1">
-                    {t('active')}: {overallData.staff.active}
-                  </p>
-                </div>
-                <div className="bg-purple-100 rounded-full p-3">
-                  <Users className="w-8 h-8 text-purple-600" />
-                </div>
-              </div>
-            </div>
-
-            {/* Cash Handover Card */}
-            {overallData.cashHandover && (
-              <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-orange-500">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-600 text-sm font-medium">{t('cash_handover') || 'Məbləğ Təslimi'}</p>
-                    <p className="text-2xl font-bold text-gray-800 mt-2">
-                      {overallData.cashHandover.total.toLocaleString()}
-                    </p>
-                    <p className="text-sm text-gray-500 mt-1">
-                      {t('amount')}: {formatCurrency(overallData.cashHandover.totalAmount)} AZN
-                    </p>
-                    {(!startDate || !endDate) && overallData.cashHandover.today && (
-                      <p className="text-xs text-gray-400 mt-2">
-                        {t('today')}: {overallData.cashHandover.today.count} ({formatCurrency(overallData.cashHandover.today.amount)} AZN)
-                      </p>
-                    )}
-                  </div>
-                  <div className="bg-orange-100 rounded-full p-3">
-                    <HandCoins className="w-8 h-8 text-orange-600" />
-                  </div>
-                </div>
               </div>
             )}
 
-            {/* Credits Card */}
+            {/* Kreditlər */}
             {overallData.credits && (
-              <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-purple-500">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-600 text-sm font-medium">{t('credits') || 'Kreditlər'}</p>
-                    <p className="text-2xl font-bold text-gray-800 mt-2">
-                      {overallData.credits.total.toLocaleString()}
-                    </p>
-                    <p className="text-sm text-gray-500 mt-1">
-                      {t('total_amount')}: {formatCurrency(overallData.credits.totalAmount)} AZN
-                    </p>
-                    <p className="text-sm text-green-600 mt-1">
-                      {t('paid_amount')}: {formatCurrency(overallData.credits.paidAmount)} AZN
-                    </p>
-                    <p className="text-sm text-red-600 mt-1">
-                      {t('remaining_amount')}: {formatCurrency(overallData.credits.remainingAmount)} AZN
-                    </p>
-                    <p className="text-sm text-purple-600 mt-1">
-                      {t('active')}: {overallData.credits.active}
-                    </p>
-                    {(!startDate || !endDate) && overallData.credits.today && (
-                      <p className="text-xs text-gray-400 mt-2">
-                        {t('today')}: {overallData.credits.today.count} ({formatCurrency(overallData.credits.today.amount)} AZN)
-                      </p>
-                    )}
+              <div className="p-5 bg-white border-2 border-violet-100 rounded-2xl shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-9 h-9 rounded-lg bg-violet-100 flex items-center justify-center">
+                      <CreditCard className="w-5 h-5 text-violet-600" />
+                    </div>
+                    <span className="font-bold text-gray-800">Kreditlər</span>
                   </div>
-                  <div className="bg-purple-100 rounded-full p-3">
-                    <CreditCard className="w-8 h-8 text-purple-600" />
+                  <span className="text-xs bg-violet-100 text-violet-700 font-bold px-2 py-0.5 rounded-full">{overallData.credits.total} ədəd</span>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Ümumi məbləğ</span>
+                    <span className="font-semibold text-gray-800">{formatCurrency(overallData.credits.totalAmount)} AZN</span>
                   </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Ödənilib</span>
+                    <span className="font-semibold text-emerald-600">{formatCurrency(overallData.credits.paidAmount)} AZN</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Qalıq</span>
+                    <span className="font-semibold text-red-600">{formatCurrency(overallData.credits.remainingAmount)} AZN</span>
+                  </div>
+                  {overallData.credits.remainingAmount > 0 && (
+                    <div className="flex items-center gap-1.5 mt-1 text-xs text-red-500 font-medium">
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      {overallData.credits.active} aktiv kredit
+                    </div>
+                  )}
+                  {(!startDate || !endDate) && overallData.credits.today && (
+                    <div className="pt-2 mt-2 border-t border-gray-100 flex justify-between text-xs text-gray-400">
+                      <span>Bu gün ({overallData.credits.today.count} kredit)</span>
+                      <span>{formatCurrency(overallData.credits.today.amount)} AZN</span>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
+
+            {/* Məhsullar */}
+            <div className="p-5 bg-white border-2 border-green-100 rounded-2xl shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-9 h-9 rounded-lg bg-green-100 flex items-center justify-center">
+                    <Package className="w-5 h-5 text-green-600" />
+                  </div>
+                  <span className="font-bold text-gray-800">Məhsullar</span>
+                </div>
+                <span className="text-xs bg-green-100 text-green-700 font-bold px-2 py-0.5 rounded-full">{overallData.products.total} ədəd</span>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Aktiv</span>
+                  <span className="font-semibold text-emerald-600">{overallData.products.active}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Ümumi stok</span>
+                  <span className="font-semibold text-gray-800">{overallData.products.totalStock.toLocaleString()} ədəd</span>
+                </div>
+                {overallData.products.deleted?.total > 0 && (
+                  <div className="pt-2 mt-2 border-t border-gray-100 space-y-1">
+                    <div className="flex justify-between text-xs text-red-500">
+                      <span>Silinmiş</span>
+                      <span>{overallData.products.deleted.total}</span>
+                    </div>
+                    {overallData.products.deleted.archived > 0 && (
+                      <div className="flex justify-between text-xs text-gray-400">
+                        <span>Arxivlənmiş</span>
+                        <span>{overallData.products.deleted.archived}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* İşçilər */}
+            <div className="p-5 bg-white border-2 border-purple-100 rounded-2xl shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-9 h-9 rounded-lg bg-purple-100 flex items-center justify-center">
+                    <Users className="w-5 h-5 text-purple-600" />
+                  </div>
+                  <span className="font-bold text-gray-800">İşçilər</span>
+                </div>
+                <span className="text-xs bg-purple-100 text-purple-700 font-bold px-2 py-0.5 rounded-full">{overallData.staff.total} nəfər</span>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Aktiv</span>
+                  <span className="font-semibold text-emerald-600">{overallData.staff.active}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Deaktiv</span>
+                  <span className="font-semibold text-gray-400">{overallData.staff.total - overallData.staff.active}</span>
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
       )}

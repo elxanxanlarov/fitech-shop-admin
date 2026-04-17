@@ -7,6 +7,7 @@ import { Edit, Trash2, Eye, Plus, FileSpreadsheet } from 'lucide-react';
 import { getProductColumns } from '../../data/table-columns/ProductColumns';
 import { productApi, categoryApi, subCategoryApi } from '../../api';
 import ExcelImportModal from '../modals/ExcelImportModal';
+import { useLocalStorage, useBranch } from '../../hooks';
 
 export default function Product() {
     const { t, i18n } = useTranslation('product');
@@ -18,17 +19,30 @@ export default function Product() {
     const [categories, setCategories] = useState([]);
     const [subCategories, setSubCategories] = useState([]);
     const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
-    const [filters, setFilters] = useState({});
-    const [searchValue, setSearchValue] = useState(''); // Input value
-    const [searchQuery, setSearchQuery] = useState(''); // Actual search query used for API
+    const [filters, setFilters] = useLocalStorage('product_filters', {});
+    const [searchQuery, setSearchQuery] = useLocalStorage('product_searchQuery', ''); // Actual search query used for API
+    const [searchValue, setSearchValue] = useState(searchQuery || ''); // Input value - localStorage-dan ilk dəyər alır
+    const { selectedBranchId, selectedBranchName } = useBranch();
+
+    // Filial dəyişdikdə filterləri sıfırla
+    const prevBranchRef = useState(selectedBranchId);
+    useEffect(() => {
+        if (prevBranchRef[0] !== selectedBranchId) {
+            prevBranchRef[1](selectedBranchId);
+            setFilters({});
+            setSearchQuery('');
+            setSearchValue('');
+        }
+    }, [selectedBranchId]);
 
     const columns = useMemo(() => getProductColumns(t, i18n.language), [t, i18n.language]);
 
-    // Fetch categories for filter
+    // Fetch categories for filter - filial seçiminə uyğun filter et
     useEffect(() => {
         const fetchCategories = async () => {
             try {
-                const response = await categoryApi.getAll();
+                const params = {};
+                const response = await categoryApi.getAll(params);
                 if (response.success && response.date) {
                     setCategories(response.date);
                 }
@@ -37,7 +51,7 @@ export default function Product() {
             }
         };
         fetchCategories();
-    }, []);
+    }, [selectedBranchId, selectedBranchName]);
 
     const fetchSubCategories = useCallback(async (categoryName) => {
         if (!categoryName) {
@@ -118,9 +132,16 @@ export default function Product() {
             params.append('maxSalePrice', filters.maxSalePrice);
         }
 
+        if (selectedBranchId && selectedBranchId !== 'central') {
+            params.append('branchId', selectedBranchId);
+            // Bütün filiallar üçün includeUnassigned=true göndər ki,
+            // merkezdən köçürülmüş məhsullar filial görünüşündə görsənsın
+            params.append('includeUnassigned', 'true');
+        }
+
         const queryString = params.toString();
         return queryString ? `?${queryString}` : '';
-    }, []);
+    }, [selectedBranchId, selectedBranchName]);
 
     // Fetch product data
     const fetchProducts = useCallback(async () => {
@@ -147,7 +168,7 @@ export default function Product() {
         } finally {
             setLoading(false);
         }
-    }, [buildQueryString, filters, searchQuery, t]);
+    }, [buildQueryString, filters, searchQuery, selectedBranchId, t]);
 
     useEffect(() => {
         fetchProducts();
@@ -297,7 +318,7 @@ export default function Product() {
 
     const handleFilterChange = useCallback((newFilters) => {
         setFilters(newFilters);
-    }, []);
+    }, [setFilters]);
 
     const handleTempFilterChange = useCallback((tempFilters) => {
         // Fetch subcategories when category is selected in the filter dropdown (before Apply)
@@ -311,7 +332,7 @@ export default function Product() {
     const handleSearchChange = useCallback((search) => {
         // Only update input value, don't search yet
         setSearchValue(search);
-    }, []);
+    }, [setSearchValue]);
 
     const handleSearchSubmit = useCallback((value = null) => {
         // Set the actual search query which triggers the API call
@@ -319,13 +340,13 @@ export default function Product() {
         // If empty, set empty string to get all data
         const queryValue = value !== null ? value : searchValue;
         setSearchQuery(queryValue || '');
-    }, [searchValue]);
+    }, [searchValue, setSearchQuery]);
 
     const handleClearFilters = useCallback(() => {
         setFilters({});
         setSearchValue('');
         setSearchQuery('');
-    }, []);
+    }, [setFilters, setSearchValue, setSearchQuery]);
 
     return (
         <div className="p-6">
@@ -356,7 +377,7 @@ export default function Product() {
                 data={productData}
                 columns={columns}
                 title={t('products')}
-                searchFields={['name', 'barcode', 'description']}
+                searchFields={['name', 'barcode', 'description', 'invoiceName']}
                 searchPlaceholder={t('search_by_name_barcode') || 'Ad, barkod və ya təsvirə görə axtar...'}
                 filterOptions={useMemo(() => {
                     const categoryObjects = categories.map(cat => ({ id: cat.name, name: cat.name }));
@@ -410,6 +431,7 @@ export default function Product() {
                 onFilterChange={handleFilterChange}
                 onTempFilterChange={handleTempFilterChange}
                 onClearFilters={handleClearFilters}
+                activeFilters={filters}
             />
 
             {/* Excel Import Modal */}

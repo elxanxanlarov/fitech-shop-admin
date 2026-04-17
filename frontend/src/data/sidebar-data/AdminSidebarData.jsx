@@ -1,4 +1,4 @@
-import { MdPeople, MdBarChart, MdAccessTime, MdSettings, MdShoppingCart, MdPointOfSale, MdAttachMoney, MdAccountBalanceWallet, MdDescription, MdLocalShipping } from 'react-icons/md'
+import { MdPeople, MdBarChart, MdAccessTime, MdSettings, MdShoppingCart, MdPointOfSale, MdAttachMoney, MdAccountBalanceWallet, MdDescription, MdLocalShipping, MdBusiness, MdSync, MdTransform, MdDeleteForever, MdSwapHoriz } from 'react-icons/md'
 export const AdminSidebarData = [
   {
     title: 'staff_management',
@@ -26,6 +26,11 @@ export const AdminSidebarData = [
     icon: <MdShoppingCart />,
   },
   {
+    title: 'product_branch_transfer',
+    path: '/admin/product-branch-transfer',
+    icon: <MdSwapHoriz />,
+  },
+  {
     title: 'invoice_name_mapping',
     path: '/admin/invoice-name-mapping',
     icon: <MdDescription />,
@@ -46,9 +51,27 @@ export const AdminSidebarData = [
     icon: <MdBarChart />,
   },
   {
+    title: 'convert_center',
+    path: '/admin/convert-center',
+    icon: <MdTransform />,
+    requiredRole: 'SUPERADMIN',
+  },
+  {
+    title: 'deleted_elements',
+    path: '/admin/deleted-elements',
+    icon: <MdDeleteForever />,
+    requiredRole: 'SUPERADMIN',
+  },
+  {
+    title: 'sync_center',
+    path: '/sync-center',
+    icon: <MdSync />,
+    requiredRole: 'SUPERADMIN',
+  },
+  {
     title: 'settings',
     path: '/admin/settings',
     icon: <MdSettings />,
   },
-  
+
 ]

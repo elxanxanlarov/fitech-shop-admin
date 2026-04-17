@@ -12,8 +12,10 @@ const getDayRange = (dateStr) => {
 };
 
 // Daxili helper: verilən tarix üçün gündəlik yekunu hesabla və DB-də create/update et
-export const generateDailySummaryForDate = async ({ date, note, staffId = null }) => {
+export const generateDailySummaryForDate = async ({ date, note, staffId = null, branchId = null }) => {
   const { start, end } = getDayRange(date);
+
+  const branchFilter = branchId === 'central' ? null : (branchId || null);
 
   // Həmin günə aid bütün satışları gətir
   const sales = await prisma.sale.findMany({
@@ -22,6 +24,7 @@ export const generateDailySummaryForDate = async ({ date, note, staffId = null }
         gte: start,
         lte: end,
       },
+      branchId: branchFilter,
       deleteType: "NONE",
       isRefunded: false,
     },
@@ -70,19 +73,20 @@ export const generateDailySummaryForDate = async ({ date, note, staffId = null }
   }
 
   // Əgər həmin gün üçün summary artıq varsa, onu update edək
-  const existing = await prisma.dailySummary.findFirst({
+  const existing = await prisma.dailysummary.findFirst({
     where: {
       date: {
         gte: start,
         lte: end,
       },
+      branchId: branchFilter,
       deleteType: "NONE",
     },
   });
 
   let summary;
   if (existing) {
-    summary = await prisma.dailySummary.update({
+    summary = await prisma.dailysummary.update({
       where: { id: existing.id },
       data: {
         date: start,
@@ -94,10 +98,11 @@ export const generateDailySummaryForDate = async ({ date, note, staffId = null }
         totalProfit: totalProfit.toFixed(2),
         note: note?.trim() || existing.note,
         staffId,
+        branchId: branchFilter,
       },
     });
   } else {
-    summary = await prisma.dailySummary.create({
+    summary = await prisma.dailysummary.create({
       data: {
         date: start,
         totalSalesCount,
@@ -108,6 +113,7 @@ export const generateDailySummaryForDate = async ({ date, note, staffId = null }
         totalProfit: totalProfit.toFixed(2),
         note: note?.trim() || null,
         staffId,
+        branchId: branchFilter,
       },
     });
   }
@@ -118,20 +124,20 @@ export const generateDailySummaryForDate = async ({ date, note, staffId = null }
     const [expensesAgg, handoversAgg] = await Promise.all([
       prisma.expense.aggregate({
         _sum: { amount: true },
-        where: { date: { gte: start, lte: end }, deleteType: "NONE" }
+        where: { date: { gte: start, lte: end }, branchId: branchFilter, deleteType: "NONE" }
       }),
-      prisma.cashHandover.aggregate({
+      prisma.cashhandover.aggregate({
         _sum: { amount: true },
-        where: { date: { gte: start, lte: end }, deleteType: "NONE" }
+        where: { date: { gte: start, lte: end }, branchId: branchFilter, deleteType: "NONE" }
       })
     ]);
 
-    return { 
-      summary, 
-      existing, 
-      hasSales, 
-      totalExpenses: Number(expensesAgg._sum.amount || 0), 
-      totalCashHandover: Number(handoversAgg._sum.amount || 0) 
+    return {
+      summary,
+      existing,
+      hasSales,
+      totalExpenses: Number(expensesAgg._sum.amount || 0),
+      totalCashHandover: Number(handoversAgg._sum.amount || 0)
     };
   } catch (err) {
     console.error("Activity log or summary data enrichment error:", err);
@@ -142,7 +148,7 @@ export const generateDailySummaryForDate = async ({ date, note, staffId = null }
 // Günlük yekun yarat (və ya yenilə) - istifadəçi tərəfindən çağırılan API
 export const createDailySummary = async (req, res) => {
   try {
-    const { date, note } = req.body;
+    const { date, note, branchId } = req.body;
     const staffId = req.staffId || null;
 
     if (!date) {
@@ -156,6 +162,7 @@ export const createDailySummary = async (req, res) => {
       date,
       note,
       staffId,
+      branchId,
     });
 
     // İstifadəçi üçün: əgər satış yoxdursa, xəbərdarlıq mesajı verək, amma artıq sıfırlarla da yaradılıb
@@ -164,8 +171,8 @@ export const createDailySummary = async (req, res) => {
       message: existing
         ? "Günlük yekun yeniləndi"
         : hasSales
-        ? "Günlük yekun yaradıldı"
-        : "Satış tapılmadı, amma sıfır dəyərlərlə günlük yekun yaradıldı",
+          ? "Günlük yekun yaradıldı"
+          : "Satış tapılmadı, amma sıfır dəyərlərlə günlük yekun yaradıldı",
       data: summary,
     });
   } catch (error) {
@@ -180,11 +187,17 @@ export const createDailySummary = async (req, res) => {
 // Günlük yekunları siyahı şəklində gətir (statistika üçün)
 export const getDailySummaries = async (req, res) => {
   try {
-    const { startDate, endDate, page = 1, limit = 20 } = req.query;
+    const { startDate, endDate, page = 1, limit = 20, branchId } = req.query;
 
     const where = {
       deleteType: "NONE",
     };
+
+    if (branchId === 'central') {
+      where.branchId = null;
+    } else if (branchId) {
+      where.branchId = branchId;
+    }
 
     if (startDate || endDate) {
       where.date = {};
@@ -201,7 +214,7 @@ export const getDailySummaries = async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const [summaries, total] = await Promise.all([
-      prisma.dailySummary.findMany({
+      prisma.dailysummary.findMany({
         where,
         include: {
           staff: {
@@ -218,11 +231,11 @@ export const getDailySummaries = async (req, res) => {
         skip,
         take: parseInt(limit),
       }),
-      prisma.dailySummary.count({ where }),
+      prisma.dailysummary.count({ where }),
     ]);
 
     // Ümumi toplu statistika
-    const aggregate = await prisma.dailySummary.aggregate({
+    const aggregate = await prisma.dailysummary.aggregate({
       _sum: {
         totalSalesCount: true,
         totalProducts: true,
@@ -266,7 +279,7 @@ export const getDailySummaryById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const summary = await prisma.dailySummary.findUnique({
+    const summary = await prisma.dailysummary.findUnique({
       where: { id },
       include: {
         staff: {
@@ -298,12 +311,12 @@ export const getDailySummaryById = async (req, res) => {
       prisma.expense.aggregate({
         _sum: { amount: true },
         _count: true,
-        where: { date: { gte: start, lte: end }, deleteType: "NONE" }
+        where: { date: { gte: start, lte: end }, branchId: summary.branchId, deleteType: "NONE" }
       }),
-      prisma.cashHandover.aggregate({
+      prisma.cashhandover.aggregate({
         _sum: { amount: true },
         _count: true,
-        where: { date: { gte: start, lte: end }, deleteType: "NONE" }
+        where: { date: { gte: start, lte: end }, branchId: summary.branchId, deleteType: "NONE" }
       })
     ]);
 
@@ -318,6 +331,7 @@ export const getDailySummaryById = async (req, res) => {
           gte: start,
           lte: end,
         },
+        branchId: summary.branchId,
         deleteType: "NONE",
         isRefunded: false,
       },

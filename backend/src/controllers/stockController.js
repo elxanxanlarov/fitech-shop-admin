@@ -5,14 +5,20 @@ import { increaseProductStock, decreaseProductStock, calculateProductStock } fro
 // Get all stock movements
 export const getAllStockMovements = async (req, res) => {
     try {
-        const { productId } = req.query;
+        const { productId, branchId } = req.query;
         
         const where = {};
         if (productId) {
             where.productId = productId;
         }
 
-        const movements = await prisma.stockMovement.findMany({
+        if (branchId && branchId !== 'central') {
+            where.branchId = branchId;
+        } else if (branchId === 'central') {
+            where.branchId = null;
+        }
+
+        const movements = await prisma.stockmovement.findMany({
             where,
             include: {
                 product: {
@@ -52,7 +58,7 @@ export const getAllStockMovements = async (req, res) => {
 export const getStockMovementById = async (req, res) => {
     try {
         const { id } = req.params;
-        const movement = await prisma.stockMovement.findUnique({
+        const movement = await prisma.stockmovement.findUnique({
             where: { id },
             include: {
                 product: true,
@@ -87,7 +93,8 @@ export const createStockMovement = async (req, res) => {
             productId,
             type,
             quantity,
-            note
+            note,
+            branchId
         } = req.body;
 
         // Validate required fields
@@ -128,7 +135,24 @@ export const createStockMovement = async (req, res) => {
             });
         }
 
-        const previousStock = calculateProductStock(product);
+        // Get current stock (central or branch)
+        let productForStock = product;
+        if (branchId && branchId !== 'central') {
+            const bStock = await prisma.branchstock.findFirst({
+                where: {
+                    branchId: branchId,
+                    productId: productId
+                }
+            });
+            if (!bStock) {
+                // If no record exists, we can create one later or return error
+                // For now, let's assume it should exist (synced)
+                return res.status(404).json({ success: false, message: "Bu filialda məhsul stok kaydı tapılmadı" });
+            }
+            productForStock = { ...product, ...bStock };
+        }
+
+        const previousStock = calculateProductStock(productForStock);
         let newStockData = {
             stock: previousStock,
             fullBoxes: product.fullBoxes || 0,
@@ -139,10 +163,10 @@ export const createStockMovement = async (req, res) => {
         try {
             if (type === 'IN') {
                 // Stok artır (qutu/ədəd məntiqinə uyğun)
-                newStockData = increaseProductStock(product, Math.abs(quantityNum));
+                newStockData = increaseProductStock(productForStock, Math.abs(quantityNum));
             } else if (type === 'OUT') {
                 // Stok azalt (qutu/ədəd məntiqinə uyğun)
-                newStockData = decreaseProductStock(product, Math.abs(quantityNum));
+                newStockData = decreaseProductStock(productForStock, Math.abs(quantityNum));
             } else if (type === 'ADJUSTMENT') {
                 // Stok tənzimləməsi - tam stock-u set et
                 const targetStock = quantityNum;
@@ -179,7 +203,7 @@ export const createStockMovement = async (req, res) => {
         }
 
         // Create stock movement
-        const movement = await prisma.stockMovement.create({
+        const movement = await prisma.stockmovement.create({
             data: {
                 productId: productId,
                 type: type,
@@ -188,22 +212,34 @@ export const createStockMovement = async (req, res) => {
                 newStock: newStockData.stock,
                 previousFullBoxes: product.fullBoxes || null,
                 newFullBoxes: newStockData.fullBoxes || null,
-                previousOpenedBoxQuantity: product.openedBoxQuantity || null,
+                previousOpenedBoxQuantity: productForStock.openedBoxQuantity || null,
                 newOpenedBoxQuantity: newStockData.openedBoxQuantity || null,
                 note: note?.trim() || null,
-                staffId: req.staffId || null
+                staffId: req.staffId || null,
+                branchId: (branchId && branchId !== 'central') ? branchId : null
             }
         });
 
-        // Update product stock (qutu/ədəd məntiqinə uyğun)
-        await prisma.product.update({
-            where: { id: productId },
-            data: {
-                stock: newStockData.stock,
-                fullBoxes: newStockData.fullBoxes,
-                openedBoxQuantity: newStockData.openedBoxQuantity
-            }
-        });
+        // Update product stock (central or branch)
+        if (branchId && branchId !== 'central') {
+            await prisma.branchstock.update({
+                where: { id: bStock.id },
+                data: {
+                    stock: newStockData.stock,
+                    fullBoxes: newStockData.fullBoxes,
+                    openedBoxQuantity: newStockData.openedBoxQuantity
+                }
+            });
+        } else {
+            await prisma.product.update({
+                where: { id: productId },
+                data: {
+                    stock: newStockData.stock,
+                    fullBoxes: newStockData.fullBoxes,
+                    openedBoxQuantity: newStockData.openedBoxQuantity
+                }
+            });
+        }
 
         // Activity log
         try {
@@ -244,7 +280,7 @@ export const deleteStockMovement = async (req, res) => {
     try {
         const { id } = req.params;
 
-        const movement = await prisma.stockMovement.findUnique({
+        const movement = await prisma.stockmovement.findUnique({
             where: { id },
             include: {
                 product: true
@@ -279,13 +315,28 @@ export const deleteStockMovement = async (req, res) => {
             revertData.openedBoxQuantity = 0;
         }
 
-        await prisma.product.update({
-            where: { id: movement.productId },
-            data: revertData
-        });
+        if (movement.branchId) {
+            const bsRow = await prisma.branchstock.findFirst({
+                where: {
+                    branchId: movement.branchId,
+                    productId: movement.productId
+                }
+            });
+            if (bsRow) {
+                await prisma.branchstock.update({
+                    where: { id: bsRow.id },
+                    data: revertData
+                });
+            }
+        } else {
+            await prisma.product.update({
+                where: { id: movement.productId },
+                data: revertData
+            });
+        }
 
         // Delete movement
-        await prisma.stockMovement.delete({
+        await prisma.stockmovement.delete({
             where: { id }
         });
 

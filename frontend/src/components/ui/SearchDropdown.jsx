@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { MdSearch, MdExpandMore, MdCheck } from 'react-icons/md';
 
 export default function SearchDropdown({
@@ -17,6 +18,7 @@ export default function SearchDropdown({
     allowCustomValue = false,
     onSearchChange = null
 }) {
+    const { t } = useTranslation('admin-panel');
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [displayValue, setDisplayValue] = useState('');
@@ -70,7 +72,7 @@ export default function SearchDropdown({
     // Filter options based on search term
     const filteredOptions = options.filter(option => {
         if (!searchTerm.trim()) return true;
-        
+
         const searchLower = searchTerm.toLowerCase();
         return searchFields.some(field => {
             const fieldValue = option[field];
@@ -78,16 +80,27 @@ export default function SearchDropdown({
         });
     });
 
-    const selectedOption = options.find(opt => getOptionValue(opt) === value);
+    const isOptionSelected = (option) => {
+        const optionValue = getOptionValue(option);
+        if (Array.isArray(value)) {
+            return value.includes(optionValue);
+        }
+        return optionValue === value;
+    };
+
+    const selectedOption = !Array.isArray(value) ? options.find(opt => getOptionValue(opt) === value) : null;
 
     const handleSelect = (option) => {
         const optionValue = getOptionValue(option);
         onChange(optionValue);
-        setIsOpen(false);
-        setSearchTerm('');
-        if (allowCustomValue) {
-            const label = getOptionLabel(option);
-            setDisplayValue(label);
+
+        if (!Array.isArray(value)) {
+            setIsOpen(false);
+            setSearchTerm('');
+            if (allowCustomValue) {
+                const label = getOptionLabel(option);
+                setDisplayValue(label);
+            }
         }
     };
 
@@ -130,7 +143,7 @@ export default function SearchDropdown({
                     {label}
                 </label>
             )}
-            
+
             <div className="relative">
                 {allowCustomValue ? (
                     <div className="relative">
@@ -173,7 +186,7 @@ export default function SearchDropdown({
                                 text-sm md:text-base outline-none
                             `}
                         />
-                        <MdExpandMore 
+                        <MdExpandMore
                             className={`absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 transition-transform pointer-events-none ${isOpen ? 'transform rotate-180' : ''}`}
                         />
                     </div>
@@ -193,14 +206,14 @@ export default function SearchDropdown({
                         <span className={selectedOption ? 'text-gray-900' : 'text-gray-500'}>
                             {selectedOption ? getOptionLabel(selectedOption) : placeholder}
                         </span>
-                        <MdExpandMore 
+                        <MdExpandMore
                             className={`w-5 h-5 text-gray-400 transition-transform ${isOpen ? 'transform rotate-180' : ''}`}
                         />
                     </button>
                 )}
 
                 {isOpen && (
-                    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-hidden">
+                    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-xl shadow-2xl max-h-[450px] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
                         {/* Search Input - only show if not in allowCustomValue mode (main input is already the search) */}
                         {!allowCustomValue && (
                             <div className="p-2 border-b border-gray-200 sticky top-0 bg-white">
@@ -224,32 +237,41 @@ export default function SearchDropdown({
                         )}
 
                         {/* Options List */}
-                        <div className="overflow-y-auto max-h-48">
+                        <div className="overflow-y-auto max-h-[380px] pb-2">
                             {filteredOptions.length === 0 ? (
                                 <div className="px-4 py-3 text-sm text-gray-500 text-center">
-                                    Nəticə tapılmadı
+                                    {t('no_results_found') || 'Nəticə tapılmadı'}
                                 </div>
                             ) : (
                                 filteredOptions.map((option) => {
                                     const optionValue = getOptionValue(option);
-                                    const isSelected = optionValue === value;
-                                    
+                                    const isSelected = isOptionSelected(option);
+
                                     return (
                                         <button
                                             key={optionValue}
                                             type="button"
                                             onClick={() => handleSelect(option)}
                                             className={`
-                                                w-full px-4 py-2 text-left hover:bg-blue-50 
-                                                transition-colors flex items-center justify-between
-                                                ${isSelected ? 'bg-blue-50' : ''}
+                                                w-full px-4 py-3 text-left
+                                                transition-colors flex items-center justify-between border-b border-gray-50 last:border-0
+                                                ${isSelected
+                                                    ? 'bg-emerald-50 hover:bg-emerald-100'
+                                                    : 'hover:bg-blue-50/50'
+                                                }
                                             `}
                                         >
                                             <span className="flex-1">
                                                 {renderOption ? renderOption(option) : getOptionLabel(option)}
                                             </span>
-                                            {isSelected && (
-                                                <MdCheck className="w-5 h-5 text-blue-600 ml-2" />
+                                            {isSelected ? (
+                                                <div className="flex items-center gap-2 ml-4 shrink-0">
+                                                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                                        ✓ Seçilib
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                <div className="w-5 h-5 rounded-full border-2 border-gray-200 ml-4 shrink-0" />
                                             )}
                                         </button>
                                     );

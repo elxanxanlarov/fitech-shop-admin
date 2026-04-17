@@ -16,6 +16,8 @@
   "reset": "Sıfırla",
   "save_success": "Qaimə adı uğurla saxlanıldı",
   "info_title": "Məlumat:",
-  "info_text": "Bu səhifədə məhsulların vitrindəki adı ilə qaimədə gələn orijinal adını uyğunlaşdıra bilərsiniz. Qaimə adı boş ola bilər."
+  "info_text": "Bu səhifədə məhsulların vitrindəki adı ilə qaimədə gələn orijinal adını uyğunlaşdıra bilərsiniz. Qaimə adı boş ola bilər.",
+  "branch": "Filial",
+  "select_branch": "Filial seçin"
 }
 

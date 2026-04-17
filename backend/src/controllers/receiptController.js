@@ -30,7 +30,7 @@ const generateReceiptNumber = async () => {
 export const createReceiptForSale = async (sale) => {
     try {
         // Qəbz artıq varsa, onu qaytar
-        const existingReceipt = await prisma.receipt.findUnique({
+        const existingReceipt = await prisma.receipt.findFirst({
             where: { saleId: sale.id }
         });
         
@@ -109,7 +109,7 @@ export const getReceiptBySaleId = async (req, res) => {
     try {
         const { saleId } = req.params;
         
-        const receipt = await prisma.receipt.findUnique({
+        const receipt = await prisma.receipt.findFirst({
             where: { saleId },
             include: {
                 sale: {

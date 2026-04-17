@@ -2,14 +2,18 @@ import api from './axios.js';
 
 export const productApi = {
   // Get all products
-  getAll: async (query = '') => {
-    const response = await api.get(`/product${query}`);
+  getAll: async (paramsOrQuery = '') => {
+    if (typeof paramsOrQuery === 'string') {
+      const response = await api.get(`/product${paramsOrQuery}`);
+      return response.data;
+    }
+    const response = await api.get('/product', { params: paramsOrQuery });
     return response.data;
   },
 
   // Get product by ID
-  getById: async (id) => {
-    const response = await api.get(`/product/${id}`);
+  getById: async (id, params = {}) => {
+    const response = await api.get(`/product/${id}`, { params });
     return response.data;
   },
 

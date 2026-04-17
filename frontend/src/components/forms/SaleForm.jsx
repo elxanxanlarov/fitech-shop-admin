@@ -1,13 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Input from '../ui/Input';
 import Alert from '../ui/Alert';
 import SearchDropdown from '../ui/SearchDropdown';
 import { MdPerson, MdShoppingCart, MdAdd, MdDelete, MdAttachMoney, MdNote, MdUndo, MdCreditCard, MdMoney, MdCheckCircle } from 'react-icons/md';
-import { saleApi, productApi, returnApi, creditTermApi, creditPaymentApi } from '../../api';
+import { saleApi, productApi, returnApi, creditTermApi, creditPaymentApi, branchApi, authApi } from '../../api';
 import { validateNumberInput } from '../../utils/validation';
 import { getFullMonthYear } from '../../data/months';
+import { useBranch } from '../../context/BranchContext';
+
+function canPickSaleBranch(user) {
+    if (!user?.role?.name) return false;
+    const r = user.role.name.toLowerCase();
+    return r === 'superadmin' || (r === 'admin' && user.isBoss === true);
+}
 
 export default function SaleForm() {
     const navigate = useNavigate();
@@ -16,6 +23,7 @@ export default function SaleForm() {
     const id = searchParams.get('id');
     const { t } = useTranslation('sale');
     const { t: tAlert } = useTranslation('alert');
+    const { selectedBranchId } = useBranch();
 
     const isAdmin = location.pathname.includes('/admin');
     const salePagePath = isAdmin ? '/admin/sales' : '/reception/sales';
@@ -60,13 +68,17 @@ export default function SaleForm() {
         note: ''
     });
     const [paymentLoading, setPaymentLoading] = useState(false);
+    const [branches, setBranches] = useState([]);
+    const [localBranchId, setLocalBranchId] = useState('');
+    const [loadingBranches, setLoadingBranches] = useState(false);
+    const [currentUser, setCurrentUser] = useState(null);
 
-    // Fetch products
     useEffect(() => {
         const fetchProducts = async () => {
+            if (!localBranchId) return;
             try {
                 setLoadingProducts(true);
-                const response = await productApi.getAll();
+                const response = await productApi.getAll({ branchId: localBranchId });
                 if (response.success && (response.data || response.date)) {
                     const list = response.data || response.date;
 
@@ -87,7 +99,70 @@ export default function SaleForm() {
             }
         };
         fetchProducts();
-    }, [t, isEditMode]);
+    }, [t, isEditMode, localBranchId]);
+
+    useEffect(() => {
+        const fetchData = async () => {
+            setLoadingBranches(true);
+            try {
+                const [userResp, branchesResp] = await Promise.all([
+                    authApi.me(),
+                    branchApi.getAll()
+                ]);
+                if (userResp.success) {
+                    setCurrentUser(userResp.data);
+                }
+                if (branchesResp.success && (branchesResp.data || branchesResp.date)) {
+                    const list = branchesResp.data || branchesResp.date;
+                    const filtered = list.filter(
+                        (b) => b.name !== 'Mərkəz Anbar' && b.id !== 'central'
+                    );
+                    setBranches(filtered);
+                }
+            } catch (error) {
+                console.error('Error fetching branches/user:', error);
+            } finally {
+                setLoadingBranches(false);
+            }
+        };
+        fetchData();
+    }, []);
+
+    useEffect(() => {
+        if (isEditMode || !currentUser || branches.length === 0) return;
+
+        let next = '';
+        if (canPickSaleBranch(currentUser)) {
+            next =
+                selectedBranchId && selectedBranchId !== 'central' ? selectedBranchId : '';
+            if (!next) {
+                const k = branches.find((b) => b.name === 'Kürdəxanı');
+                next = k ? k.id : branches[0]?.id || '';
+            }
+        } else {
+            next = currentUser.branchId || '';
+            if (!next && selectedBranchId && selectedBranchId !== 'central') {
+                next = selectedBranchId;
+            }
+        }
+
+        setLocalBranchId((prev) => (prev === next ? prev : next));
+    }, [isEditMode, currentUser, selectedBranchId, branches]);
+
+    const branchOptionsForForm = useMemo(() => {
+        if (!currentUser || canPickSaleBranch(currentUser)) return branches;
+        const bid = currentUser.branchId;
+        if (!bid) return branches;
+        const mine = branches.filter((b) => b.id === bid);
+        return mine.length ? mine : branches;
+    }, [branches, currentUser]);
+
+    useEffect(() => {
+        if (isEditMode) return;
+        setSelectedProducts([
+            { productId: '', quantity: '', salePrice: '', discountAmount: '', boxes: '', pieces: '' }
+        ]);
+    }, [localBranchId, isEditMode]);
 
     // Fetch credit terms
     useEffect(() => {
@@ -113,6 +188,11 @@ export default function SaleForm() {
                     const response = await saleApi.getById(id);
                     if (response.success && (response.data || response.date)) {
                         const sale = response.data || response.date;
+                        if (sale.branchId) {
+                            setLocalBranchId(sale.branchId);
+                        } else if (selectedBranchId && selectedBranchId !== 'central') {
+                            setLocalBranchId(selectedBranchId);
+                        }
                         setFormData({
                             customerName: sale.customerName || '',
                             customerSurname: sale.customerSurname || '',
@@ -123,7 +203,7 @@ export default function SaleForm() {
                             isCredit: sale.isCredit || false,
                             creditTermId: sale.creditTermId || ''
                         });
-                        
+
                         // Kredit ödənişləri yüklə
                         if (sale.isCredit && sale.id) {
                             try {
@@ -135,7 +215,7 @@ export default function SaleForm() {
                                 console.error('Error fetching credit payments:', error);
                             }
                         }
-                        
+
                         // Sale məlumatlarını saxla (kredit məlumatları üçün)
                         if (sale.isCredit) {
                             // Sale məlumatlarını state-də saxla
@@ -185,17 +265,17 @@ export default function SaleForm() {
             if (!item.productId) {
                 newErrors[`product_${index}`] = t('product_required') || 'Məhsul seçilməlidir';
             }
-            
+
             const product = products.find(p => p.id === item.productId);
-            
+
             // Qutu/Paket tipindədirsə, qutu və ya açıq ədəd doldurulmalıdır
             if (product && product.unitType !== 'PIECE' && product.piecesPerBox) {
                 const boxesNum = parseInt(item.boxes || 0) || 0;
                 const piecesNum = parseInt(item.pieces || 0) || 0;
-                
+
                 // Əgər boxes 0-dırsa, pieces quantity kimi istifadə olunur (qutular avtomatik açılacaq)
                 const totalQuantity = boxesNum === 0 ? piecesNum : (boxesNum * product.piecesPerBox) + piecesNum;
-                
+
                 if (totalQuantity <= 0) {
                     newErrors[`quantity_${index}`] = t('quantity_required') || 'Qutu və ya ədəd daxil edilməlidir';
                 } else {
@@ -204,7 +284,7 @@ export default function SaleForm() {
                     if (totalQuantity > availableStock) {
                         newErrors[`quantity_${index}`] = t('quantity_exceeds_stock', { stock: availableStock }) || `Mövcud stok: ${availableStock}`;
                     }
-                    
+
                     // Açıq ədəd piecesPerBox-dan çox ola bilməz (yalnız boxes > 0 olduqda)
                     if (boxesNum > 0 && piecesNum >= product.piecesPerBox) {
                         newErrors[`quantity_${index}`] = `Açıq ${product.unitType === 'BOX' ? 'ədəd' : product.unitType === 'METER' ? 'metr' : product.unitType === 'LITER' ? 'litr' : 'kq'} maksimum ${product.piecesPerBox - 1} ola bilər`;
@@ -212,12 +292,12 @@ export default function SaleForm() {
                 }
             } else {
                 // Ədəd tipindədirsə, quantity tələb olunur
-            if (!item.quantity || item.quantity === '' || item.quantity === null || item.quantity === undefined) {
-                newErrors[`quantity_${index}`] = t('quantity_required') || 'Miqdar tələb olunur';
-            } else if (parseInt(item.quantity) <= 0) {
-                newErrors[`quantity_${index}`] = t('quantity_cannot_be_zero') || 'Miqdar 0 ola bilməz';
-            } else {
-                // Stok yoxla
+                if (!item.quantity || item.quantity === '' || item.quantity === null || item.quantity === undefined) {
+                    newErrors[`quantity_${index}`] = t('quantity_required') || 'Miqdar tələb olunur';
+                } else if (parseInt(item.quantity) <= 0) {
+                    newErrors[`quantity_${index}`] = t('quantity_cannot_be_zero') || 'Miqdar 0 ola bilməz';
+                } else {
+                    // Stok yoxla
                     if (product) {
                         const availableStock = calculateProductStock(product);
                         const requestedQuantity = parseInt(item.quantity);
@@ -250,7 +330,7 @@ export default function SaleForm() {
     const handleProductChange = (index, productId) => {
         const newProducts = [...selectedProducts];
         newProducts[index].productId = productId;
-        
+
         // Məhsul seçildikdə standart satış qiymətini təyin et
         if (productId) {
             const product = products.find(p => p.id === productId);
@@ -266,7 +346,7 @@ export default function SaleForm() {
                 } else {
                     newProducts[index].discountAmount = '';
                 }
-                
+
                 // Qutu/ədəd input-larını sıfırla
                 newProducts[index].boxes = '';
                 newProducts[index].pieces = '';
@@ -279,7 +359,7 @@ export default function SaleForm() {
             newProducts[index].pieces = '';
             newProducts[index].quantity = '';
         }
-        
+
         setSelectedProducts(newProducts);
 
         // Error-u sil
@@ -307,15 +387,15 @@ export default function SaleForm() {
             }
             return;
         }
-        
+
         // Yalnız rəqəm yazıla bilər
         const isValidNumber = /^\d*$/.test(quantity);
         if (!isValidNumber) {
             return; // Yalnız rəqəm yazıla bilər
         }
-        
+
         const qtyNum = parseInt(quantity) || 0;
-        
+
         // 0 ola bilməz
         if (qtyNum === 0 && quantity !== '') {
             setErrors(prev => ({
@@ -324,7 +404,7 @@ export default function SaleForm() {
             }));
             return;
         }
-        
+
         const newProducts = [...selectedProducts];
         newProducts[index].quantity = quantity; // Formatlanmamış dəyəri saxla
         setSelectedProducts(newProducts);
@@ -342,11 +422,11 @@ export default function SaleForm() {
     const handleBoxesChange = (index, boxes) => {
         const newProducts = [...selectedProducts];
         const product = products.find(p => p.id === newProducts[index].productId);
-        
+
         if (!product || product.unitType === 'PIECE') {
             return; // Yalnız qutu/paket tipində məhsullar üçün
         }
-        
+
         // Yalnız rəqəm yazıla bilər
         if (boxes === '' || boxes === null || boxes === undefined) {
             newProducts[index].boxes = '';
@@ -362,19 +442,19 @@ export default function SaleForm() {
             }
             return;
         }
-        
+
         const isValidNumber = /^\d*$/.test(boxes);
         if (!isValidNumber) {
             return;
         }
-        
+
         const boxesNum = parseInt(boxes) || 0;
         const piecesNum = parseInt(newProducts[index].pieces || 0) || 0;
         const piecesPerBox = product.piecesPerBox || 1;
-        
+
         // Ümumi quantity hesabla
         const totalQuantity = (boxesNum * piecesPerBox) + piecesNum;
-        
+
         // Stok yoxla
         const availableStock = calculateProductStock(product);
         if (totalQuantity > availableStock) {
@@ -384,7 +464,7 @@ export default function SaleForm() {
             }));
             return;
         }
-        
+
         // Tam qutuların maksimum sayını yoxla
         const maxBoxes = Math.floor(availableStock / piecesPerBox);
         if (boxesNum > maxBoxes) {
@@ -394,12 +474,12 @@ export default function SaleForm() {
             }));
             return;
         }
-        
+
         newProducts[index].boxes = boxes;
         newProducts[index].quantity = totalQuantity > 0 ? totalQuantity.toString() : '';
-        
+
         setSelectedProducts(newProducts);
-        
+
         // Error-u sil
         if (errors[`quantity_${index}`]) {
             setErrors(prev => {
@@ -413,11 +493,11 @@ export default function SaleForm() {
     const handlePiecesChange = (index, pieces) => {
         const newProducts = [...selectedProducts];
         const product = products.find(p => p.id === newProducts[index].productId);
-        
+
         if (!product || product.unitType === 'PIECE') {
             return; // Yalnız qutu/paket tipində məhsullar üçün
         }
-        
+
         // Yalnız rəqəm yazıla bilər
         if (pieces === '' || pieces === null || pieces === undefined) {
             newProducts[index].pieces = '';
@@ -435,16 +515,16 @@ export default function SaleForm() {
             }
             return;
         }
-        
+
         const isValidNumber = /^\d*$/.test(pieces);
         if (!isValidNumber) {
             return;
         }
-        
+
         let piecesNum = parseInt(pieces) || 0;
         const boxesNum = parseInt(newProducts[index].boxes || 0) || 0;
         const piecesPerBox = product.piecesPerBox || 1;
-        
+
         // Əgər boxes 0-dırsa, quantity kimi istifadə et - avtomatik qutu açma məntiqini tətbiq et
         if (boxesNum === 0) {
             // Ümumi stok yoxla
@@ -456,14 +536,14 @@ export default function SaleForm() {
                 }));
                 return;
             }
-            
+
             // Quantity-ni saxla (qutular avtomatik açılacaq)
             newProducts[index].pieces = pieces;
             newProducts[index].quantity = piecesNum > 0 ? piecesNum.toString() : '';
             newProducts[index].boxes = '0'; // Qutular avtomatik açılacaq, boxes 0 qalır
-            
+
             setSelectedProducts(newProducts);
-            
+
             // Error-u sil
             if (errors[`quantity_${index}`]) {
                 setErrors(prev => {
@@ -474,7 +554,7 @@ export default function SaleForm() {
             }
             return;
         }
-        
+
         // Əgər boxes > 0-dırsa, köhnə məntiq (açıq ədəd maksimum piecesPerBox - 1)
         // Açıq ədəd piecesPerBox-dan çox ola bilməz
         if (piecesNum > piecesPerBox - 1) {
@@ -485,10 +565,10 @@ export default function SaleForm() {
             }));
             return;
         }
-        
+
         // Ümumi quantity hesabla
         const totalQuantity = (boxesNum * piecesPerBox) + piecesNum;
-        
+
         // Stok yoxla
         const availableStock = calculateProductStock(product);
         if (totalQuantity > availableStock) {
@@ -498,11 +578,11 @@ export default function SaleForm() {
             }));
             return;
         }
-        
+
         // Əgər tam qutular varsa, açıq ədəd yoxlaması
         const availableFullBoxes = product.fullBoxes || 0;
         const availableOpenedQuantity = product.openedBoxQuantity || 0;
-        
+
         // Əgər tam qutular varsa, açıq ədəd yoxlaması
         if (boxesNum > 0 && piecesNum > availableOpenedQuantity) {
             // Tam qutulardan istifadə edərkən, açıq ədəd maksimum availableOpenedQuantity ola bilər
@@ -514,10 +594,10 @@ export default function SaleForm() {
                 return;
             }
         }
-        
+
         newProducts[index].pieces = pieces;
         newProducts[index].quantity = totalQuantity > 0 ? totalQuantity.toString() : '';
-        
+
         setSelectedProducts(newProducts);
 
         // Error-u sil
@@ -538,16 +618,16 @@ export default function SaleForm() {
             setSelectedProducts(newProducts);
             return;
         }
-        
+
         // Yalnız rəqəm və onluq nöqtə yazıla bilər
         const isValidNumber = /^\d*\.?\d*$/.test(salePrice);
         if (!isValidNumber) {
             return; // Yalnız rəqəm və onluq nöqtə yazıla bilər
         }
-        
+
         const newProducts = [...selectedProducts];
         const priceNum = parseFloat(salePrice) || 0;
-        
+
         if (priceNum < 0) {
             setErrors(prev => ({
                 ...prev,
@@ -555,7 +635,7 @@ export default function SaleForm() {
             }));
             return;
         }
-        
+
         newProducts[index].salePrice = salePrice; // Formatlanmamış dəyəri saxla
         setSelectedProducts(newProducts);
 
@@ -571,27 +651,27 @@ export default function SaleForm() {
     const handleDiscountAmountChange = (index, discountAmount) => {
         const newProducts = [...selectedProducts];
         const product = products.find(p => p.id === newProducts[index].productId);
-        
+
         if (!product) {
             return;
         }
-        
+
         // Həmişə məhsulun salePrice-ını default olaraq istifadə et
         const defaultSalePrice = parseFloat(product.salePrice);
-        
+
         // Maksimum endirim məbləğini hesabla: salePrice - discountPrice (əgər discountPrice varsa)
         let maxDiscountAmount = defaultSalePrice; // Default olaraq satış qiyməti qədər
         if (product.hasDiscount && product.discountPrice) {
             const discountPrice = parseFloat(product.discountPrice);
             maxDiscountAmount = defaultSalePrice - discountPrice;
         }
-        
+
         // Boş ola bilər
         if (discountAmount === '' || discountAmount === null || discountAmount === undefined) {
             newProducts[index].discountAmount = '';
             newProducts[index].salePrice = defaultSalePrice.toFixed(2);
             setSelectedProducts(newProducts);
-            
+
             // Error-u sil
             if (errors[`discount_${index}`]) {
                 setErrors(prev => {
@@ -602,15 +682,15 @@ export default function SaleForm() {
             }
             return;
         }
-        
+
         // Rəqəm olub-olmadığını yoxla (onluq nöqtə və rəqəmlərə icazə ver)
         const isValidNumber = /^-?\d*\.?\d*$/.test(discountAmount);
         if (!isValidNumber) {
             return; // Yalnız rəqəm və onluq nöqtəyə icazə ver
         }
-        
+
         const discountNum = parseFloat(discountAmount);
-        
+
         // NaN və ya mənfi yoxla
         if (isNaN(discountNum) || discountNum < 0) {
             setErrors(prev => ({
@@ -619,7 +699,7 @@ export default function SaleForm() {
             }));
             return;
         }
-        
+
         // Maksimum endirim məbləğini yoxla
         if (discountNum > maxDiscountAmount) {
             setErrors(prev => ({
@@ -631,12 +711,12 @@ export default function SaleForm() {
             setSelectedProducts(newProducts);
             return;
         }
-        
+
         // Endirim məbləğini çıx və satış qiymətini yenilə
         const newSalePrice = Math.max(0, defaultSalePrice - discountNum);
         newProducts[index].discountAmount = discountAmount; // Formatlanmamış dəyəri saxla
         newProducts[index].salePrice = newSalePrice.toFixed(2);
-        
+
         setSelectedProducts(newProducts);
 
         // Error-u sil
@@ -690,10 +770,10 @@ export default function SaleForm() {
     // Helper: Məhsulun qiymətini hesabla (qutu/ədəd məntiqinə uyğun) - Backend-dəki calculateProductPrice ilə uyğundur
     const calculateProductPrice = (product, quantity, customSalePrice) => {
         if (!product || !quantity) return 0;
-        
+
         const unitType = product.unitType || 'PIECE';
         const piecesPerBox = product.piecesPerBox || 1;
-        
+
         // Qiymət təyin et
         let finalSalePrice;
         if (customSalePrice && customSalePrice !== '' && !isNaN(parseFloat(customSalePrice))) {
@@ -703,28 +783,28 @@ export default function SaleForm() {
                 ? parseFloat(product.discountPrice)
                 : parseFloat(product.salePrice);
         }
-        
+
         // Ədəd tipindədirsə, sadəcə ədəd qiyməti
         if (unitType === 'PIECE') {
             return finalSalePrice * quantity;
         }
-        
+
         const boxPrice = product.boxPrice ? parseFloat(product.boxPrice) : null;
-        
+
         // Qutu/Litr/Metr/Kiloqram üçün
         // Əgər boxPrice varsa və quantity tam qutudursa, boxPrice istifadə et
         if (boxPrice && piecesPerBox && quantity >= piecesPerBox && quantity % piecesPerBox === 0) {
             const boxes = quantity / piecesPerBox;
             return boxPrice * boxes;
         }
-        
+
         // Qarışıq: tam qutular + açıq ədədlər
         if (piecesPerBox && boxPrice) {
             const boxes = Math.floor(quantity / piecesPerBox);
             const pieces = quantity % piecesPerBox;
             return (boxPrice * boxes) + (finalSalePrice * pieces);
         }
-        
+
         // Default: ədəd qiyməti
         return finalSalePrice * quantity;
     };
@@ -745,7 +825,7 @@ export default function SaleForm() {
             if (item.productId && item.quantity && item.quantity !== '') {
                 const product = products.find(p => p.id === item.productId);
                 if (!product) return total;
-                
+
                 const qty = parseInt(item.quantity) || 0;
                 // Qutu/ədəd məntiqinə uyğun qiymət hesabla
                 const price = calculateProductPrice(product, qty, item.salePrice);
@@ -778,7 +858,7 @@ export default function SaleForm() {
             }
         }
     }, [selectedProducts, isEditMode, formData.isCredit]);
-    
+
     // Kredit müddəti seçildikdə ilk ödəniş məbləğini hesabla və default olaraq doldur
     useEffect(() => {
         if (!isEditMode && formData.isCredit && formData.creditTermId) {
@@ -817,12 +897,12 @@ export default function SaleForm() {
             }));
             return; // Don't update value if validation fails
         }
-        
+
         // Boş ola bilər (tam silmək), amma 0 ola bilməz
         if (quantity === '' || quantity === null || quantity === undefined) {
             // Boş buraxıla bilər (tam silmək) - item-i sil
             setReturnItems(prev => prev.filter(item => item.saleItemId !== saleItemId));
-            
+
             // Clear error
             if (returnErrors[saleItemId]) {
                 setReturnErrors(prev => {
@@ -833,12 +913,12 @@ export default function SaleForm() {
             }
             return;
         }
-        
+
         const saleItem = saleItems.find(si => si.id === saleItemId);
         if (!saleItem) return;
-        
+
         let qty = parseInt(quantity) || 0;
-        
+
         // 0 ola bilməz
         if (qty === 0) {
             setReturnErrors(prev => ({
@@ -847,13 +927,13 @@ export default function SaleForm() {
             }));
             return; // Don't update value if it's 0
         }
-        
+
         // Maksimum qaytarma məhdudiyyətini yoxla və məhdudlaşdır
         const availableReturnQuantity = getAvailableReturnQuantity(saleItem);
         if (qty > availableReturnQuantity) {
             qty = availableReturnQuantity; // Maksimuma məhdudlaşdır
         }
-        
+
         const existingIndex = returnItems.findIndex(item => item.saleItemId === saleItemId);
         if (existingIndex >= 0) {
             const newItems = [...returnItems];
@@ -876,10 +956,10 @@ export default function SaleForm() {
     const handleReturnBoxesChange = (saleItemId, boxes) => {
         const saleItem = saleItems.find(si => si.id === saleItemId);
         if (!saleItem || !saleItem.product) return;
-        
+
         const product = saleItem.product;
         if (product.unitType === 'PIECE' || !product.piecesPerBox) return;
-        
+
         // Yalnız rəqəm yazıla bilər
         if (boxes !== '' && boxes !== null && boxes !== undefined) {
             const isValidNumber = /^\d*$/.test(boxes);
@@ -887,34 +967,34 @@ export default function SaleForm() {
                 return;
             }
         }
-        
+
         const returnItem = returnItems.find(ri => ri.saleItemId === saleItemId);
         const piecesNum = returnItem?.pieces ? parseInt(returnItem.pieces) : 0;
         const piecesPerBox = product.piecesPerBox;
-        
+
         // Maksimum qaytarma məhdudiyyətini hesabla
         const availableReturnQuantity = getAvailableReturnQuantity(saleItem);
         const maxReturnBoxes = Math.floor(availableReturnQuantity / piecesPerBox);
-        
+
         // Maksimumdan çox yazıla bilməz
         let boxesNum = boxes === '' ? 0 : parseInt(boxes) || 0;
         if (boxesNum > maxReturnBoxes) {
             boxesNum = maxReturnBoxes; // Maksimuma məhdudlaşdır
         }
-        
+
         const totalQuantity = (boxesNum * piecesPerBox) + piecesNum;
-        
+
         // Ümumi quantity maksimumdan çox ola bilməz
         if (totalQuantity > availableReturnQuantity) {
             // Əgər ümumi quantity maksimumdan çoxdursa, qutu sayını azalt
             const maxBoxesForTotal = Math.floor((availableReturnQuantity - piecesNum) / piecesPerBox);
             boxesNum = Math.max(0, maxBoxesForTotal);
         }
-        
+
         // Yekun dəyərləri yenilə
         const finalBoxes = boxesNum.toString();
         const finalTotalQuantity = (boxesNum * piecesPerBox) + piecesNum;
-        
+
         if (finalTotalQuantity > availableReturnQuantity) {
             setReturnErrors(prev => ({
                 ...prev,
@@ -922,7 +1002,7 @@ export default function SaleForm() {
             }));
             return;
         }
-        
+
         if (finalTotalQuantity === 0) {
             setReturnItems(prev => prev.filter(item => item.saleItemId !== saleItemId));
             // Clear error
@@ -935,7 +1015,7 @@ export default function SaleForm() {
             }
             return;
         }
-        
+
         const existingIndex = returnItems.findIndex(item => item.saleItemId === saleItemId);
         if (existingIndex >= 0) {
             const newItems = [...returnItems];
@@ -945,7 +1025,7 @@ export default function SaleForm() {
         } else {
             setReturnItems([...returnItems, { saleItemId, quantity: finalTotalQuantity, boxes: finalBoxes, pieces: piecesNum.toString() }]);
         }
-        
+
         // Clear error
         if (returnErrors[saleItemId]) {
             setReturnErrors(prev => {
@@ -959,10 +1039,10 @@ export default function SaleForm() {
     const handleReturnPiecesChange = (saleItemId, pieces) => {
         const saleItem = saleItems.find(si => si.id === saleItemId);
         if (!saleItem || !saleItem.product) return;
-        
+
         const product = saleItem.product;
         if (product.unitType === 'PIECE' || !product.piecesPerBox) return;
-        
+
         // Yalnız rəqəm yazıla bilər
         if (pieces !== '' && pieces !== null && pieces !== undefined) {
             const isValidNumber = /^\d*$/.test(pieces);
@@ -970,30 +1050,30 @@ export default function SaleForm() {
                 return;
             }
         }
-        
+
         const returnItem = returnItems.find(ri => ri.saleItemId === saleItemId);
         const boxesNum = returnItem?.boxes ? parseInt(returnItem.boxes) : 0;
         const piecesPerBox = product.piecesPerBox;
-        
+
         // Maksimum qaytarma məhdudiyyətini hesabla
         const availableReturnQuantity = getAvailableReturnQuantity(saleItem);
-        
+
         // Maksimumdan çox yazıla bilməz
         let piecesNum = pieces === '' ? 0 : parseInt(pieces) || 0;
-        
+
         // Ümumi quantity hesabla
         const totalQuantity = (boxesNum * piecesPerBox) + piecesNum;
-        
+
         // Əgər ümumi quantity maksimumdan çoxdursa, pieces-i məhdudlaşdır
         if (totalQuantity > availableReturnQuantity) {
             const maxPieces = availableReturnQuantity - (boxesNum * piecesPerBox);
             piecesNum = Math.max(0, maxPieces);
         }
-        
+
         // Yekun dəyərləri yenilə
         const finalPieces = piecesNum.toString();
         const finalTotalQuantity = (boxesNum * piecesPerBox) + piecesNum;
-        
+
         if (finalTotalQuantity > availableReturnQuantity) {
             setReturnErrors(prev => ({
                 ...prev,
@@ -1001,7 +1081,7 @@ export default function SaleForm() {
             }));
             return;
         }
-        
+
         if (finalTotalQuantity === 0) {
             setReturnItems(prev => prev.filter(item => item.saleItemId !== saleItemId));
             // Clear error
@@ -1014,7 +1094,7 @@ export default function SaleForm() {
             }
             return;
         }
-        
+
         const existingIndex = returnItems.findIndex(item => item.saleItemId === saleItemId);
         if (existingIndex >= 0) {
             const newItems = [...returnItems];
@@ -1024,7 +1104,7 @@ export default function SaleForm() {
         } else {
             setReturnItems([...returnItems, { saleItemId, quantity: finalTotalQuantity, boxes: boxesNum.toString(), pieces: finalPieces }]);
         }
-        
+
         // Clear error
         if (returnErrors[saleItemId]) {
             setReturnErrors(prev => {
@@ -1037,7 +1117,7 @@ export default function SaleForm() {
 
     const validateReturnForm = () => {
         const newErrors = {};
-        
+
         if (returnItems.length === 0) {
             newErrors.general = t('return_items_required') || 'Ən azı bir məhsul seçilməlidir';
         }
@@ -1124,7 +1204,8 @@ export default function SaleForm() {
                 customerName: formData.customerName?.trim() || null,
                 customerSurname: formData.customerSurname?.trim() || null,
                 customerPhone: formData.customerPhone?.trim() || null,
-                note: formData.note?.trim() || null
+                note: formData.note?.trim() || null,
+                branchId: (localBranchId && localBranchId !== 'central') ? localBranchId : null
             };
 
             // Edit modunda items göndərmə, yalnız müştəri məlumatları və qeyd yenilənir
@@ -1146,7 +1227,7 @@ export default function SaleForm() {
                 // Paid amount və payment type əlavə et
                 payload.paidAmount = formData.paidAmount ? parseFloat(formData.paidAmount) : calculateTotal();
                 payload.paymentType = formData.paymentType;
-                
+
                 // Kredit məlumatları
                 if (formData.isCredit && formData.creditTermId) {
                     payload.isCredit = true;
@@ -1218,6 +1299,35 @@ export default function SaleForm() {
                     </h3>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {!isEditMode && (
+                            <div className="md:col-span-2 space-y-4 mb-4 pb-4 border-b border-gray-100">
+                                <label className="block text-sm font-medium text-gray-700">
+                                    {t('branch') || 'Filial'}
+                                </label>
+                                <SearchDropdown
+                                    options={branchOptionsForForm}
+                                    value={localBranchId}
+                                    onChange={(val) => {
+                                        setLocalBranchId(val);
+                                        setSelectedProducts([{ productId: '', quantity: '', salePrice: '', discountAmount: '', boxes: '', pieces: '' }]);
+                                    }}
+                                    getOptionLabel={(b) => b.name}
+                                    getOptionValue={(b) => b.id}
+                                    placeholder={t('select_branch') || 'Filial seçin'}
+                                    disabled={
+                                        loadingBranches ||
+                                        isLoading ||
+                                        !canPickSaleBranch(currentUser)
+                                    }
+                                    icon={<MdShoppingCart className="text-blue-500" />}
+                                    searchFields={['name']}
+                                />
+                                <p className="text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-lg py-2 px-3">
+                                    {t('branch_change_info') || 'Filial dəyişdirildikdə seçilmiş məhsullar sıfırlanacaq.'}
+                                </p>
+                            </div>
+                        )}
+
                         <Input
                             label={t('customer_name') || 'Müştəri Adı'}
                             type="text"
@@ -1334,16 +1444,16 @@ export default function SaleForm() {
                                                 <option value="" disabled>{t('loading') || 'Yüklənir...'}</option>
                                             )}
                                         </select>
-                                        
+
                                         {formData.creditTermId && (() => {
                                             const selectedTerm = creditTerms.find(t => t.id === formData.creditTermId);
                                             const total = calculateTotal();
                                             if (!selectedTerm || total === 0) return null;
-                                            
+
                                             const interestRate = parseFloat(selectedTerm.interestRate) / 100;
                                             const creditTotal = total * (1 + interestRate);
                                             const monthlyPayment = total / selectedTerm.months;
-                                            
+
                                             return (
                                                 <div className="mt-4 space-y-2 text-sm">
                                                     <div className="flex justify-between">
@@ -1365,7 +1475,7 @@ export default function SaleForm() {
                                                 </div>
                                             );
                                         })()}
-                                        
+
                                         {/* İlk ödəniş inputu */}
                                         <div className="mt-6 pt-6 border-t-2 border-purple-300 bg-purple-50 rounded-lg p-4">
                                             <label className="block text-base font-semibold text-gray-900 mb-3">
@@ -1461,12 +1571,12 @@ export default function SaleForm() {
                                                     label={`${t('product') || 'Məhsul'} ${index + 1}`}
                                                     getOptionLabel={(product) => {
                                                         const stock = calculateProductStock(product);
-                                                        const unitLabel = 
+                                                        const unitLabel =
                                                             product.unitType === 'BOX' ? 'ədəd' :
-                                                            product.unitType === 'METER' ? 'metr' :
-                                                            product.unitType === 'LITER' ? 'litr' :
-                                                            product.unitType === 'KILOGRAM' ? 'kq' :
-                                                            'ədəd';
+                                                                product.unitType === 'METER' ? 'metr' :
+                                                                    product.unitType === 'LITER' ? 'litr' :
+                                                                        product.unitType === 'KILOGRAM' ? 'kq' :
+                                                                            'ədəd';
                                                         let stockDisplay;
                                                         if (product.unitType === 'PIECE') {
                                                             stockDisplay = `${stock} ədəd`;
@@ -1474,7 +1584,7 @@ export default function SaleForm() {
                                                             const boxUnit = product.unitType === 'BOX' ? 'qutu' : 'paket';
                                                             const fullBoxes = product.fullBoxes || 0;
                                                             const openedQuantity = product.openedBoxQuantity || 0;
-                                                            
+
                                                             // Sadə format: "2 qutu, ümumi 10 ədəd stok"
                                                             let display = '';
                                                             if (fullBoxes > 0) {
@@ -1485,7 +1595,7 @@ export default function SaleForm() {
                                                                 else display = `${openedQuantity} açıq`;
                                                             }
                                                             if (!display) display = '0';
-                                                            
+
                                                             stockDisplay = `${display}, ümumi ${stock} ${unitLabel} stok`;
                                                         } else {
                                                             stockDisplay = `${stock} ${unitLabel}`;
@@ -1493,15 +1603,15 @@ export default function SaleForm() {
                                                         return `${product.name} - ${parseFloat(product.salePrice).toFixed(2)} ₼${product.hasDiscount && product.discountPrice ? ` (${parseFloat(product.discountPrice).toFixed(2)} ₼)` : ''} (Stok: ${stockDisplay})`;
                                                     }}
                                                     getOptionValue={(product) => product.id}
-                                                    searchFields={['name', 'barcode']}
+                                                    searchFields={['name', 'barcode', 'invoiceName']}
                                                     renderOption={(product) => {
                                                         const stock = calculateProductStock(product);
-                                                        const unitLabel = 
+                                                        const unitLabel =
                                                             product.unitType === 'BOX' ? 'ədəd' :
-                                                            product.unitType === 'METER' ? 'metr' :
-                                                            product.unitType === 'LITER' ? 'litr' :
-                                                            product.unitType === 'KILOGRAM' ? 'kq' :
-                                                            'ədəd';
+                                                                product.unitType === 'METER' ? 'metr' :
+                                                                    product.unitType === 'LITER' ? 'litr' :
+                                                                        product.unitType === 'KILOGRAM' ? 'kq' :
+                                                                            'ədəd';
                                                         let stockDisplay;
                                                         if (product.unitType === 'PIECE') {
                                                             stockDisplay = `${stock} ədəd`;
@@ -1509,7 +1619,7 @@ export default function SaleForm() {
                                                             const boxUnit = product.unitType === 'BOX' ? 'qutu' : 'paket';
                                                             const fullBoxes = product.fullBoxes || 0;
                                                             const openedQuantity = product.openedBoxQuantity || 0;
-                                                            
+
                                                             // Sadə format: "2 qutu, ümumi 10 ədəd stok"
                                                             let display = '';
                                                             if (fullBoxes > 0) {
@@ -1520,24 +1630,32 @@ export default function SaleForm() {
                                                                 else display = `${openedQuantity} açıq`;
                                                             }
                                                             if (!display) display = '0';
-                                                            
+
                                                             stockDisplay = `${display}, ümumi ${stock} ${unitLabel} stok`;
                                                         } else {
                                                             stockDisplay = `${stock} ${unitLabel}`;
                                                         }
+                                                        const hasNoStock = stock <= 0;
                                                         return (
-                                                        <div>
-                                                            <div className="font-medium text-base">{product.name}</div>
-                                                            <div className="text-sm text-gray-500">
-                                                                {parseFloat(product.salePrice).toFixed(2)} ₼
-                                                                {product.hasDiscount && product.discountPrice && (
-                                                                    <span className="text-green-600 ml-1">
-                                                                        ({parseFloat(product.discountPrice).toFixed(2)} ₼)
-                                                                    </span>
-                                                                )}
-                                                                    <span className="ml-2">Stok: {stockDisplay}</span>
+                                                            <div>
+                                                                <div className={`font-medium text-base ${hasNoStock ? 'text-red-700' : 'text-gray-900'}`}>
+                                                                    {product.name}
+                                                                    {product.invoiceName && (
+                                                                        <span className="ml-2 text-xs font-normal text-gray-500 italic">
+                                                                            ({product.invoiceName})
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                <div className="text-sm text-gray-500">
+                                                                    {parseFloat(product.salePrice).toFixed(2)} ₼
+                                                                    {product.hasDiscount && product.discountPrice && (
+                                                                        <span className="text-green-600 ml-1">
+                                                                            ({parseFloat(product.discountPrice).toFixed(2)} ₼)
+                                                                        </span>
+                                                                    )}
+                                                                    <span className={`ml-2 ${hasNoStock ? 'text-red-600 font-bold' : ''}`}>Stok: {stockDisplay}</span>
+                                                                </div>
                                                             </div>
-                                                        </div>
                                                         );
                                                     }}
                                                     className="text-base"
@@ -1564,9 +1682,8 @@ export default function SaleForm() {
                                                                     e.preventDefault();
                                                                 }
                                                             }}
-                                                            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                                                                errors[`quantity_${index}`] ? 'border-red-500' : 'border-gray-300'
-                                                            } ${isEditMode ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                                            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors[`quantity_${index}`] ? 'border-red-500' : 'border-gray-300'
+                                                                } ${isEditMode ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                                                             disabled={isLoading || !item.productId || isEditMode}
                                                             placeholder="0"
                                                         />
@@ -1576,11 +1693,11 @@ export default function SaleForm() {
                                                             {(() => {
                                                                 const boxesNum = parseInt(item.boxes || 0) || 0;
                                                                 if (boxesNum === 0) {
-                                                                    return selectedProduct.unitType === 'BOX' ? 'Ədəd (Qutular avtomatik açılacaq)' : 
-                                                                           selectedProduct.unitType === 'METER' ? 'Metr (Paketlər avtomatik açılacaq)' :
-                                                                           selectedProduct.unitType === 'LITER' ? 'Litr (Paketlər avtomatik açılacaq)' :
-                                                                           selectedProduct.unitType === 'KILOGRAM' ? 'Kq (Paketlər avtomatik açılacaq)' :
-                                                                           'Açıq Məhsul (Paketlər avtomatik açılacaq)';
+                                                                    return selectedProduct.unitType === 'BOX' ? 'Ədəd (Qutular avtomatik açılacaq)' :
+                                                                        selectedProduct.unitType === 'METER' ? 'Metr (Paketlər avtomatik açılacaq)' :
+                                                                            selectedProduct.unitType === 'LITER' ? 'Litr (Paketlər avtomatik açılacaq)' :
+                                                                                selectedProduct.unitType === 'KILOGRAM' ? 'Kq (Paketlər avtomatik açılacaq)' :
+                                                                                    'Açıq Məhsul (Paketlər avtomatik açılacaq)';
                                                                 } else {
                                                                     return 'Açıq Məhsul';
                                                                 }
@@ -1607,9 +1724,8 @@ export default function SaleForm() {
                                                                     e.preventDefault();
                                                                 }
                                                             }}
-                                                            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                                                                errors[`quantity_${index}`] ? 'border-red-500' : 'border-gray-300'
-                                                            } ${isEditMode ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                                            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors[`quantity_${index}`] ? 'border-red-500' : 'border-gray-300'
+                                                                } ${isEditMode ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                                                             disabled={isLoading || !item.productId || isEditMode}
                                                             placeholder="0"
                                                         />
@@ -1617,21 +1733,21 @@ export default function SaleForm() {
                                                             <p className="mt-1 text-sm text-red-600">{errors[`quantity_${index}`]}</p>
                                                         )}
                                                         {selectedProduct && (
-                                                            <p className="mt-1 text-xs text-gray-500">
+                                                            <p className={`mt-1 text-xs font-medium ${availableStock <= 0 ? 'text-red-600' : 'text-gray-500'}`}>
                                                                 {(() => {
-                                                                    const unitLabel = 
+                                                                    const unitLabel =
                                                                         selectedProduct.unitType === 'METER' ? 'metr' :
-                                                                        selectedProduct.unitType === 'LITER' ? 'litr' :
-                                                                        selectedProduct.unitType === 'KILOGRAM' ? 'kq' :
-                                                                        'ədəd';
+                                                                            selectedProduct.unitType === 'LITER' ? 'litr' :
+                                                                                selectedProduct.unitType === 'KILOGRAM' ? 'kq' :
+                                                                                    'ədəd';
                                                                     const boxUnit = selectedProduct.unitType === 'BOX' ? 'qutu' : 'paket';
                                                                     const fullBoxes = selectedProduct.fullBoxes || 0;
                                                                     const openedQuantity = selectedProduct.openedBoxQuantity || 0;
-                                                                    
+
                                                                     if (selectedProduct.unitType === 'PIECE' || !selectedProduct.piecesPerBox) {
                                                                         return `${t('available_stock') || 'Mövcud stok'}: ${availableStock} ${unitLabel}`;
                                                                     }
-                                                                    
+
                                                                     // Sadə format: "2 qutu, ümumi 10 ədəd stok"
                                                                     let stockDisplay = '';
                                                                     if (fullBoxes > 0) {
@@ -1642,7 +1758,7 @@ export default function SaleForm() {
                                                                         else stockDisplay = `${openedQuantity} açıq`;
                                                                     }
                                                                     if (!stockDisplay) stockDisplay = '0';
-                                                                    
+
                                                                     return `${t('available_stock') || 'Mövcud stok'}: ${stockDisplay}, ümumi ${availableStock} ${unitLabel} stok`;
                                                                 })()}
                                                             </p>
@@ -1655,38 +1771,37 @@ export default function SaleForm() {
                                                     </div>
                                                 </>
                                             ) : (
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    {t('quantity') || 'Miqdar'}
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    value={item.quantity || ''}
-                                                    onChange={(e) => handleQuantityChange(index, e.target.value)}
-                                                    onKeyPress={(e) => {
-                                                        // Yalnız rəqəm yazıla bilər
-                                                        const char = String.fromCharCode(e.which);
-                                                        if (!/[0-9]/.test(char)) {
-                                                            e.preventDefault();
-                                                        }
-                                                    }}
-                                                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                                                        errors[`quantity_${index}`] ? 'border-red-500' : 'border-gray-300'
-                                                    } ${isEditMode ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                                                    disabled={isLoading || !item.productId || isEditMode}
-                                                />
-                                                {errors[`quantity_${index}`] && (
-                                                    <p className="mt-1 text-sm text-red-600">{errors[`quantity_${index}`]}</p>
-                                                )}
-                                                {selectedProduct && (
-                                                    <p className="mt-1 text-xs text-gray-500">
-                                                            {t('available_stock') || 'Mövcud stok'}: {availableStock} {selectedProduct.unitType === 'BOX' ? 'qutu' : 
-                                                                                                                               selectedProduct.unitType === 'METER' ? 'metr' :
-                                                                                                                               selectedProduct.unitType === 'LITER' ? 'litr' :
-                                                                                                                               selectedProduct.unitType === 'KILOGRAM' ? 'kq' : 'ədəd'}
-                                                    </p>
-                                                )}
-                                            </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                        {t('quantity') || 'Miqdar'}
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={item.quantity || ''}
+                                                        onChange={(e) => handleQuantityChange(index, e.target.value)}
+                                                        onKeyPress={(e) => {
+                                                            // Yalnız rəqəm yazıla bilər
+                                                            const char = String.fromCharCode(e.which);
+                                                            if (!/[0-9]/.test(char)) {
+                                                                e.preventDefault();
+                                                            }
+                                                        }}
+                                                        className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors[`quantity_${index}`] ? 'border-red-500' : 'border-gray-300'
+                                                            } ${isEditMode ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                                        disabled={isLoading || !item.productId || isEditMode}
+                                                    />
+                                                    {errors[`quantity_${index}`] && (
+                                                        <p className="mt-1 text-sm text-red-600">{errors[`quantity_${index}`]}</p>
+                                                    )}
+                                                    {selectedProduct && (
+                                                        <p className={`mt-1 text-xs font-medium ${availableStock <= 0 ? 'text-red-600' : 'text-gray-500'}`}>
+                                                            {t('available_stock') || 'Mövcud stok'}: {availableStock} {selectedProduct.unitType === 'BOX' ? 'qutu' :
+                                                                selectedProduct.unitType === 'METER' ? 'metr' :
+                                                                    selectedProduct.unitType === 'LITER' ? 'litr' :
+                                                                        selectedProduct.unitType === 'KILOGRAM' ? 'kq' : 'ədəd'}
+                                                        </p>
+                                                    )}
+                                                </div>
                                             )}
 
                                             <div>
@@ -1706,9 +1821,8 @@ export default function SaleForm() {
                                                         return item.salePrice || defaultPrice.toFixed(2);
                                                     })()}
                                                     readOnly
-                                                    className={`w-full px-4 py-2 border rounded-lg bg-gray-100 cursor-not-allowed ${
-                                                        errors[`salePrice_${index}`] ? 'border-red-500' : 'border-gray-300'
-                                                    }`}
+                                                    className={`w-full px-4 py-2 border rounded-lg bg-gray-100 cursor-not-allowed ${errors[`salePrice_${index}`] ? 'border-red-500' : 'border-gray-300'
+                                                        }`}
                                                     disabled={true}
                                                     placeholder={defaultPrice.toFixed(2)}
                                                 />
@@ -1718,12 +1832,12 @@ export default function SaleForm() {
                                                 {selectedProduct && (
                                                     <p className="mt-1 text-xs text-gray-500">
                                                         {(() => {
-                                                            const unitLabel = 
+                                                            const unitLabel =
                                                                 selectedProduct.unitType === 'BOX' ? 'qutu' :
-                                                                selectedProduct.unitType === 'METER' ? 'metr' :
-                                                                selectedProduct.unitType === 'LITER' ? 'litr' :
-                                                                selectedProduct.unitType === 'KILOGRAM' ? 'kq' :
-                                                                'ədəd';
+                                                                    selectedProduct.unitType === 'METER' ? 'metr' :
+                                                                        selectedProduct.unitType === 'LITER' ? 'litr' :
+                                                                            selectedProduct.unitType === 'KILOGRAM' ? 'kq' :
+                                                                                'ədəd';
                                                             const priceInfo = selectedProduct.unitType !== 'PIECE' && selectedProduct.boxPrice && selectedProduct.piecesPerBox
                                                                 ? `${defaultPrice.toFixed(2)} ₼/${unitLabel} (${parseFloat(selectedProduct.boxPrice).toFixed(2)} ₼/${selectedProduct.piecesPerBox} ${unitLabel})`
                                                                 : `${defaultPrice.toFixed(2)} ₼/${unitLabel}`;
@@ -1743,9 +1857,8 @@ export default function SaleForm() {
                                                         type="text"
                                                         value={item.discountAmount || ''}
                                                         onChange={(e) => handleDiscountAmountChange(index, e.target.value)}
-                                                        className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                                                            errors[`discount_${index}`] ? 'border-red-500' : 'border-gray-300'
-                                                        } ${isEditMode ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                                        className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors[`discount_${index}`] ? 'border-red-500' : 'border-gray-300'
+                                                            } ${isEditMode ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                                                         disabled={isLoading || !item.productId || isEditMode}
                                                         placeholder="0.00"
                                                         onKeyPress={(e) => {
@@ -1855,12 +1968,12 @@ export default function SaleForm() {
                                             }
                                             const boxes = Math.floor(quantity / product.piecesPerBox);
                                             const pieces = quantity % product.piecesPerBox;
-                                            const unitLabel = product.unitType === 'BOX' ? 'qutu' : 
-                                                             product.unitType === 'METER' ? 'metr' : 
-                                                             product.unitType === 'LITER' ? 'litr' : 
-                                                             product.unitType === 'KILOGRAM' ? 'kq' : 'ədəd';
+                                            const unitLabel = product.unitType === 'BOX' ? 'qutu' :
+                                                product.unitType === 'METER' ? 'metr' :
+                                                    product.unitType === 'LITER' ? 'litr' :
+                                                        product.unitType === 'KILOGRAM' ? 'kq' : 'ədəd';
                                             const boxUnit = product.unitType === 'BOX' ? 'qutu' : 'paket';
-                                            
+
                                             if (boxes > 0 && pieces > 0) {
                                                 return `${boxes} ədəd ${boxUnit} daxilində + ${pieces} açıq (${quantity} ${unitLabel})`;
                                             } else if (boxes > 0) {
@@ -1886,7 +1999,7 @@ export default function SaleForm() {
                                                             {product.name || '-'}
                                                         </p>
                                                         <p className="text-xs text-gray-500 mt-1">
-                                                            {t('sold_quantity') || 'Satılan'}: {formatQuantity(saleItem.quantity)} | 
+                                                            {t('sold_quantity') || 'Satılan'}: {formatQuantity(saleItem.quantity)} |
                                                             {t('available_to_return') || 'Qaytarıla bilən'}: {formatQuantity(availableQty)}
                                                         </p>
                                                         {returnQty > 0 && returnAmount > 0 && (
@@ -1919,9 +2032,8 @@ export default function SaleForm() {
                                                                                 e.preventDefault();
                                                                             }
                                                                         }}
-                                                                        className={`w-20 px-2 py-1 text-sm border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 ${
-                                                                            returnErrors[saleItem.id] ? 'border-red-500' : 'border-gray-300'
-                                                                        }`}
+                                                                        className={`w-20 px-2 py-1 text-sm border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 ${returnErrors[saleItem.id] ? 'border-red-500' : 'border-gray-300'
+                                                                            }`}
                                                                         disabled={isReturnLoading}
                                                                         placeholder="0"
                                                                     />
@@ -1949,9 +2061,8 @@ export default function SaleForm() {
                                                                                 e.preventDefault();
                                                                             }
                                                                         }}
-                                                                        className={`w-20 px-2 py-1 text-sm border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 ${
-                                                                            returnErrors[saleItem.id] ? 'border-red-500' : 'border-gray-300'
-                                                                        }`}
+                                                                        className={`w-20 px-2 py-1 text-sm border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 ${returnErrors[saleItem.id] ? 'border-red-500' : 'border-gray-300'
+                                                                            }`}
                                                                         disabled={isReturnLoading}
                                                                         placeholder="0"
                                                                     />
@@ -1972,29 +2083,28 @@ export default function SaleForm() {
                                                         ) : (
                                                             <div className="flex items-center gap-2">
                                                                 <label className="text-xs text-gray-700 whitespace-nowrap">
-                                                            {t('return_quantity') || 'Qaytarma miqdarı'}:
-                                                        </label>
-                                                        <input
-                                                            type="text"
-                                                            value={returnQty}
-                                                            onChange={(e) => {
-                                                                let value = e.target.value;
-                                                                if (value !== '' && parseInt(value) > availableQty) {
-                                                                    value = availableQty.toString();
-                                                                }
-                                                                handleReturnItemChange(saleItem.id, value);
-                                                            }}
+                                                                    {t('return_quantity') || 'Qaytarma miqdarı'}:
+                                                                </label>
+                                                                <input
+                                                                    type="text"
+                                                                    value={returnQty}
+                                                                    onChange={(e) => {
+                                                                        let value = e.target.value;
+                                                                        if (value !== '' && parseInt(value) > availableQty) {
+                                                                            value = availableQty.toString();
+                                                                        }
+                                                                        handleReturnItemChange(saleItem.id, value);
+                                                                    }}
                                                                     onKeyPress={(e) => {
                                                                         const char = String.fromCharCode(e.which);
                                                                         if (!/[0-9]/.test(char)) {
                                                                             e.preventDefault();
                                                                         }
                                                                     }}
-                                                            className={`w-24 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 ${
-                                                                returnErrors[saleItem.id] ? 'border-red-500' : 'border-gray-300'
-                                                            }`}
-                                                            disabled={isReturnLoading}
-                                                        />
+                                                                    className={`w-24 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 ${returnErrors[saleItem.id] ? 'border-red-500' : 'border-gray-300'
+                                                                        }`}
+                                                                    disabled={isReturnLoading}
+                                                                />
                                                             </div>
                                                         )}
                                                     </div>
@@ -2082,18 +2192,18 @@ export default function SaleForm() {
                                 <h4 className="text-md font-semibold text-gray-900 mb-4">
                                     {t('credit_payments') || 'Kredit Ödənişləri'}
                                 </h4>
-                                
+
                                 {/* Kredit məlumatları */}
                                 {(() => {
                                     if (!saleData) return null;
-                                    
+
                                     const creditTotalAmount = parseFloat(saleData.creditTotalAmount || saleData.totalAmount || 0);
                                     const totalPaid = creditPayments.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
                                     const creditRemainingAmount = Math.max(0, creditTotalAmount - totalPaid);
                                     const creditMonthlyPayment = parseFloat(saleData.creditMonthlyPayment || 0);
-                                    
+
                                     const isFullyPaid = creditRemainingAmount <= 0.01; // 0.01-dən kiçik olsa tam ödənilib sayılır
-                                    
+
                                     return (
                                         <div className="bg-purple-50 rounded-lg border border-purple-200 p-4 mb-4">
                                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
@@ -2114,7 +2224,7 @@ export default function SaleForm() {
                                                     <p className="text-lg font-semibold">{creditMonthlyPayment.toFixed(2)} ₼</p>
                                                 </div>
                                             </div>
-                                            
+
                                             {!isFullyPaid && (
                                                 <div className="mt-4 p-4 bg-white rounded-lg border border-purple-200">
                                                     <h5 className="text-sm font-semibold text-gray-900 mb-3">{t('make_payment') || 'Ödəniş Et'}</h5>
@@ -2173,13 +2283,13 @@ export default function SaleForm() {
                                                                     Alert.error(tAlert('error') || 'Xəta!', t('invalid_amount') || 'Düzgün məbləğ daxil edin');
                                                                     return;
                                                                 }
-                                                                
-                                                                    const paymentAmount = parseFloat(paymentData.amount);
+
+                                                                const paymentAmount = parseFloat(paymentData.amount);
                                                                 if (paymentAmount > creditRemainingAmount) {
                                                                     Alert.error(tAlert('error') || 'Xəta!', t('payment_exceeds_remaining') || 'Ödəniş məbləği qalan məbləğdən çox ola bilməz');
                                                                     return;
                                                                 }
-                                                                
+
                                                                 setPaymentLoading(true);
                                                                 try {
                                                                     const response = await creditPaymentApi.makePayment({
@@ -2188,7 +2298,7 @@ export default function SaleForm() {
                                                                         paymentType: paymentData.paymentType,
                                                                         note: paymentData.note
                                                                     });
-                                                                    
+
                                                                     if (response.success) {
                                                                         Alert.success(t('payment_success') || 'Uğurlu!', t('payment_success_text') || 'Ödəniş uğurla edildi');
                                                                         setPaymentData({ amount: '', paymentType: 'cash', note: '' });
@@ -2221,7 +2331,7 @@ export default function SaleForm() {
                                                     </div>
                                                 </div>
                                             )}
-                                            
+
                                             {isFullyPaid && (
                                                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                                                     <div className="flex items-center gap-2 text-green-800">
@@ -2233,7 +2343,7 @@ export default function SaleForm() {
                                         </div>
                                     );
                                 })()}
-                                
+
                                 {/* Ödəniş tarixçəsi */}
                                 <div className="mt-4">
                                     <h5 className="text-sm font-semibold text-gray-900 mb-3">{t('payment_history') || 'Ödəniş Tarixçəsi'}</h5>
@@ -2244,12 +2354,12 @@ export default function SaleForm() {
                                             {creditPayments.map((payment, index) => {
                                                 const paymentDate = new Date(payment.paymentDate);
                                                 const paymentMonth = getFullMonthYear(paymentDate, 'az');
-                                                
+
                                                 // Növbəti ay hesabla
                                                 const nextMonth = new Date(paymentDate);
                                                 nextMonth.setMonth(nextMonth.getMonth() + 1);
                                                 const nextMonthStr = getFullMonthYear(nextMonth, 'az');
-                                                
+
                                                 // Qalan məbləği hesabla (bu ödənişdən sonra)
                                                 const creditTotal = parseFloat(saleData?.creditTotalAmount || saleData?.totalAmount || 0);
                                                 const totalPaidSoFar = creditPayments.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
@@ -2257,7 +2367,7 @@ export default function SaleForm() {
                                                     .slice(index + 1)
                                                     .reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
                                                 const paymentRemainingAmount = Math.max(0, creditTotal - totalPaidSoFar + paidAfterThis);
-                                                
+
                                                 return (
                                                     <div key={payment.id} className="border border-gray-200 rounded-lg p-3 bg-white">
                                                         <div className="flex justify-between items-start">

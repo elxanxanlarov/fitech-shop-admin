@@ -2,8 +2,14 @@ import api from './axios.js';
 
 export const categoryApi = {
   // Get all categories
-  getAll: async () => {
-    const response = await api.get('/category');
+  getAll: async (params = {}) => {
+    const response = await api.get('/category', { params });
+    return response.data;
+  },
+
+  // Mövcud kateqoriyaları Kürdəxanı-ya bağla
+  assignToKurdaxani: async () => {
+    const response = await api.post('/category/assign-kurdaxani');
     return response.data;
   },
 

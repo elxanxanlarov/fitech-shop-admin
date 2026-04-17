@@ -35,6 +35,9 @@
   "error_delete_core_role_text": "Staff with core roles cannot be deleted",
   "error_bulk_delete_core_role": "Error!",
   "error_bulk_delete_core_role_text": "Staff with core roles cannot be deleted. Please remove from selection.",
+  "error_edit_privileged_text": "Superadmin and Head Admin can only be edited by Superadmin",
+  "error_delete_privileged_text": "Superadmin and Head Admin can only be deleted by Superadmin",
+  "error_bulk_delete_privileged_text": "Selection includes Superadmin or Head Admin; only Superadmin can delete them.",
   "items_selected": "items selected",
   "edit_staff": "Edit Staff Information",
   "new_staff": "New Staff",
@@ -68,6 +71,8 @@
   "profile_description": "Manage your profile information",
   "edit": "Edit",
   "save": "Save",
-  "password_change_superadmin": "As a superadmin, you can change this staff member's password"
+  "password_change_superadmin": "As a superadmin, you can change this staff member's password",
+  "branch": "Branch",
+  "select_branch": "Select branch",
+  "branch_locked_own": "You can only assign your own branch"
 }
-

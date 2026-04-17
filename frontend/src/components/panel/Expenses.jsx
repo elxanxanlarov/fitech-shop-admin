@@ -5,6 +5,7 @@ import TableTemplate from '../ui/TableTamplate';
 import Alert from '../ui/Alert';
 import { Edit, Trash2, Eye, Plus, ShoppingBag, TrendingDown } from 'lucide-react';
 import { expenseApi } from '../../api';
+import { useLocalStorage, useBranch } from '../../hooks';
 
 export default function Expenses() {
     const { t } = useTranslation('expense');
@@ -13,13 +14,16 @@ export default function Expenses() {
     const location = useLocation();
     const [expenseData, setExpenseData] = useState([]);
     const [loading, setLoading] = useState(true);
+    const { selectedBranchId } = useBranch();
 
-    const [dateRange, setDateRange] = useState(() => {
+    const defaultDateRange = useMemo(() => {
         const today = new Date();
         const localToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
         return { start: localToday, end: localToday };
-    });
-    const [datePreset, setDatePreset] = useState('today');
+    }, []);
+
+    const [dateRange, setDateRange] = useLocalStorage('expense_dateRange', defaultDateRange);
+    const [datePreset, setDatePreset] = useLocalStorage('expense_datePreset', 'today');
     const isAdmin = useMemo(() => location.pathname.includes('/admin'), [location.pathname]);
 
     const columns = useMemo(() => [
@@ -58,6 +62,11 @@ export default function Expenses() {
             },
         },
         {
+            key: 'branch',
+            label: t('branch') || 'Filial',
+            render: (_value, item) => item.branch?.name || t('central_warehouse') || 'Mərkəzi Anbar',
+        },
+        {
             key: 'staff',
             label: t('added_by') || 'Əlavə edən',
             render: (value, item) => {
@@ -77,16 +86,39 @@ export default function Expenses() {
         },
     ], [t]);
 
+    const [pagination, setPagination] = useState({
+        page: 1,
+        limit: 10,
+        total: 0,
+        totalPages: 0
+    });
+
     const fetchExpenses = useCallback(async () => {
         setLoading(true);
         try {
-            const params = {};
+            const params = {
+                page: pagination.page,
+                limit: pagination.limit
+            };
             if (dateRange.start) params.startDate = dateRange.start;
             if (dateRange.end) params.endDate = dateRange.end;
+
+            // Mərkəzi anbar seçiləndə bütün filial xərclərini gətir
+            if (selectedBranchId && selectedBranchId !== 'central') {
+                params.branchId = selectedBranchId;
+            }
 
             const response = await expenseApi.getAll(params);
             if (response.success && response.date) {
                 setExpenseData(response.date);
+                if (response.pagination) {
+                    setPagination(prev => ({
+                        ...prev,
+                        total: response.pagination.total,
+                        totalPages: response.pagination.totalPages,
+                        totalAmount: response.pagination.totalAmount
+                    }));
+                }
             } else {
                 setExpenseData([]);
             }
@@ -97,7 +129,7 @@ export default function Expenses() {
         } finally {
             setLoading(false);
         }
-    }, [dateRange, t]);
+    }, [dateRange, selectedBranchId, t, pagination.page, pagination.limit]);
 
     useEffect(() => {
         fetchExpenses();
@@ -112,6 +144,11 @@ export default function Expenses() {
             window.removeEventListener('expenseRestored', handleExpenseRestored);
         };
     }, [fetchExpenses]);
+
+    // Reset page to 1 when branch or date range changes
+    useEffect(() => {
+        setPagination(prev => ({ ...prev, page: 1 }));
+    }, [selectedBranchId, dateRange]);
 
     const handleEdit = async (expense) => {
         if (!isAdmin) return;
@@ -213,10 +250,11 @@ export default function Expenses() {
     };
 
     const summaryStats = useMemo(() => {
-        const totalCount = expenseData.length;
-        const totalAmount = expenseData.reduce((sum, item) => sum + parseFloat(item.amount || 0), 0);
-        return { totalCount, totalAmount };
-    }, [expenseData]);
+        return {
+            totalCount: pagination.total || 0,
+            totalAmount: pagination.totalAmount || 0
+        };
+    }, [pagination.total, pagination.totalAmount]);
 
     return (
         <div className="p-6">
@@ -248,6 +286,8 @@ export default function Expenses() {
                 showSearch={true}
                 showDateFilter={true}
                 serverSidePagination={true}
+                pagination={pagination}
+                onPageChange={(page) => setPagination(prev => ({ ...prev, page }))}
                 dateRangeValue={dateRange}
                 onDateRangeChange={(start, end) => setDateRange({ start, end })}
                 datePresetValue={datePreset}
@@ -288,7 +328,7 @@ export default function Expenses() {
                                         {t('total_expenses_amount') || 'Ümumi Xərc Məbləği'}
                                     </p>
                                     <p className="text-2xl font-bold text-red-900">
-                                        {summaryStats.totalAmount.toFixed(2)} AZN
+                                        {(Number(summaryStats.totalAmount) || 0).toFixed(2)} AZN
                                     </p>
                                 </div>
                                 <div className="bg-red-100 rounded-full p-3">

@@ -5,7 +5,7 @@ import { decreaseProductStock, increaseProductStock } from "../utils/productStoc
 
 export const getAllReturns = async (req, res) => {
     try {
-        const returns = await prisma.saleReturn.findMany({
+        const returns = await prisma.salereturn.findMany({
             include: {
                 sale: true,
                 items: {
@@ -29,7 +29,7 @@ export const getAllReturns = async (req, res) => {
 export const getReturnById = async (req, res) => {
     try {
         const { id } = req.params;
-        const returnItem = await prisma.saleReturn.findUnique({
+        const returnItem = await prisma.salereturn.findUnique({
             where: { id },
             include: {
                 sale: {
@@ -66,7 +66,7 @@ export const getReturnById = async (req, res) => {
 export const getReturnsBySaleId = async (req, res) => {
     try {
         const { saleId } = req.params;
-        const returns = await prisma.saleReturn.findMany({
+        const returns = await prisma.salereturn.findMany({
             where: { saleId },
             include: {
                 items: {
@@ -166,7 +166,7 @@ export const createReturn = async (req, res) => {
         }
 
         // Qaytarma yarat
-        const returnRecord = await prisma.saleReturn.create({
+        const returnRecord = await prisma.salereturn.create({
             data: {
                 saleId,
                 customerName: customerName?.trim() || sale.customerName || null,
@@ -176,6 +176,7 @@ export const createReturn = async (req, res) => {
                 returnedAmount,
                 reason: reason?.trim() || null,
                 note: note?.trim() || null,
+                branchId: sale.branchId, // Satış olan filialı qeyd et
                 items: {
                     create: returnItems
                 }
@@ -264,7 +265,7 @@ export const updateReturn = async (req, res) => {
         const { id } = req.params;
         const { customerName, customerSurname, customerPhone, reason, note } = req.body;
 
-        const existingReturn = await prisma.saleReturn.findUnique({ 
+        const existingReturn = await prisma.salereturn.findUnique({ 
             where: { id },
             include: { items: true }
         });
@@ -273,7 +274,7 @@ export const updateReturn = async (req, res) => {
             return res.status(404).json({ success: false, message: "Qaytarma tapılmadı" });
         }
 
-        const updatedReturn = await prisma.saleReturn.update({
+        const updatedReturn = await prisma.salereturn.update({
             where: { id },
             data: {
                 customerName: customerName !== undefined ? (customerName?.trim() || null) : existingReturn.customerName,
@@ -323,7 +324,7 @@ export const updateReturn = async (req, res) => {
 export const deleteReturn = async (req, res) => {
     try {
         const { id } = req.params;
-        const existingReturn = await prisma.saleReturn.findUnique({ 
+        const existingReturn = await prisma.salereturn.findUnique({ 
             where: { id },
             include: { 
                 items: {
@@ -361,7 +362,7 @@ export const deleteReturn = async (req, res) => {
             }
         }
 
-        await prisma.saleReturn.delete({ where: { id } });
+        await prisma.salereturn.delete({ where: { id } });
 
         // Activity log yarat
         try {

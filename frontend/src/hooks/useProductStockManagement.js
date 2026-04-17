@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Alert from '../components/ui/Alert';
 import { stockApi, productApi } from '../api';
+import { useBranch } from '../context/BranchContext';
 
 export function useProductStockManagement(productId, formData, setFormData, t, tAlert) {
     const [stockQuantity, setStockQuantity] = useState('');
@@ -10,6 +11,7 @@ export function useProductStockManagement(productId, formData, setFormData, t, t
     const [stockMovementType, setStockMovementType] = useState('OUT');
     const [processingStock, setProcessingStock] = useState(false);
     const [showStockManagement, setShowStockManagement] = useState(false);
+    const { selectedBranchId } = useBranch();
 
     const handleStockMovement = async () => {
         if (!productId) {
@@ -78,11 +80,12 @@ export function useProductStockManagement(productId, formData, setFormData, t, t
                 productId,
                 type: stockMovementType,
                 quantity: finalQuantity,
-                note: stockNote.trim() || null
+                note: stockNote.trim() || null,
+                branchId: (selectedBranchId && selectedBranchId !== 'central') ? selectedBranchId : null
             });
 
             // Refresh product data to get updated stock
-            const productResponse = await productApi.getById(productId);
+            const productResponse = await productApi.getById(productId, { branchId: selectedBranchId });
             if (productResponse.success && productResponse.date) {
                 const updatedProduct = productResponse.date;
                 setFormData(prev => ({

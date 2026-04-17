@@ -66,6 +66,15 @@ export const getProductColumns = (t, language = 'az') => [
         )
     },
     {
+        key: 'invoiceName',
+        label: t('invoice_name'),
+        render: (value) => (
+            <div className="flex items-center space-x-2">
+                <span className="text-xs text-gray-500 italic line-clamp-1">{value || '-'}</span>
+            </div>
+        )
+    },
+    {
         key: 'purchasePrice',
         label: t('purchase_price'),
         render: (value) => {

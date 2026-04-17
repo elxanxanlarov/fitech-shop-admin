@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Input from '../ui/Input';
 import Alert from '../ui/Alert';
 import { MdInventory, MdDescription, MdImage, MdAttachMoney, MdLocalOffer, MdQrCode, MdStorage, MdCloudUpload, MdAdd, MdRemove, MdEdit, MdHistory } from 'react-icons/md';
-import { productApi, uploadApi, categoryApi, subCategoryApi } from '../../api';
+import { productApi, uploadApi, categoryApi, subCategoryApi, branchApi, authApi } from '../../api';
 import { createInputChangeHandler } from '../../utils/validation';
 import SearchDropdown from '../ui/SearchDropdown';
 import ProductStockHistoryModal from '../modals/ProductStockHistoryModal';
@@ -12,7 +12,14 @@ import ProductBasicInfo from './productform/ProductBasicInfo';
 import ProductPricing from './productform/ProductPricing';
 import ProductUnitInfo from './productform/ProductUnitInfo';
 import ProductStockSection from './productform/ProductStockSection';
-import { useProductDiscountHandler, useProductFormChangeDetection, useProductStockManagement, useProductFormValidation } from '../../hooks';
+import { useProductDiscountHandler, useProductFormChangeDetection, useProductStockManagement, useProductFormValidation, useBranch } from '../../hooks';
+
+/** Superadmin və baş admin (admin + isBoss) filial seçə bilər — digər formlarla eyni */
+function canPickProductBranch(user) {
+    if (!user?.role?.name) return false;
+    const r = user.role.name.toLowerCase();
+    return r === 'superadmin' || (r === 'admin' && user.isBoss === true);
+}
 
 export default function ProductForm() {
     const navigate = useNavigate();
@@ -23,6 +30,7 @@ export default function ProductForm() {
     const subCategoryIdFromQuery = searchParams.get('subCategoryId');
     const { t } = useTranslation('product');
     const { t: tAlert } = useTranslation('alert');
+    const { selectedBranchId } = useBranch();
 
     const isAdmin = location.pathname.includes('/admin');
     const productPagePath = isAdmin ? '/admin/products' : '/reception/products';
@@ -47,8 +55,13 @@ export default function ProductForm() {
         piecesPerBox: '',
         openedBoxQuantity: 0,
         boxPrice: '',
-        fullBoxes: 0
+        fullBoxes: 0,
+        branchId: ''
     });
+
+    const [branches, setBranches] = useState([]);
+    const [loadingBranches, setLoadingBranches] = useState(false);
+    const [currentUser, setCurrentUser] = useState(null);
 
     const [errors, setErrors] = useState({});
     const [isLoading, setIsLoading] = useState(false);
@@ -89,7 +102,16 @@ export default function ProductForm() {
             if (isEditMode && id) {
                 try {
                     setIsLoading(true);
-                    const response = await productApi.getById(id);
+                    const resolvedBranchForApi =
+                        formData.branchId && formData.branchId !== 'central'
+                            ? formData.branchId
+                            : selectedBranchId && selectedBranchId !== 'central'
+                              ? selectedBranchId
+                              : undefined;
+                    const response = await productApi.getById(
+                        id,
+                        resolvedBranchForApi ? { branchId: resolvedBranchForApi } : {}
+                    );
                     if (response.success && response.date) {
                         const product = response.date;
 
@@ -113,7 +135,8 @@ export default function ProductForm() {
                             piecesPerBox: product.piecesPerBox?.toString() || '',
                             openedBoxQuantity: product.openedBoxQuantity || 0,
                             boxPrice: product.boxPrice?.toString() || '',
-                            fullBoxes: product.fullBoxes || 0
+                            fullBoxes: product.fullBoxes || 0,
+                            branchId: resolvedBranchForApi || 'central'
                         };
                         setFormData(initialData);
                         setInitialFormData(initialData);
@@ -179,9 +202,66 @@ export default function ProductForm() {
         };
 
         fetchProduct();
-    }, [id, isEditMode, t]);
+    // formData.branchId dependency-si: edit modunda filial dəyişəndə həmin filialın stokunu göstər
+    }, [id, isEditMode, t, formData.branchId, selectedBranchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Fetch categories
+    // İstifadəçi və filiallar
+    useEffect(() => {
+        const fetchData = async () => {
+            setLoadingBranches(true);
+            try {
+                const [userResp, branchesResp] = await Promise.all([
+                    authApi.me(),
+                    branchApi.getAll()
+                ]);
+                if (userResp.success) {
+                    setCurrentUser(userResp.data);
+                }
+                if (branchesResp.success && branchesResp.data) {
+                    setBranches(branchesResp.data);
+                }
+            } catch (error) {
+                console.error('Error fetching branches/user:', error);
+            } finally {
+                setLoadingBranches(false);
+            }
+        };
+        fetchData();
+    }, []);
+
+    // Yeni məhsul: filiala bağlı admin/reception — öz filialı; superadmin/baş admin — header və ya Kürdəxanı/ilk
+    useEffect(() => {
+        if (isEditMode || !currentUser || branches.length === 0) return;
+
+        let next = '';
+        if (canPickProductBranch(currentUser)) {
+            next =
+                selectedBranchId && selectedBranchId !== 'central' ? selectedBranchId : '';
+            if (!next) {
+                const k = branches.find((b) => b.name === 'Kürdəxanı');
+                next = k ? k.id : branches[0]?.id || '';
+            }
+        } else {
+            next = currentUser.branchId || '';
+            if (!next && selectedBranchId && selectedBranchId !== 'central') {
+                next = selectedBranchId;
+            }
+        }
+
+        setFormData((prev) =>
+            prev.branchId === next ? prev : { ...prev, branchId: next }
+        );
+    }, [isEditMode, currentUser, selectedBranchId, branches]);
+
+    const branchOptionsForForm = useMemo(() => {
+        if (!currentUser || canPickProductBranch(currentUser)) return branches;
+        const bid = currentUser.branchId;
+        if (!bid) return branches;
+        const mine = branches.filter((b) => b.id === bid);
+        return mine.length ? mine : branches;
+    }, [branches, currentUser]);
+
+    // Fetch categories (Bütün kateqoriyalar - qlobal)
     useEffect(() => {
         const fetchCategories = async () => {
             setLoadingCategories(true);
@@ -197,16 +277,21 @@ export default function ProductForm() {
             }
         };
         fetchCategories();
-    }, []);
+    }, []); 
 
     // Fetch existing products for search (only in create mode)
     useEffect(() => {
         if (isEditMode) return; // Edit modunda lazım deyil
+        if (!formData.branchId) return; // Filial seçilməyibsə gözlə
 
         const fetchProducts = async () => {
             setLoadingProducts(true);
             try {
-                const response = await productApi.getAll();
+                const params = {};
+                if (formData.branchId && formData.branchId !== 'central') {
+                    params.branchId = formData.branchId;
+                }
+                const response = await productApi.getAll(params);
                 if (response.success && (response.data || response.date)) {
                     const list = response.data || response.date;
                     setExistingProducts(list || []);
@@ -218,7 +303,7 @@ export default function ProductForm() {
             }
         };
         fetchProducts();
-    }, [isEditMode]);
+    }, [isEditMode, formData.branchId]);
 
     // Fetch subcategories when category changes
     const fetchSubCategories = async (categoryId) => {
@@ -428,6 +513,7 @@ export default function ProductForm() {
                 stock: calculatedStock,
                 isActive: formData.isActive,
                 isOfficial: formData.isOfficial,
+                branchId: formData.branchId,
                 categoryId:
                     formData.categoryId && formData.categoryId.trim() !== ''
                         ? formData.categoryId
@@ -483,6 +569,9 @@ export default function ProductForm() {
                     isEditMode={isEditMode}
                     existingProducts={existingProducts}
                     loadingProducts={loadingProducts}
+                    branches={branchOptionsForForm}
+                    loadingBranches={loadingBranches}
+                    branchPickerDisabled={!canPickProductBranch(currentUser)}
                     onInputChange={handleInputChange}
                     onCategoryChange={handleCategoryChange}
                     onImageSelect={handleImageSelect}

@@ -1,17 +1,19 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import Alert from '../ui/Alert';
 import Input from '../ui/Input';
 import { Calendar, Edit, Trash2, Plus, X } from 'lucide-react';
-import { finalDeliveryApi, productApi, authApi } from '../../api';
+import { finalDeliveryApi, productApi, authApi, branchApi } from '../../api';
 import SearchDropdown from '../ui/SearchDropdown';
+import { useBranch } from '../../hooks';
 
 export default function FinalDeliveryForm() {
     const { t, i18n } = useTranslation('finalDelivery');
     const { t: tAlert } = useTranslation('alert');
     const navigate = useNavigate();
     const location = useLocation();
+    const { selectedBranchId } = useBranch();
     const [searchParams] = useSearchParams();
     const id = searchParams.get('id');
     const isEditMode = !!id;
@@ -30,7 +32,10 @@ export default function FinalDeliveryForm() {
         startDate: '',
         endDate: '',
         note: '',
+        branchId: (selectedBranchId && selectedBranchId !== 'central') ? selectedBranchId : '',
     });
+
+    const [branches, setBranches] = useState([]);
 
     const [loading, setLoading] = useState(false);
     const [errors, setErrors] = useState({});
@@ -38,7 +43,7 @@ export default function FinalDeliveryForm() {
     const [previewLoading, setPreviewLoading] = useState(false);
     const [detailDelivery, setDetailDelivery] = useState(null);
     const [detailLoading, setDetailLoading] = useState(false);
-    
+
     // Edit modal state
     const [editingItem, setEditingItem] = useState(null);
     const [showEditModal, setShowEditModal] = useState(false);
@@ -61,6 +66,12 @@ export default function FinalDeliveryForm() {
     const [addLoading, setAddLoading] = useState(false);
     const [currentUser, setCurrentUser] = useState(null);
 
+    // Table pagination state
+    const [tablePagination, setTablePagination] = useState({
+        page: 1,
+        limit: 10
+    });
+
     // Fetch current user to check role
     useEffect(() => {
         const fetchCurrentUser = async () => {
@@ -75,6 +86,32 @@ export default function FinalDeliveryForm() {
         };
         fetchCurrentUser();
     }, []);
+
+    const canPickAnyBranch = useMemo(() => {
+        const r = currentUser?.role?.name?.toLowerCase() || '';
+        const boss = currentUser?.isBoss === true;
+        return r === 'superadmin' || (r === 'admin' && boss);
+    }, [currentUser]);
+
+    const branchChoices = useMemo(() => {
+        if (!branches.length) return [];
+        if (canPickAnyBranch) return branches;
+        const onlyId =
+            currentUser?.branchId ||
+            (selectedBranchId && selectedBranchId !== 'central' ? selectedBranchId : null);
+        if (!onlyId) return branches;
+        const filtered = branches.filter((b) => b.id === onlyId);
+        return filtered.length ? filtered : branches;
+    }, [branches, currentUser, selectedBranchId, canPickAnyBranch]);
+
+    useEffect(() => {
+        if (isEditMode || canPickAnyBranch || !currentUser) return;
+        const pin =
+            currentUser.branchId ||
+            (selectedBranchId && selectedBranchId !== 'central' ? selectedBranchId : null);
+        if (!pin) return;
+        setFormData((p) => (p.branchId === pin ? p : { ...p, branchId: pin }));
+    }, [isEditMode, canPickAnyBranch, currentUser, selectedBranchId]);
 
     // Edit (detail) rejimində mövcud yekun təslimat məlumatlarını yüklə
     useEffect(() => {
@@ -93,7 +130,8 @@ export default function FinalDeliveryForm() {
                         startDate: response.data.startDate.split('T')[0],
                         endDate: response.data.endDate.split('T')[0],
                         year: start.getFullYear(),
-                        note: response.data.note || ''
+                        note: response.data.note || '',
+                        branchId: response.data.branchId || ''
                     }));
                 }
             } catch (error) {
@@ -106,6 +144,21 @@ export default function FinalDeliveryForm() {
 
         fetchDetail();
     }, [isEditMode, id]);
+
+    // Fetch branches
+    useEffect(() => {
+        const fetchBranches = async () => {
+            try {
+                const response = await branchApi.getAll();
+                if (response.success && response.data) {
+                    setBranches(response.data);
+                }
+            } catch (error) {
+                console.error('Error fetching branches:', error);
+            }
+        };
+        fetchBranches();
+    }, []);
 
     useEffect(() => {
         // Set default dates based on preset (yalnız create rejimində mənalıdır)
@@ -228,9 +281,8 @@ export default function FinalDeliveryForm() {
                 return;
             }
 
-            setPreviewLoading(true);
             try {
-                const response = await finalDeliveryApi.preview(formData.startDate, formData.endDate);
+                const response = await finalDeliveryApi.preview(formData.startDate, formData.endDate, formData.branchId);
                 if (response.success && (response.data || response.date)) {
                     setPreviewData(response.data || response.date);
                 } else {
@@ -245,7 +297,16 @@ export default function FinalDeliveryForm() {
         };
 
         fetchPreview();
-    }, [formData.startDate, formData.endDate, isEditMode]);
+    }, [formData.startDate, formData.endDate, isEditMode, formData.branchId]);
+
+    // Reset table page when preview/detail changes
+    useEffect(() => {
+        setTablePagination(prev => ({ ...prev, page: 1 }));
+    }, [previewData, detailDelivery]);
+
+    const handleTablePageChange = (newPage) => {
+        setTablePagination(prev => ({ ...prev, page: newPage }));
+    };
 
     const handleInputChange = (field, value) => {
         setFormData(prev => ({
@@ -281,6 +342,10 @@ export default function FinalDeliveryForm() {
             }
         }
 
+        if (!formData.branchId || formData.branchId === 'central') {
+            newErrors.branchId = t('branch_required') || 'Filial seçilməlidir';
+        }
+
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -303,6 +368,7 @@ export default function FinalDeliveryForm() {
                 startDate: formData.startDate,
                 endDate: formData.endDate,
                 note: formData.note?.trim() || null,
+                branchId: formData.branchId
             };
 
             const response = await finalDeliveryApi.create(payload);
@@ -337,6 +403,11 @@ export default function FinalDeliveryForm() {
     const tableItems = isEditMode && detailDelivery
         ? (detailDelivery.items || [])
         : previewData;
+
+    const paginatedItems = tableItems.slice(
+        (tablePagination.page - 1) * tablePagination.limit,
+        tablePagination.page * tablePagination.limit
+    );
 
     const totalProducts = tableItems.length;
     const totalStock = tableItems.reduce(
@@ -375,7 +446,7 @@ export default function FinalDeliveryForm() {
     // Edit item save
     const handleSaveEditItem = async () => {
         if (!editingItem) return;
-        
+
         setEditLoading(true);
         try {
             const payload = {
@@ -386,7 +457,7 @@ export default function FinalDeliveryForm() {
             };
 
             const response = await finalDeliveryApi.updateItem(editingItem.id, payload);
-            
+
             if (response.success) {
                 Alert.success(t('update_success') || 'Uğurlu!', t('update_success_text') || 'Məhsul yeniləndi');
                 // Detail delivery-i yenidən yüklə
@@ -434,7 +505,7 @@ export default function FinalDeliveryForm() {
             try {
                 Alert.loading(t('loading') || 'Yüklənir...');
                 const response = await finalDeliveryApi.deleteItem(item.id);
-                
+
                 if (response.success) {
                     Alert.close();
                     setTimeout(() => {
@@ -464,14 +535,14 @@ export default function FinalDeliveryForm() {
     const handleOpenAddModal = async () => {
         try {
             // Mövcud məhsulları yüklə
-            const response = await productApi.getAll();
+            const response = await productApi.getAll({ branchId: formData.branchId === 'central' ? null : formData.branchId });
             if (response.success && (response.data || response.date)) {
                 const allProducts = response.data || response.date;
                 // Artıq təslimatda olan məhsulları çıxar
                 const existingProductIds = (detailDelivery?.items || []).map(item => item.productId);
-                const available = allProducts.filter(p => 
-                    p.isActive && 
-                    p.deleteType === 'NONE' && 
+                const available = allProducts.filter(p =>
+                    p.isActive &&
+                    p.deleteType === 'NONE' &&
                     !existingProductIds.includes(p.id)
                 );
                 setAvailableProducts(available);
@@ -511,7 +582,7 @@ export default function FinalDeliveryForm() {
             };
 
             const response = await finalDeliveryApi.addItem(id, payload);
-            
+
             if (response.success) {
                 Alert.success(t('add_success') || 'Uğurlu!', t('add_success_text') || 'Məhsul əlavə edildi');
                 // Detail delivery-i yenidən yüklə
@@ -580,6 +651,56 @@ export default function FinalDeliveryForm() {
                     </button>
                 </div>
             )}
+
+            {/* Branch Selection or Display */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 print:hidden">
+                <div className="flex flex-col md:flex-row gap-6 items-end">
+                    <div className="flex-1 w-full">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            {t('branch') || 'Filial'}
+                        </label>
+                        {isEditMode ? (
+                            <div className="px-3 py-2 border border-gray-100 bg-gray-50 rounded-lg text-gray-900 font-medium h-[42px] flex items-center">
+                                {detailDelivery?.branch?.name || t('central_warehouse') || 'Mərkəzi Anbar'}
+                            </div>
+                        ) : (
+                            <div className="w-full">
+                                <SearchDropdown
+                                    options={branchChoices}
+                                    value={formData.branchId}
+                                    onChange={(val) => handleInputChange('branchId', val)}
+                                    error={!!errors.branchId}
+                                    placeholder={t('select_branch') || 'Filial seçin...'}
+                                    getOptionLabel={(option) => option.name || ''}
+                                    getOptionValue={(option) => option.id?.toString() || ''}
+                                    searchFields={['name']}
+                                    disabled={!canPickAnyBranch}
+                                />
+                                {!canPickAnyBranch && (
+                                    <p className="mt-1 text-xs text-gray-500">
+                                        {t('branch_locked_own') || 'Yalnız öz filialınız üçün təyin olunur'}
+                                    </p>
+                                )}
+                                {errors.branchId && (
+                                    <p className="mt-1 text-xs font-medium text-red-500 animate-in fade-in slide-in-from-top-1 duration-200 pl-1">
+                                        {errors.branchId}
+                                    </p>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                    {isEditMode && detailDelivery?.staff && (
+                        <div className="flex-1 w-full">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                {t('created_by') || 'Yaradan'}
+                            </label>
+                            <div className="px-3 py-2 border border-gray-100 bg-gray-50 rounded-lg text-gray-900 font-medium h-[42px] flex items-center">
+                                {`${detailDelivery.staff.name} ${detailDelivery.staff.surName || ''}`.trim()}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
 
             <form onSubmit={handleSubmit} className="space-y-6 w-full print:text-xs">
                 {/* Date Preset Selector + Year - yalnız create rejimində göstərilir (print-də gizlidir) */}
@@ -757,7 +878,7 @@ export default function FinalDeliveryForm() {
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-200">
-                                        {tableItems.map((item) => (
+                                        {paginatedItems.map((item) => (
                                             <tr key={item.productId || item.id} className="hover:bg-gray-50">
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                                                     {item.product?.name || '-'}
@@ -813,6 +934,77 @@ export default function FinalDeliveryForm() {
                                         ))}
                                     </tbody>
                                 </table>
+                            )}
+
+                            {/* Pagination */}
+                            {tableItems.length > tablePagination.limit && (
+                                <div className="px-6 py-4 flex items-center justify-between border-t border-gray-200 print:hidden">
+                                    <div className="flex-1 flex justify-between sm:hidden">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleTablePageChange(Math.max(1, tablePagination.page - 1))}
+                                            disabled={tablePagination.page === 1}
+                                            className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                                        >
+                                            {t('previous') || 'Əvvəlki'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleTablePageChange(Math.min(Math.ceil(tableItems.length / tablePagination.limit), tablePagination.page + 1))}
+                                            disabled={tablePagination.page === Math.ceil(tableItems.length / tablePagination.limit)}
+                                            className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                                        >
+                                            {t('next') || 'Növbəti'}
+                                        </button>
+                                    </div>
+                                    <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                                        <div>
+                                            <p className="text-sm text-gray-700">
+                                                {t('showing') || 'Göstərilir'}{' '}
+                                                <span className="font-medium">{(tablePagination.page - 1) * tablePagination.limit + 1}</span>{' '}
+                                                {t('to') || 'ilə'}{' '}
+                                                <span className="font-medium">{Math.min(tablePagination.page * tablePagination.limit, tableItems.length)}</span>{' '}
+                                                {t('of') || 'arasında'}{' '}
+                                                <span className="font-medium">{tableItems.length}</span>{' '}
+                                                {t('results') || 'nəticə'}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleTablePageChange(Math.max(1, tablePagination.page - 1))}
+                                                    disabled={tablePagination.page === 1}
+                                                    className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                                                >
+                                                    <Calendar className="w-4 h-4 rotate-90" />
+                                                </button>
+                                                {[...Array(Math.ceil(tableItems.length / tablePagination.limit))].map((_, i) => (
+                                                    <button
+                                                        key={i + 1}
+                                                        type="button"
+                                                        onClick={() => handleTablePageChange(i + 1)}
+                                                        className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                                                            tablePagination.page === i + 1
+                                                                ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
+                                                                : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                                                        }`}
+                                                    >
+                                                        {i + 1}
+                                                    </button>
+                                                ))}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleTablePageChange(Math.min(Math.ceil(tableItems.length / tablePagination.limit), tablePagination.page + 1))}
+                                                    disabled={tablePagination.page === Math.ceil(tableItems.length / tablePagination.limit)}
+                                                    className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                                                >
+                                                    <Calendar className="w-4 h-4 -rotate-90" />
+                                                </button>
+                                            </nav>
+                                        </div>
+                                    </div>
+                                </div>
                             )}
                         </div>
                     </div>

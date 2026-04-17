@@ -4,7 +4,8 @@ import {
     getCategoryById,
     createCategory,
     updateCategory,
-    deleteCategory
+    deleteCategory,
+    makeCategoriesGlobal
 } from '../controllers/categoryController.js';
 import { authenticateToken } from '../middleware/authMiddleware.js';
 
@@ -16,6 +17,7 @@ router.use(authenticateToken);
 router.get('/', getAllCategories);
 router.get('/:id', getCategoryById);
 router.post('/', createCategory);
+router.post('/make-global', makeCategoriesGlobal);
 router.put('/:id', updateCategory);
 router.delete('/:id', deleteCategory);
 

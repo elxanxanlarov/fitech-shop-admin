@@ -1,11 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Input from '../ui/Input';
 import Alert from '../ui/Alert';
+import SearchDropdown from '../ui/SearchDropdown';
 import { MdFolder, MdDescription, MdArrowBack } from 'react-icons/md';
+import { BiBuildings } from 'react-icons/bi';
 import { Plus, Edit, Trash2 } from 'lucide-react';
-import { categoryApi, subCategoryApi } from '../../api';
+import { categoryApi, subCategoryApi, branchApi } from '../../api';
+import { useBranch } from '../../hooks';
 
 export default function CategoryForm() {
     const navigate = useNavigate();
@@ -14,6 +17,8 @@ export default function CategoryForm() {
     const id = searchParams.get('id');
     const { t } = useTranslation('category');
     const { t: tAlert } = useTranslation('alert');
+    const { selectedBranchId } = useBranch();
+    const initialBranchIdRef = useRef(selectedBranchId);
 
     const isAdmin = location.pathname.includes('/admin');
     const categoryPagePath = isAdmin ? '/admin/category-management' : '/reception/category-management';
@@ -22,7 +27,7 @@ export default function CategoryForm() {
     const [formData, setFormData] = useState({
         name: '',
         description: '',
-        isActive: true
+        isActive: true,
     });
     
     const [errors, setErrors] = useState({});
@@ -30,6 +35,8 @@ export default function CategoryForm() {
     const [initialFormData, setInitialFormData] = useState(null);
     const [subCategories, setSubCategories] = useState([]);
     const [loadingSubCategories, setLoadingSubCategories] = useState(false);
+
+    // Filiallar artıq lazım deyil - Kateqoriyalar qlobaldır
 
     // Fetch category data (if edit mode)
     useEffect(() => {
@@ -43,7 +50,7 @@ export default function CategoryForm() {
                         const initialData = {
                             name: category.name || '',
                             description: category.description || '',
-                            isActive: category.isActive !== undefined ? category.isActive : true
+                            isActive: category.isActive !== undefined ? category.isActive : true,
                         };
                         setFormData(initialData);
                         setInitialFormData(initialData);
@@ -124,13 +131,13 @@ export default function CategoryForm() {
         const currentData = {
             name: formData.name.trim(),
             description: formData.description?.trim() || '',
-            isActive: formData.isActive !== undefined ? formData.isActive : true
+            isActive: formData.isActive !== undefined ? formData.isActive : true,
         };
         
         const initial = {
             name: initialFormData.name.trim(),
             description: initialFormData.description?.trim() || '',
-            isActive: initialFormData.isActive !== undefined ? initialFormData.isActive : true
+            isActive: initialFormData.isActive !== undefined ? initialFormData.isActive : true,
         };
         
         // Check if any field has changed
@@ -157,7 +164,8 @@ export default function CategoryForm() {
             const payload = {
                 name: formData.name.trim(),
                 description: formData.description?.trim() || null,
-                isActive: formData.isActive
+                isActive: formData.isActive,
+                branchId: null
             };
 
             if (isEditMode) {
@@ -224,6 +232,8 @@ export default function CategoryForm() {
                     </h3>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Filial seçimi silindi */}
+
                         <div className="md:col-span-2">
                             <Input
                                 label={t('name') || 'Ad'}

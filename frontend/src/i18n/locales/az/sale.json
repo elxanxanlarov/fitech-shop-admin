@@ -117,15 +117,12 @@
   "make_payment": "Ödəniş Et",
   "amount": "Məbləğ",
   "enter_amount": "Məbləğ daxil edin",
-  "payment_type": "Ödəniş növü",
-  "note_placeholder": "Qeyd (istəyə bağlı)",
   "processing": "İşlənir...",
   "credit_fully_paid": "Kredit tam ödənilib",
   "payment_history": "Ödəniş Tarixçəsi",
   "no_payments": "Hələ ödəniş edilməyib",
   "received_by": "Qəbul edən",
   "no_sale_selected": "Satış seçilməyib",
-  "sale_not_found": "Satış tapılmadı",
   "invalid_amount": "Düzgün məbləğ daxil edin",
   "payment_exceeds_remaining": "Ödəniş məbləği qalan məbləğdən çox ola bilməz",
   "payment_success": "Uğurlu!",
@@ -168,6 +165,9 @@
   "total_sales_count": "Ümumi Satış Sayı",
   "search_by_product": "Məhsula görə axtarış",
   "only_superadmin_can_delete": "Yalnız Superadmin satışları silə bilər",
-  "clear_filter": "Filteri təmizlə"
+  "clear_filter": "Filteri təmizlə",
+  "branch": "Filial",
+  "select_branch": "Filial seçin",
+  "branch_change_info": "Filial dəyişdirildikdə seçilmiş məhsullar sıfırlanacaq."
 }
 

@@ -4,14 +4,17 @@
   "logout": "Logout",
   "staff_management": "Staff Management",
   "final_delivery": "Final Delivery",
+  "branch_management": "Branch Management",
   "customer_management": "Customer Management",
   "product_management": "Product Management",
+  "product_branch_transfer": "Product transfer",
   "invoice_name_mapping": "Invoice Names",
   "sale_management": "Sale",
   "expense_management": "Expenses",
   "cash_handover_management": "Cash Handover",
   "activity_log": "Activity Log",
   "statistics": "Statistics",
+  "convert_center": "Convert",
+  "deleted_elements": "Deleted Items",
   "settings": "Settings"
 }
-

@@ -119,7 +119,7 @@ export default function ProductStockHistoryModal({ isOpen, onClose, productId, p
             date: s.sale?.createdAt || s.createdAt,
             sale: s.sale ? { 
                 ...s.sale, 
-                staff: s.sale.staff || s.sale.receipt?.staff 
+                staff: s.sale.staff
             } : s.sale
         })),
         ...returns.map(r => ({ ...r, historyType: 'return', date: r.return?.createdAt || r.createdAt }))

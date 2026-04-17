@@ -37,6 +37,10 @@ import azInvoiceName from "./locales/az/invoice_name.json";
 import enInvoiceName from "./locales/en/invoice_name.json";
 import azFinalDelivery from "./locales/az/finalDelivery.json";
 import enFinalDelivery from "./locales/en/finalDelivery.json";
+import azBranch from "./locales/az/branch.json";
+import enBranch from "./locales/en/branch.json";
+import azSubCategory from "./locales/az/subcategory.json";
+import enSubCategory from "./locales/en/subcategory.json";
 
 const resources = {
   az: {
@@ -57,6 +61,8 @@ const resources = {
     cashHandover: azCashHandover,
     invoice_name: azInvoiceName,
     finalDelivery: azFinalDelivery,
+    branch: azBranch,
+    subcategory: azSubCategory,
   },
   en: {
     translation: enTranslation,
@@ -76,6 +82,8 @@ const resources = {
     cashHandover: enCashHandover,
     invoice_name: enInvoiceName,
     finalDelivery: enFinalDelivery,
+    branch: enBranch,
+    subcategory: enSubCategory,
   },
 };
 
@@ -87,7 +95,7 @@ i18n
     supportedLngs: ["az", "en"],
     fallbackLng: "az",
     defaultNS: "translation",
-    ns: ["translation", "admin-panel", "staff", "auth", "sidebar", "alert", "product", "sale", "statistics", "activityLog", "settings", "role", "category", "expense", "cashHandover", "invoice_name", "finalDelivery"],
+    ns: ["translation", "admin-panel", "staff", "auth", "sidebar", "alert", "product", "sale", "statistics", "activityLog", "settings", "role", "category", "expense", "cashHandover", "invoice_name", "finalDelivery", "branch", "subcategory"],
     debug: false,
     interpolation: {
       escapeValue: false,

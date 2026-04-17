@@ -3,14 +3,16 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import TableTemplate from '../ui/TableTamplate';
 import Alert from '../ui/Alert';
-import { Plus, Edit, Trash2, Eye, ChevronDown, ChevronRight, Package } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, ChevronDown, ChevronRight, Search } from 'lucide-react';
 import React from 'react';
 import { categoryApi, subCategoryApi, productApi } from '../../api';
+import { useBranch } from '../../hooks';
 
 export default function CategoryManagement() {
     const { t } = useTranslation('category');
     const { t: tAlert } = useTranslation('alert');
     const navigate = useNavigate();
+    const { selectedBranchId, selectedBranchName } = useBranch();
     const [categoryData, setCategoryData] = useState([]);
     const [loading, setLoading] = useState(true);
     const [expandedCategories, setExpandedCategories] = useState({});
@@ -22,18 +24,16 @@ export default function CategoryManagement() {
     });
     const [subCategoryErrors, setSubCategoryErrors] = useState({});
     const [savingSubCategory, setSavingSubCategory] = useState(false);
-    const [addingProduct, setAddingProduct] = useState(null);
-    const [productFormData, setProductFormData] = useState({
-        name: '',
-        categoryId: '',
-        subCategoryId: ''
-    });
-    const [productErrors, setProductErrors] = useState({});
-    const [savingProduct, setSavingProduct] = useState(false);
-    const [allProducts, setAllProducts] = useState([]);
-    const [selectedProductIds, setSelectedProductIds] = useState([]);
-    const [selectingProducts, setSelectingProducts] = useState(null);
-    const [productSearchTerm, setProductSearchTerm] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const filteredCategories = useMemo(() => {
+        if (!searchTerm.trim()) return categoryData;
+        const lowerSearch = searchTerm.toLowerCase();
+        return categoryData.filter(cat => 
+            cat.name?.toLowerCase().includes(lowerSearch) || 
+            cat.description?.toLowerCase().includes(lowerSearch)
+        );
+    }, [categoryData, searchTerm]);
 
     const columns = useMemo(() => [
         {
@@ -79,7 +79,8 @@ export default function CategoryManagement() {
         const fetchCategories = async () => {
             setLoading(true);
             try {
-                const response = await categoryApi.getAll();
+                const params = {};
+                const response = await categoryApi.getAll(params);
                 if (response.success && response.date) {
                     setCategoryData(response.date);
                 } else {
@@ -106,37 +107,9 @@ export default function CategoryManagement() {
         return () => {
             window.removeEventListener('categoryRestored', handleCategoryRestored);
         };
-    }, [tAlert, t]);
+    }, [tAlert, t, selectedBranchId, selectedBranchName]);
 
-    // Fetch all products
-    useEffect(() => {
-        const fetchProducts = async () => {
-            try {
-                const response = await productApi.getAll();
-                if (response.success && response.date) {
-                    setAllProducts(response.date);
-                } else {
-                    setAllProducts([]);
-                }
-            } catch (error) {
-                console.error('Error fetching products:', error);
-                setAllProducts([]);
-            }
-        };
-
-        fetchProducts();
-        
-        // Custom event dinlə - məhsul bərpa ediləndə yenilə
-        const handleProductRestored = () => {
-            fetchProducts();
-        };
-        
-        window.addEventListener('productRestored', handleProductRestored);
-        
-        return () => {
-            window.removeEventListener('productRestored', handleProductRestored);
-        };
-    }, []);
+    // Məhsullar artıq bu səhifədə göstərilmir
 
     const handleEdit = async (category) => {
         navigate(`/admin/category-form?id=${category.id.toString()}`);
@@ -385,109 +358,7 @@ export default function CategoryManagement() {
         }
     };
 
-    const handleAddProduct = (categoryId) => {
-        setAddingProduct(categoryId);
-        setProductFormData({ 
-            name: '', 
-            categoryId: categoryId,
-            subCategoryId: ''
-        });
-        setProductErrors({});
-        // Expand category if not expanded
-        if (!expandedCategories[categoryId]) {
-            setExpandedCategories(prev => ({ ...prev, [categoryId]: true }));
-        }
-    };
-
-    const handleSelectProducts = (categoryId) => {
-        setSelectingProducts(categoryId);
-        setSelectedProductIds([]);
-        setProductSearchTerm('');
-        // Expand category if not expanded
-        if (!expandedCategories[categoryId]) {
-            setExpandedCategories(prev => ({ ...prev, [categoryId]: true }));
-        }
-    };
-
-    const handleCancelSelectProducts = () => {
-        setSelectingProducts(null);
-        setSelectedProductIds([]);
-        setProductSearchTerm('');
-    };
-
-    const handleProductSelectionChange = (productId) => {
-        setSelectedProductIds(prev => {
-            if (prev.includes(productId)) {
-                return prev.filter(id => id !== productId);
-            } else {
-                return [...prev, productId];
-            }
-        });
-    };
-
-    const handleAddSelectedProducts = async (categoryId) => {
-        if (selectedProductIds.length === 0) {
-            Alert.error(tAlert('error') || 'Xəta', t('no_products_selected') || 'Heç bir məhsul seçilməyib');
-            return;
-        }
-
-        setSavingProduct(true);
-        try {
-            // Get subcategory if selected
-            const subCategoryId = productFormData.subCategoryId || null;
-
-            // Update each selected product
-            await Promise.all(selectedProductIds.map(productId => 
-                productApi.update(productId, {
-                    categoryId: categoryId,
-                    subCategoryId: subCategoryId
-                })
-            ));
-
-            // Refresh categories
-            const response = await categoryApi.getAll();
-            if (response.success && response.date) {
-                setCategoryData(response.date);
-            }
-
-            // Close form
-            setSelectingProducts(null);
-            setSelectedProductIds([]);
-            setProductFormData({ name: '', categoryId: '', subCategoryId: '' });
-
-            Alert.success(t('add_success') || 'Uğurlu!', t('add_products_success_text') || `${selectedProductIds.length} məhsul uğurla əlavə edildi`);
-        } catch (error) {
-            console.error('Error adding products:', error);
-            Alert.error(tAlert('error') || 'Xəta!', error.response?.data?.message || tAlert('error_text') || 'Əməliyyat zamanı xəta baş verdi');
-        } finally {
-            setSavingProduct(false);
-        }
-    };
-
-    const handleCancelAddProduct = () => {
-        setAddingProduct(null);
-        setProductFormData({ name: '', categoryId: '', subCategoryId: '' });
-        setProductErrors({});
-    };
-
-    const handleProductInputChange = (field, value) => {
-        setProductFormData(prev => ({
-            ...prev,
-            [field]: value
-        }));
-        // Clear error when user starts typing
-        if (productErrors[field]) {
-            setProductErrors(prev => ({
-                ...prev,
-                [field]: ''
-            }));
-        }
-    };
-
-    const handleSaveProduct = async (categoryId) => {
-        // Navigate to product form with category pre-selected
-        navigate(`/admin/product-form?categoryId=${categoryId}${productFormData.subCategoryId ? `&subCategoryId=${productFormData.subCategoryId}` : ''}`);
-    };
+    // Məhsul funksiyaları ləğv edildi
 
     return (
         <div className="p-6">
@@ -496,13 +367,25 @@ export default function CategoryManagement() {
                     <h1 className="text-2xl font-bold text-gray-900">{t('category_management') || 'Kateqoriya İdarəetməsi'}</h1>
                     <p className="text-gray-600">{t('manage_categories') || 'Kateqoriyaları idarə edin'}</p>
                 </div>
-                <button
-                    onClick={handleAddCategory}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                    <Plus className="w-4 h-4" />
-                    {t('add_category') || 'Kateqoriya Əlavə Et'}
-                </button>
+                <div className="flex items-center gap-4">
+                    <div className="relative">
+                        <input
+                            type="text"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            placeholder={t('search_placeholder') || 'Kateqoriya axtar...'}
+                            className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-64"
+                        />
+                        <Search className="w-5 h-5 text-gray-400 absolute left-3 top-2.5" />
+                    </div>
+                    <button
+                        onClick={handleAddCategory}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                        <Plus className="w-4 h-4" />
+                        {t('add_category') || 'Kateqoriya Əlavə Et'}
+                    </button>
+                </div>
             </div>
 
             {loading ? (
@@ -554,7 +437,7 @@ export default function CategoryManagement() {
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
-                                {categoryData.map((category) => (
+                                {filteredCategories.map((category) => (
                                     <React.Fragment key={category.id}>
                                         <tr className="hover:bg-gray-50">
                                             <td className="px-6 py-4 whitespace-nowrap">
@@ -613,211 +496,7 @@ export default function CategoryManagement() {
                                             <tr>
                                                 <td colSpan="6" className="px-6 py-4 bg-gray-50">
                                                     <div className="ml-8 space-y-6">
-                                                        {/* Products Section */}
-                                                        <div>
-                                                                <div className="flex items-center justify-between mb-3">
-                                                                <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                                                                    <Package className="w-4 h-4" />
-                                                                    {t('products') || 'Məhsullar'}
-                                                                    {category.products && category.products.length > 0 && (
-                                                                        <span className="text-xs text-gray-500">({category.products.length})</span>
-                                                                    )}
-                                                                </h4>
-                                                                <div className="flex items-center gap-2">
-                                                                    <button
-                                                                        onClick={() => handleSelectProducts(category.id)}
-                                                                        className="flex items-center gap-1 px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-                                                                    >
-                                                                        <Package className="w-3 h-3" />
-                                                                        {t('select_products') || 'Məhsul Seç'}
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => handleAddProduct(category.id)}
-                                                                        className="flex items-center gap-1 px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-                                                                    >
-                                                                        <Plus className="w-3 h-3" />
-                                                                        {t('add_product') || 'Yeni Məhsul'}
-                                                                    </button>
-                                                                </div>
-                                                            </div>
-
-                                                            {/* Add Product Form */}
-                                                            {addingProduct === category.id && (
-                                                                <div className="mb-4 p-4 bg-purple-50 border border-purple-200 rounded-lg">
-                                                                    <h5 className="text-sm font-semibold text-gray-900 mb-3">
-                                                                        {t('add_product') || 'Yeni Məhsul'}
-                                                                    </h5>
-                                                                    <div className="flex items-end gap-2">
-                                                                        <div className="flex-1">
-                                                                            <label className="block text-xs font-medium text-gray-700 mb-1">
-                                                                                {t('subcategory') || 'Alt Kateqoriya'} ({t('optional') || 'İstəyə bağlı'})
-                                                                            </label>
-                                                                            <select
-                                                                                value={productFormData.subCategoryId}
-                                                                                onChange={(e) => handleProductInputChange('subCategoryId', e.target.value)}
-                                                                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                                                            >
-                                                                                <option value="">{t('no_subcategory') || 'Alt kateqoriya seçilmədi'}</option>
-                                                                                {category.subCategories && category.subCategories.map(subCat => (
-                                                                                    <option key={subCat.id} value={subCat.id}>
-                                                                                        {subCat.name}
-                                                                                    </option>
-                                                                                ))}
-                                                                            </select>
-                                                                        </div>
-                                                                        <button
-                                                                            onClick={() => handleSaveProduct(category.id)}
-                                                                            disabled={savingProduct}
-                                                                            className="px-4 py-2 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                                                                        >
-                                                                            {t('continue_to_product_form') || 'Məhsul Formuna Keç'}
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={handleCancelAddProduct}
-                                                                            disabled={savingProduct}
-                                                                            className="px-3 py-2 text-xs bg-gray-500 text-white rounded-lg hover:bg-gray-600 disabled:opacity-50 transition-colors"
-                                                                        >
-                                                                            {t('cancel') || 'Ləğv et'}
-                                                                        </button>
-                                                                    </div>
-                                                                </div>
-                                                            )}
-
-                                                            {/* Select Products Form */}
-                                                            {selectingProducts === category.id && (
-                                                                <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-                                                                    <h5 className="text-sm font-semibold text-gray-900 mb-3">
-                                                                        {t('select_products') || 'Məhsul Seç'}
-                                                                    </h5>
-                                                                    <div className="space-y-3">
-                                                                        <div className="flex-1">
-                                                                            <label className="block text-xs font-medium text-gray-700 mb-1">
-                                                                                {t('subcategory') || 'Alt Kateqoriya'} ({t('optional') || 'İstəyə bağlı'})
-                                                                            </label>
-                                                                            <select
-                                                                                value={productFormData.subCategoryId}
-                                                                                onChange={(e) => handleProductInputChange('subCategoryId', e.target.value)}
-                                                                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                                                                            >
-                                                                                <option value="">{t('no_subcategory') || 'Alt kateqoriya seçilmədi'}</option>
-                                                                                {category.subCategories && category.subCategories.map(subCat => (
-                                                                                    <option key={subCat.id} value={subCat.id}>
-                                                                                        {subCat.name}
-                                                                                    </option>
-                                                                                ))}
-                                                                            </select>
-                                                                        </div>
-                                                                        <div>
-                                                                            <label className="block text-xs font-medium text-gray-700 mb-1">
-                                                                                {t('search_products') || 'Məhsul Axtar'}
-                                                                            </label>
-                                                                            <input
-                                                                                type="text"
-                                                                                value={productSearchTerm}
-                                                                                onChange={(e) => setProductSearchTerm(e.target.value)}
-                                                                                placeholder={t('search_products_placeholder') || 'Məhsul adı və ya barcode ilə axtar...'}
-                                                                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                                                                            />
-                                                                        </div>
-                                                                        <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-lg p-2 bg-white">
-                                                                            {(() => {
-                                                                                // Filter products: exclude those already in this category and filter by search term
-                                                                                const filteredProducts = allProducts.filter(product => {
-                                                                                    const isInThisCategory = product.categoryId === category.id;
-                                                                                    if (isInThisCategory) return false;
-                                                                                    
-                                                                                    if (productSearchTerm.trim()) {
-                                                                                        const searchLower = productSearchTerm.toLowerCase();
-                                                                                        return product.name?.toLowerCase().includes(searchLower) ||
-                                                                                               product.barcode?.toLowerCase().includes(searchLower);
-                                                                                    }
-                                                                                    return true;
-                                                                                });
-
-                                                                                return filteredProducts.length > 0 ? (
-                                                                                    filteredProducts.map((product) => {
-                                                                                        const isSelected = selectedProductIds.includes(product.id);
-                                                                                        return (
-                                                                                            <label
-                                                                                                key={product.id}
-                                                                                                className="flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-gray-50"
-                                                                                            >
-                                                                                                <input
-                                                                                                    type="checkbox"
-                                                                                                    checked={isSelected}
-                                                                                                    onChange={() => handleProductSelectionChange(product.id)}
-                                                                                                    className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
-                                                                                                />
-                                                                                                <span className="text-sm text-gray-900 flex-1">
-                                                                                                    {product.name}
-                                                                                                    {product.barcode && (
-                                                                                                        <span className="ml-2 text-xs text-gray-500">({product.barcode})</span>
-                                                                                                    )}
-                                                                                                </span>
-                                                                                            </label>
-                                                                                        );
-                                                                                    })
-                                                                                ) : (
-                                                                                    <div className="text-sm text-gray-500 text-center py-4">
-                                                                                        {productSearchTerm.trim() 
-                                                                                            ? (t('no_products_found') || 'Məhsul tapılmadı')
-                                                                                            : (t('no_products_available') || 'Məhsul yoxdur')
-                                                                                        }
-                                                                                    </div>
-                                                                                );
-                                                                            })()}
-                                                                        </div>
-                                                                        <div className="flex items-center justify-end gap-2">
-                                                                            <button
-                                                                                onClick={handleCancelSelectProducts}
-                                                                                disabled={savingProduct}
-                                                                                className="px-3 py-2 text-xs bg-gray-500 text-white rounded-lg hover:bg-gray-600 disabled:opacity-50 transition-colors"
-                                                                            >
-                                                                                {t('cancel') || 'Ləğv et'}
-                                                                            </button>
-                                                                            <button
-                                                                                onClick={() => handleAddSelectedProducts(category.id)}
-                                                                                disabled={savingProduct || selectedProductIds.length === 0}
-                                                                                className="px-4 py-2 text-xs bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
-                                                                            >
-                                                                                {savingProduct ? (t('saving') || 'Saxlanılır...') : `${t('add_selected') || 'Seçilmişləri Əlavə Et'} (${selectedProductIds.length})`}
-                                                                            </button>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            )}
-
-                                                            {/* Products List */}
-                                                            <div className="space-y-2">
-                                                                {category.products && category.products.length > 0 ? (
-                                                                    category.products.map((product) => (
-                                                                        <div key={product.id} className="flex items-center justify-between p-3 bg-white rounded border border-gray-200 hover:bg-gray-50">
-                                                                            <div className="flex-1">
-                                                                                <div className="font-medium text-gray-900">{product.name}</div>
-                                                                            </div>
-                                                                            <div className="flex items-center gap-2">
-                                                                                <span className={`px-2 py-1 text-xs rounded-full ${
-                                                                                    product.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                                                                                }`}>
-                                                                                    {product.isActive ? (t('active') || 'Aktiv') : (t('inactive') || 'Qeyri-aktiv')}
-                                                                                </span>
-                                                                                <button
-                                                                                    onClick={() => navigate(`/admin/product-form?id=${product.id}`)}
-                                                                                    className="text-indigo-600 hover:text-indigo-900 p-1"
-                                                                                    title={t('edit') || 'Redaktə et'}
-                                                                                >
-                                                                                    <Edit className="w-4 h-4" />
-                                                                                </button>
-                                                                            </div>
-                                                                        </div>
-                                                                    ))
-                                                                ) : (
-                                                                    <div className="text-sm text-gray-500 text-center py-4">
-                                                                        {t('no_products') || 'Məhsul yoxdur'}
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
+                                                        {/* Məhsullar bölməsi silindi */}
 
                                                         {/* SubCategories Section */}
                                                         <div>

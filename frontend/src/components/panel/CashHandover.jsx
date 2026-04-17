@@ -3,8 +3,9 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useLocation } from 'react-router-dom';
 import TableTemplate from '../ui/TableTamplate';
 import Alert from '../ui/Alert';
-import { Edit, Trash2, Eye, Plus } from 'lucide-react';
+import { Edit, Trash2, Eye, Plus, Wallet, Hash, PiggyBank, ArrowDownCircle, ArrowUpCircle, ReceiptText } from 'lucide-react';
 import { cashHandoverApi } from '../../api';
+import { useLocalStorage, useBranch } from '../../hooks';
 
 export default function CashHandover() {
     const { t } = useTranslation('cashHandover');
@@ -13,12 +14,21 @@ export default function CashHandover() {
     const location = useLocation();
     const [cashHandoverData, setCashHandoverData] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [dateRange, setDateRange] = useState(() => {
+    const { selectedBranchId } = useBranch();
+    const [kassaBalance, setKassaBalance] = useState(null);
+    const [kassaBreakdown, setKassaBreakdown] = useState(null);
+    const [loadingKassa, setLoadingKassa] = useState(false);
+
+    const defaultDateRange = useMemo(() => {
         const today = new Date();
+        const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        const localStart = `${firstDayOfMonth.getFullYear()}-${String(firstDayOfMonth.getMonth() + 1).padStart(2, '0')}-${String(firstDayOfMonth.getDate()).padStart(2, '0')}`;
         const localToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-        return { start: localToday, end: localToday };
-    });
-    const [datePreset, setDatePreset] = useState('today');
+        return { start: localStart, end: localToday };
+    }, []);
+
+    const [dateRange, setDateRange] = useLocalStorage('cashHandover_dateRange', defaultDateRange);
+    const [datePreset, setDatePreset] = useLocalStorage('cashHandover_datePreset', 'thisMonth');
     const isAdmin = useMemo(() => location.pathname.includes('/admin'), [location.pathname]);
 
     const columns = useMemo(() => [
@@ -83,6 +93,7 @@ export default function CashHandover() {
             const params = {};
             if (dateRange.start) params.startDate = dateRange.start;
             if (dateRange.end) params.endDate = dateRange.end;
+            if (selectedBranchId) params.branchId = selectedBranchId;
 
             const response = await cashHandoverApi.getAll(params);
             if (response.success && response.date) {
@@ -97,11 +108,31 @@ export default function CashHandover() {
         } finally {
             setLoading(false);
         }
-    }, [dateRange, t]);
+    }, [dateRange, selectedBranchId, t]);
+
+    const fetchKassaBalance = useCallback(async () => {
+        setLoadingKassa(true);
+        try {
+            const branchId = selectedBranchId && selectedBranchId !== 'central' ? selectedBranchId : null;
+            const response = await cashHandoverApi.getPendingDates(branchId);
+            if (response.success) {
+                setKassaBalance(response.totalAvailable ?? 0);
+                setKassaBreakdown(response.breakdown ?? null);
+            }
+        } catch (error) {
+            console.error('Error fetching kassa balance:', error);
+        } finally {
+            setLoadingKassa(false);
+        }
+    }, [selectedBranchId]);
 
     useEffect(() => {
         fetchCashHandovers();
     }, [fetchCashHandovers]);
+
+    useEffect(() => {
+        fetchKassaBalance();
+    }, [fetchKassaBalance]);
 
     const handleEdit = async (cashHandover) => {
         if (!isAdmin) return;
@@ -189,6 +220,12 @@ export default function CashHandover() {
         }
     };
 
+    const summary = useMemo(() => {
+        const total = cashHandoverData.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+        const count = cashHandoverData.length;
+        return { total, count };
+    }, [cashHandoverData]);
+
     const handleAddCashHandover = () => {
         const isAdmin = location.pathname.includes('/admin');
         const addCashHandoverPath = isAdmin ? '/admin/cash-handover-form' : '/reception/cash-handover-form';
@@ -239,6 +276,98 @@ export default function CashHandover() {
                     showAction: true
                 }}
             />
+
+            {/* Kassa balance — always shown when data loaded */}
+            {!loadingKassa && kassaBalance !== null && (
+                <div className="mt-4">
+                    <div className={`p-5 rounded-2xl border-2 ${
+                        kassaBalance > 0
+                            ? 'bg-amber-50 border-amber-300'
+                            : 'bg-emerald-50 border-emerald-200'
+                    }`}>
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                            {/* Left: main balance */}
+                            <div className="flex items-center gap-4">
+                                <div className={`w-13 h-13 rounded-2xl flex items-center justify-center shrink-0 ${
+                                    kassaBalance > 0 ? 'bg-amber-100' : 'bg-emerald-100'
+                                }`}>
+                                    <PiggyBank className={`w-7 h-7 ${kassaBalance > 0 ? 'text-amber-600' : 'text-emerald-600'}`} />
+                                </div>
+                                <div>
+                                    <p className={`text-xs font-semibold uppercase tracking-wide ${
+                                        kassaBalance > 0 ? 'text-amber-500' : 'text-emerald-500'
+                                    }`}>
+                                        Kassada Qalan Məbləğ
+                                    </p>
+                                    <p className={`text-3xl font-bold ${
+                                        kassaBalance > 0 ? 'text-amber-700' : 'text-emerald-700'
+                                    }`}>
+                                        {kassaBalance.toFixed(2)}
+                                        <span className="text-base font-semibold ml-1">AZN</span>
+                                    </p>
+                                    <p className={`text-xs mt-0.5 ${kassaBalance > 0 ? 'text-amber-500' : 'text-emerald-500'}`}>
+                                        {kassaBalance > 0
+                                            ? 'Hələ təslim edilməyib'
+                                            : 'Bütün məbləğlər təslim edilib'}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Right: breakdown pills */}
+                            {kassaBreakdown && (
+                                <div className="flex flex-wrap gap-2">
+                                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-full text-xs text-gray-700 font-medium shadow-sm">
+                                        <ArrowDownCircle className="w-3.5 h-3.5 text-green-500" />
+                                        Gəlir: <span className="font-bold text-green-700">{parseFloat(kassaBreakdown.cashIn || 0).toFixed(2)} AZN</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-full text-xs text-gray-700 font-medium shadow-sm">
+                                        <ArrowUpCircle className="w-3.5 h-3.5 text-red-500" />
+                                        Çıxım: <span className="font-bold text-red-700">{parseFloat(kassaBreakdown.cashOut || 0).toFixed(2)} AZN</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-full text-xs text-gray-700 font-medium shadow-sm">
+                                        <ReceiptText className="w-3.5 h-3.5 text-blue-500" />
+                                        Təslim: <span className="font-bold text-blue-700">{parseFloat(kassaBreakdown.handovers || 0).toFixed(2)} AZN</span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Summary of current list */}
+            {!loading && cashHandoverData.length > 0 && (
+                <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="flex items-center gap-4 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                        <div className="w-11 h-11 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
+                            <Wallet className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <div>
+                            <p className="text-xs font-medium text-blue-500 uppercase tracking-wide">
+                                Seçilmiş Dövr Üzrə Cəmi
+                            </p>
+                            <p className="text-xl font-bold text-blue-700">
+                                {summary.total.toFixed(2)} <span className="text-sm font-semibold">AZN</span>
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-4 p-4 bg-purple-50 border border-purple-200 rounded-xl">
+                        <div className="w-11 h-11 rounded-xl bg-purple-100 flex items-center justify-center shrink-0">
+                            <Hash className="w-5 h-5 text-purple-600" />
+                        </div>
+                        <div>
+                            <p className="text-xs font-medium text-purple-500 uppercase tracking-wide">
+                                Ümumi Təslim Sayı
+                            </p>
+                            <p className="text-xl font-bold text-purple-700">
+                                {summary.count} <span className="text-sm font-semibold">ədəd</span>
+                            </p>
+                        </div>
+                    </div>
+
+                </div>
+            )}
         </div>
     );
 }

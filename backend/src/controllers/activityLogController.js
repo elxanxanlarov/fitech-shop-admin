@@ -3,12 +3,31 @@ import prisma from '../lib/prisma.js';
 // Bütün activity log-ları gətir
 export const getAllActivityLogs = async (req, res) => {
     try {
-        const { staffId, entityType, action, startDate, endDate, limit = 100, page = 1 } = req.query;
+        const { staffId, entityType, action, startDate, endDate, branchId, includeUnassigned, limit = 100, page = 1 } = req.query;
         
         const where = {};
         
         if (staffId) {
             where.staffId = staffId;
+        }
+
+        if (branchId && branchId !== 'central') {
+            if (includeUnassigned === 'true') {
+                // Kürdəxanı seçiləndə: həmin filialın işçiləri + staff-ı olmayan köhnə qeydlər
+                // + həmin filiala aid əməliyyat konteksti (məs. superadmin tərəfindən işçi CRUD)
+                where.OR = [
+                    { staff: { branchId: branchId } },
+                    { branchId: branchId },
+                    { staffId: null },
+                    { staff: { branchId: null } }
+                ];
+            } else {
+                // Əməliyyatı edən işçi həmin filialdadır VƏ ya qeyd həmin filiala kontekstlə yazılıb
+                where.OR = [
+                    { staff: { branchId: branchId } },
+                    { branchId: branchId }
+                ];
+            }
         }
         
         if (entityType) {
@@ -34,7 +53,7 @@ export const getAllActivityLogs = async (req, res) => {
         const skip = (parseInt(page) - 1) * parseInt(limit);
         
         const [logs, total] = await Promise.all([
-            prisma.activityLog.findMany({
+            prisma.activitylog.findMany({
                 where,
                 include: {
                     staff: {
@@ -43,11 +62,24 @@ export const getAllActivityLogs = async (req, res) => {
                             name: true,
                             surName: true,
                             email: true,
+                            branchId: true,
+                            branch: {
+                                select: {
+                                    id: true,
+                                    name: true
+                                }
+                            },
                             role: {
                                 select: {
                                     name: true
                                 }
                             }
+                        }
+                    },
+                    branch: {
+                        select: {
+                            id: true,
+                            name: true
                         }
                     }
                 },
@@ -57,7 +89,7 @@ export const getAllActivityLogs = async (req, res) => {
                 skip,
                 take: parseInt(limit)
             }),
-            prisma.activityLog.count({ where })
+            prisma.activitylog.count({ where })
         ]);
         
         res.json({
@@ -85,7 +117,7 @@ export const getActivityLogById = async (req, res) => {
     try {
         const { id } = req.params;
         
-        const log = await prisma.activityLog.findUnique({
+        const log = await prisma.activitylog.findUnique({
             where: { id },
             include: {
                 staff: {
@@ -94,11 +126,24 @@ export const getActivityLogById = async (req, res) => {
                         name: true,
                         surName: true,
                         email: true,
+                        branchId: true,
+                        branch: {
+                            select: {
+                                id: true,
+                                name: true
+                            }
+                        },
                         role: {
                             select: {
                                 name: true
                             }
                         }
+                    }
+                },
+                branch: {
+                    select: {
+                        id: true,
+                        name: true
                     }
                 }
             }
@@ -134,7 +179,7 @@ export const getActivityLogsByStaff = async (req, res) => {
         const skip = (parseInt(page) - 1) * parseInt(limit);
         
         const [logs, total] = await Promise.all([
-            prisma.activityLog.findMany({
+            prisma.activitylog.findMany({
                 where: { staffId },
                 include: {
                     staff: {
@@ -143,11 +188,24 @@ export const getActivityLogsByStaff = async (req, res) => {
                             name: true,
                             surName: true,
                             email: true,
+                            branchId: true,
+                            branch: {
+                                select: {
+                                    id: true,
+                                    name: true
+                                }
+                            },
                             role: {
                                 select: {
                                     name: true
                                 }
                             }
+                        }
+                    },
+                    branch: {
+                        select: {
+                            id: true,
+                            name: true
                         }
                     }
                 },
@@ -157,7 +215,7 @@ export const getActivityLogsByStaff = async (req, res) => {
                 skip,
                 take: parseInt(limit)
             }),
-            prisma.activityLog.count({ where: { staffId } })
+            prisma.activitylog.count({ where: { staffId } })
         ]);
         
         res.json({
@@ -183,11 +241,12 @@ export const getActivityLogsByStaff = async (req, res) => {
 // Activity log yarat (helper funksiya kimi istifadə olunur)
 export const createActivityLog = async (data) => {
     try {
-        const { staffId, entityType, entityId, action, description, changes } = data;
+        const { staffId, entityType, entityId, action, description, changes, branchId: logBranchId } = data;
         
-        const log = await prisma.activityLog.create({
+        const log = await prisma.activitylog.create({
             data: {
                 staffId: staffId || null,
+                branchId: logBranchId || null,
                 entityType,
                 entityId,
                 action,
@@ -218,7 +277,7 @@ export const deleteActivityLog = async (req, res) => {
     try {
         const { id } = req.params;
         
-        const log = await prisma.activityLog.findUnique({
+        const log = await prisma.activitylog.findUnique({
             where: { id }
         });
         
@@ -229,7 +288,7 @@ export const deleteActivityLog = async (req, res) => {
             });
         }
         
-        await prisma.activityLog.delete({
+        await prisma.activitylog.delete({
             where: { id }
         });
         

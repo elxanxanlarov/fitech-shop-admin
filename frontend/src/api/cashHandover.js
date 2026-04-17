@@ -34,12 +34,25 @@ export const cashHandoverApi = {
   },
 
   // Get available revenue by date
-  getAvailableRevenueByDate: async (date, excludeId = null) => {
+  getAvailableRevenueByDate: async (date, excludeId = null, branchId = null) => {
     const params = { date };
     if (excludeId) {
       params.excludeId = excludeId;
     }
+    if (branchId) {
+      params.branchId = branchId;
+    }
     const response = await api.get('/cash-handover/available-revenue', { params });
+    return response.data;
+  },
+
+  // Get pending dates for payout
+  getPendingDates: async (branchId = null) => {
+    const params = {};
+    if (branchId) {
+      params.branchId = branchId;
+    }
+    const response = await api.get('/cash-handover/pending-dates', { params });
     return response.data;
   },
 };

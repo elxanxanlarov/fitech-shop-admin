@@ -1,4 +1,5 @@
 export { default as useClickOutside } from './useClickOutside';
+export { default as useLocalStorage } from './useLocalStorage';
 export { useProductImage } from './useProductImage';
 export { useProductCategories } from './useProductCategories';
 export { useProductStockManagement } from './useProductStockManagement';
@@ -7,3 +8,4 @@ export { useProductFormValidation } from './useProductFormValidation';
 export { useProductFormSubmit } from './useProductFormSubmit';
 export { useProductDiscountHandler } from './useProductDiscountHandler';
 export { useProductFormChangeDetection } from './useProductFormChangeDetection';
+export { useBranch } from '../context/BranchContext';
