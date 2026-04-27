@@ -104,11 +104,7 @@ export const seedData = async () => {
       }
     }
 
-    // Kürdəxanı filialını yoxla və yarat (yoxdursa) və işçiləri ora köçür
-    const kurdaxani = await ensureBranch("Kürdəxanı", "Kürdəxanı qəsəbəsi");
-    if (kurdaxani) {
-        await migrateStaffToBranch(kurdaxani.id);
-    }
+    // Filiallar artıq avtomatik yaradılmır, UI vasitəsilə idarə olunur.
 
     console.log("✅ Seed data tamamlandı!");
   } catch (error) {

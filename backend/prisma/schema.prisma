@@ -7,8 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// === ENUMS ===
-
 enum deletetype {
   NONE
   SOFT
@@ -127,9 +125,10 @@ model product {
   stockMovements    stockmovement[]
   finalDeliveryItems finaldeliveryitem[]
   branchStocks      branchstock[]
-  transferItems     stocktransferitem[]
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
+  transferItems         stocktransferitem[]
+  branchDeletedProducts BranchDeletedProduct[] @relation("ProductDeletedInBranches")
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
 
   @@map("product")
 }
@@ -356,6 +355,8 @@ model notification {
   message   String
   saleId    String?
   sale      sale?     @relation(fields: [saleId], references: [id], onUpdate: Cascade, onDelete: Cascade)
+  branchId  String?
+  branch    branch?   @relation(fields: [branchId], references: [id], onUpdate: Cascade, onDelete: SetNull)
   isRead    Boolean   @default(false)
   readAt    DateTime?
   dueDate   DateTime?
@@ -387,6 +388,8 @@ model staff {
   finalDeliveries       finaldelivery[]
   dailySummaries        dailysummary[]
   transfers             stocktransfer[]
+  allowedStartHour      Int             @default(9)
+  allowedEndHour        Int             @default(21)
   createdAt             DateTime        @default(now())
   updatedAt             DateTime        @updatedAt
 
@@ -470,6 +473,8 @@ model branch {
   categories      category[]
   subCategories   subcategory[]
   activityLogs    activitylog[]
+  notifications   notification[]
+  deletedProducts BranchDeletedProduct[] @relation("BranchDeletedProducts")
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
@@ -521,5 +526,17 @@ model stocktransferitem {
   createdAt         DateTime      @default(now())
 
   @@map("stocktransferitem")
+}
+
+model BranchDeletedProduct {
+  id        String   @id @default(uuid())
+  branchId  String
+  branch    branch   @relation("BranchDeletedProducts", fields: [branchId], references: [id], onUpdate: Cascade, onDelete: Cascade)
+  productId String
+  product   product  @relation("ProductDeletedInBranches", fields: [productId], references: [id], onUpdate: Cascade, onDelete: Cascade)
+  deletedAt DateTime @default(now())
+
+  @@unique([branchId, productId])
+  @@map("branch_deleted_product")
 }
 

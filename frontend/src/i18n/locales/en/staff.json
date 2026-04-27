@@ -74,5 +74,9 @@
   "password_change_superadmin": "As a superadmin, you can change this staff member's password",
   "branch": "Branch",
   "select_branch": "Select branch",
-  "branch_locked_own": "You can only assign your own branch"
+  "branch_locked_own": "You can only assign your own branch",
+  "login_hours": "Login Hours",
+  "start_hour": "Start Hour",
+  "end_hour": "End Hour",
+  "login_hours_note": "This restriction only applies to staff. It does not apply to Superadmins and Head Admins."
 }

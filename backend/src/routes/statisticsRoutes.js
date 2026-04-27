@@ -5,7 +5,8 @@ import {
     getDailyStatistics,
     getTopSellingProducts,
     getStatisticsByPaymentType,
-    getCustomerStatistics
+    getCustomerStatistics,
+    getSalesLedger,
 } from '../controllers/statisticsController.js';
 import { authenticateToken } from '../middleware/authMiddleware.js';
 
@@ -31,6 +32,9 @@ router.get('/payment-type', getStatisticsByPaymentType);
 
 // Müştəri statistikası
 router.get('/customers', getCustomerStatistics);
+
+// Superadmin satış dəftəri
+router.get('/ledger', getSalesLedger);
 
 export default router;
 

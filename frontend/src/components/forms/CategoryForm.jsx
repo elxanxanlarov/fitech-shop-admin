@@ -7,8 +7,7 @@ import SearchDropdown from '../ui/SearchDropdown';
 import { MdFolder, MdDescription, MdArrowBack } from 'react-icons/md';
 import { BiBuildings } from 'react-icons/bi';
 import { Plus, Edit, Trash2 } from 'lucide-react';
-import { categoryApi, subCategoryApi, branchApi } from '../../api';
-import { useBranch } from '../../hooks';
+import { categoryApi, subCategoryApi } from '../../api';
 
 export default function CategoryForm() {
     const navigate = useNavigate();
@@ -17,8 +16,7 @@ export default function CategoryForm() {
     const id = searchParams.get('id');
     const { t } = useTranslation('category');
     const { t: tAlert } = useTranslation('alert');
-    const { selectedBranchId } = useBranch();
-    const initialBranchIdRef = useRef(selectedBranchId);
+
 
     const isAdmin = location.pathname.includes('/admin');
     const categoryPagePath = isAdmin ? '/admin/category-management' : '/reception/category-management';
@@ -164,8 +162,7 @@ export default function CategoryForm() {
             const payload = {
                 name: formData.name.trim(),
                 description: formData.description?.trim() || null,
-                isActive: formData.isActive,
-                branchId: null
+                isActive: formData.isActive
             };
 
             if (isEditMode) {

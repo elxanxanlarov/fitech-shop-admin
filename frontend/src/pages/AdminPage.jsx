@@ -36,6 +36,8 @@ import CentralWarehouse from "../components/panel/CentralWarehouse.jsx"
 import ConvertCenter from "../components/panel/ConvertCenter.jsx"
 import DeletedElements from "../components/panel/DeletedElements.jsx"
 import ProductBranchTransfer from "../components/panel/ProductBranchTransfer.jsx"
+import BranchDeletedProducts from "../components/panel/BranchDeletedProducts.jsx"
+import SalesLedger from "../components/panel/SalesLedger.jsx"
 
 
 export default function AdminPanel() {
@@ -87,6 +89,8 @@ export default function AdminPanel() {
             {slug === "product-branch-transfer" && <ProductBranchTransfer />}
             {slug === "subcategory-management" && <SubCategoryManagement />}
             {slug === "profile" && <Profile />}
+            {slug === "branch-deleted-products" && <BranchDeletedProducts />}
+            {slug === "sales-ledger" && <SalesLedger />}
         </div>
     )
 }

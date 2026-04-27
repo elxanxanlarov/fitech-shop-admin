@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
-import { Trash2, X, RotateCcw, Package, DollarSign, ShoppingCart, Folder, Shield } from 'lucide-react';
-import { productApi, expenseApi, saleApi, categoryApi, subCategoryApi, roleApi } from '../../api';
-import { useClickOutside } from '../../hooks';
+import { useState, useEffect, useCallback } from 'react';
+import { Trash2, X, RotateCcw, Package, DollarSign, ShoppingCart, Folder, Shield, Loader2 } from 'lucide-react';
+import { productApi, expenseApi, saleApi, categoryApi, subCategoryApi, roleApi, convertApi } from '../../api';
+import { useClickOutside, useBranch } from '../../hooks';
 import { useTranslation } from 'react-i18next';
 import Alert from './Alert';
 
@@ -26,303 +26,181 @@ const TYPE_LABELS = {
 export default function DeletedProductsBell() {
     const { t } = useTranslation('product');
     const { t: tAlert } = useTranslation('alert');
+    const { selectedBranchId } = useBranch();
     const [deletedItems, setDeletedItems] = useState([]);
     const [showDropdown, setShowDropdown] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [actionId, setActionId] = useState(null);
+    const [isBulkProcessing, setIsBulkProcessing] = useState(false);
+    
     const dropdownRef = useClickOutside(showDropdown, () => setShowDropdown(false));
 
-    useEffect(() => {
-        fetchAllDeletedItems();
-        // Hər 30 saniyədə bir yenilə
-        const interval = setInterval(fetchAllDeletedItems, 30000);
-        
-        // Custom event dinlə - element silinəndə və ya bərpa ediləndə yenilə
-        const handleItemDeleted = () => {
-            fetchAllDeletedItems();
-        };
-        
-        const handleItemRestored = () => {
-            fetchAllDeletedItems();
-        };
-        
-        window.addEventListener('productDeleted', handleItemDeleted);
-        window.addEventListener('productSoftDeleted', handleItemDeleted);
-        window.addEventListener('productRestored', handleItemRestored);
-        window.addEventListener('expenseDeleted', handleItemDeleted);
-        window.addEventListener('expenseRestored', handleItemRestored);
-        window.addEventListener('saleDeleted', handleItemDeleted);
-        window.addEventListener('saleRestored', handleItemRestored);
-        window.addEventListener('categoryDeleted', handleItemDeleted);
-        window.addEventListener('categoryRestored', handleItemRestored);
-        window.addEventListener('subCategoryDeleted', handleItemDeleted);
-        window.addEventListener('subCategoryRestored', handleItemRestored);
-        window.addEventListener('roleDeleted', handleItemDeleted);
-        window.addEventListener('roleRestored', handleItemRestored);
-        
-        return () => {
-            clearInterval(interval);
-            window.removeEventListener('productDeleted', handleItemDeleted);
-            window.removeEventListener('productSoftDeleted', handleItemDeleted);
-            window.removeEventListener('productRestored', handleItemRestored);
-            window.removeEventListener('expenseDeleted', handleItemDeleted);
-            window.removeEventListener('expenseRestored', handleItemRestored);
-            window.removeEventListener('saleDeleted', handleItemDeleted);
-            window.removeEventListener('saleRestored', handleItemRestored);
-            window.removeEventListener('categoryDeleted', handleItemDeleted);
-            window.removeEventListener('categoryRestored', handleItemRestored);
-            window.removeEventListener('subCategoryDeleted', handleItemDeleted);
-            window.removeEventListener('subCategoryRestored', handleItemRestored);
-            window.removeEventListener('roleDeleted', handleItemDeleted);
-            window.removeEventListener('roleRestored', handleItemRestored);
-        };
-    }, []);
-
-    const fetchAllDeletedItems = async () => {
+    const fetchAllDeletedItems = useCallback(async () => {
         try {
             setLoading(true);
+            const params = { deleteType: 'SOFT' };
+            if (selectedBranchId && selectedBranchId !== 'central') {
+                params.branchId = selectedBranchId;
+            }
+
             const [productsRes, expensesRes, salesRes, categoriesRes, subCategoriesRes, rolesRes] = await Promise.all([
-                productApi.getAll('?deleteType=SOFT').catch(() => ({ success: false, data: [] })),
-                expenseApi.getAll({ deleteType: 'SOFT' }).catch(() => ({ success: false, data: [] })),
-                saleApi.getAll({ deleteType: 'SOFT' }).catch(() => ({ success: false, data: [] })),
+                productApi.getAll(params).catch(() => ({ success: false, data: [] })),
+                expenseApi.getAll(params).catch(() => ({ success: false, data: [] })),
+                saleApi.getAll(params).catch(() => ({ success: false, data: [] })),
                 categoryApi.getAll().then(res => {
                     const list = res.data || res.date || [];
-                    if (res.success && list) {
-                        return { success: true, data: list.filter(item => item.deleteType === 'SOFT') };
-                    }
-                    return { success: false, data: [] };
+                    return { success: res.success, data: list.filter(item => item.deleteType === 'SOFT') };
                 }).catch(() => ({ success: false, data: [] })),
                 subCategoryApi.getAll().then(res => {
                     const list = res.data || res.date || [];
-                    if (res.success && list) {
-                        return { success: true, data: list.filter(item => item.deleteType === 'SOFT') };
-                    }
-                    return { success: false, data: [] };
+                    return { success: res.success, data: list.filter(item => item.deleteType === 'SOFT') };
                 }).catch(() => ({ success: false, data: [] })),
                 roleApi.getAll().then(res => {
                     const list = res.data || res.date || [];
-                    if (res.success && list) {
-                        return { success: true, data: list.filter(item => item.deleteType === 'SOFT') };
-                    }
-                    return { success: false, data: [] };
+                    return { success: res.success, data: list.filter(item => item.deleteType === 'SOFT') };
                 }).catch(() => ({ success: false, data: [] }))
             ]);
 
             const allItems = [
-                ...(productsRes.success && (productsRes.data || productsRes.date) ? (productsRes.data || productsRes.date).map(item => ({ ...item, type: 'Product' })) : []),
-                ...(expensesRes.success && (expensesRes.data || expensesRes.date) ? (expensesRes.data || expensesRes.date).map(item => ({ ...item, type: 'Expense' })) : []),
-                ...(salesRes.success && (salesRes.data || salesRes.date) ? (salesRes.data || salesRes.date).map(item => ({ ...item, type: 'Sale' })) : []),
-                ...(categoriesRes.success && (categoriesRes.data || categoriesRes.date) ? (categoriesRes.data || categoriesRes.date).map(item => ({ ...item, type: 'Category' })) : []),
-                ...(subCategoriesRes.success && (subCategoriesRes.data || subCategoriesRes.date) ? (subCategoriesRes.data || subCategoriesRes.date).map(item => ({ ...item, type: 'SubCategory' })) : []),
-                ...(rolesRes.success && (rolesRes.data || rolesRes.date) ? (rolesRes.data || rolesRes.date).map(item => ({ ...item, type: 'Role' })) : [])
+                ...(productsRes.success ? (productsRes.data || productsRes.date || []).map(item => ({ ...item, type: 'Product' })) : []),
+                ...(expensesRes.success ? (expensesRes.data || expensesRes.date || []).map(item => ({ ...item, type: 'Expense' })) : []),
+                ...(salesRes.success ? (salesRes.data || salesRes.date || []).map(item => ({ ...item, type: 'Sale' })) : []),
+                ...(categoriesRes.success ? (categoriesRes.data || categoriesRes.date || []).map(item => ({ ...item, type: 'Category' })) : []),
+                ...(subCategoriesRes.success ? (subCategoriesRes.data || subCategoriesRes.date || []).map(item => ({ ...item, type: 'SubCategory' })) : []),
+                ...(rolesRes.success ? (rolesRes.data || rolesRes.date || []).map(item => ({ ...item, type: 'Role' })) : [])
             ];
 
-            setDeletedItems(allItems);
+            // Duplikatları sil (eyni ID və eyni Tip)
+            const uniqueItems = allItems.filter((item, index, self) =>
+                index === self.findIndex((t) => (t.id === item.id && t.type === item.type))
+            );
+
+            setDeletedItems(uniqueItems);
         } catch (error) {
             console.error('Error fetching deleted items:', error);
         } finally {
             setLoading(false);
         }
-    };
+    }, [selectedBranchId]);
+
+    useEffect(() => {
+        fetchAllDeletedItems();
+        const interval = setInterval(fetchAllDeletedItems, 45000); // Biraz uzatdıq
+        
+        const handleRefresh = () => fetchAllDeletedItems();
+        
+        window.addEventListener('productDeleted', handleRefresh);
+        window.addEventListener('productSoftDeleted', handleRefresh);
+        window.addEventListener('productRestored', handleRefresh);
+        window.addEventListener('expenseDeleted', handleRefresh);
+        window.addEventListener('expenseRestored', handleRefresh);
+        window.addEventListener('saleDeleted', handleRefresh);
+        window.addEventListener('saleRestored', handleRefresh);
+        window.addEventListener('categoryDeleted', handleRefresh);
+        window.addEventListener('categoryRestored', handleRefresh);
+        window.addEventListener('subCategoryDeleted', handleRefresh);
+        window.addEventListener('subCategoryRestored', handleRefresh);
+        window.addEventListener('roleDeleted', handleRefresh);
+        window.addEventListener('roleRestored', handleRefresh);
+        
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener('productDeleted', handleRefresh);
+            window.removeEventListener('productSoftDeleted', handleRefresh);
+            window.removeEventListener('productRestored', handleRefresh);
+            window.removeEventListener('expenseDeleted', handleRefresh);
+            window.removeEventListener('expenseRestored', handleRefresh);
+            window.removeEventListener('saleDeleted', handleRefresh);
+            window.removeEventListener('saleRestored', handleRefresh);
+            window.removeEventListener('categoryDeleted', handleRefresh);
+            window.removeEventListener('categoryRestored', handleRefresh);
+            window.removeEventListener('subCategoryDeleted', handleRefresh);
+            window.removeEventListener('subCategoryRestored', handleRefresh);
+            window.removeEventListener('roleDeleted', handleRefresh);
+            window.removeEventListener('roleRestored', handleRefresh);
+        };
+    }, [fetchAllDeletedItems]);
 
     const handleRestore = async (item) => {
+        if (actionId) return;
         const itemName = item.name || item.title || `${item.customerName || ''} ${item.customerSurname || ''}`.trim() || item.id.substring(0, 8);
         const result = await Alert.confirm(
             tAlert('restore_confirm') || 'Bərpa edilsin?',
             `${t('restore_confirm_text') || 'Bu elementi bərpa etmək istəyirsiniz?'} ${itemName}?`,
-            {
-                confirmText: tAlert('yes') || 'Bəli',
-                cancelText: tAlert('no') || 'Xeyr',
-                confirmColor: '#10B981',
-                cancelColor: '#6B7280'
-            }
+            { confirmText: tAlert('yes'), cancelText: tAlert('no'), confirmColor: '#10B981' }
         );
 
-        if (result.isConfirmed) {
-            try {
-                Alert.loading(t('loading') || 'Yüklənir...');
-                
-                let restorePromise;
+        if (!result.isConfirmed) return;
+
+        setActionId(item.id);
+        try {
+            let restorePromise;
+            const params = selectedBranchId && selectedBranchId !== 'central' ? { branchId: selectedBranchId } : {};
+            
+            // ConvertApi tərəfindən dəstəklənən tiplər
+            const convertTypes = ['Product', 'Sale', 'Expense'];
+            
+            if (convertTypes.includes(item.type)) {
+                // convertApi.restoreDeleted(entities, params, itemIds)
+                const entityKey = item.type.toLowerCase();
+                restorePromise = convertApi.restoreDeleted([entityKey], params, [item.id]);
+            } else {
+                // Digər tiplər üçün köhnə qayda (Category, SubCategory, Role)
                 switch (item.type) {
-                    case 'Product':
-                        // Product üçün restore: deleteType-u NONE və isActive-i true et
-                        restorePromise = productApi.update(item.id, {
-                            deleteType: 'NONE',
-                            isActive: true
-                        });
-                        break;
-                    case 'Expense':
-                        // Expense üçün restore: deleteType-u NONE et
-                        restorePromise = expenseApi.update(item.id, {
-                            deleteType: 'NONE'
-                        });
-                        break;
-                    case 'Sale':
-                        // Sale üçün restore: deleteType-u NONE et
-                        restorePromise = saleApi.update(item.id, {
-                            deleteType: 'NONE'
-                        });
-                        break;
                     case 'Category':
-                        // Category üçün restore: deleteType-u NONE və isActive-i true et
-                        restorePromise = categoryApi.update(item.id, {
-                            deleteType: 'NONE',
-                            isActive: true
-                        });
+                        restorePromise = categoryApi.update(item.id, { deleteType: 'NONE', isActive: true });
                         break;
                     case 'SubCategory':
-                        // SubCategory üçün restore: deleteType-u NONE və isActive-i true et
-                        restorePromise = subCategoryApi.update(item.id, {
-                            deleteType: 'NONE',
-                            isActive: true
-                        });
+                        restorePromise = subCategoryApi.update(item.id, { deleteType: 'NONE', isActive: true });
                         break;
                     case 'Role':
-                        // Role üçün restore: deleteType-u NONE et
-                        restorePromise = roleApi.update(item.id, {
-                            deleteType: 'NONE'
-                        });
+                        restorePromise = roleApi.update(item.id, { deleteType: 'NONE' });
                         break;
                     default:
                         throw new Error('Unknown item type');
                 }
-
-                await restorePromise;
-                setDeletedItems(prev => prev.filter(i => i.id !== item.id || i.type !== item.type));
-                
-                // Custom event dispatch et - event adını düzgün formatla
-                const eventName = item.type === 'SubCategory' ? 'subCategoryRestored' : `${item.type.toLowerCase()}Restored`;
-                window.dispatchEvent(new CustomEvent(eventName, { 
-                    detail: { id: item.id } 
-                }));
-                
-                Alert.close();
-                setTimeout(() => {
-                    Alert.success(tAlert('success') || 'Uğurlu!', t('restore_success') || 'Element bərpa edildi');
-                }, 100);
-            } catch (error) {
-                Alert.close();
-                setTimeout(() => {
-                    Alert.error(tAlert('error') || 'Xəta!', error.response?.data?.message || tAlert('error_text') || 'Element bərpa edilərkən xəta baş verdi');
-                }, 100);
             }
-        }
-    };
 
-    const handleRestoreAll = async () => {
-        if (deletedItems.length === 0) return;
-        
-        const result = await Alert.confirm(
-            tAlert('restore_confirm') || 'Bərpa edilsin?',
-            `${t('restore_all_confirm') || 'Bütün silinmiş elementləri bərpa etmək istəyirsiniz?'} (${deletedItems.length} ${t('items') || 'element'})?`,
-            {
-                confirmText: tAlert('yes') || 'Bəli',
-                cancelText: tAlert('no') || 'Xeyr',
-                confirmColor: '#10B981',
-                cancelColor: '#6B7280'
-            }
-        );
-
-        if (result.isConfirmed) {
-            try {
-                Alert.loading(t('loading') || 'Yüklənir...');
-                
-                const restorePromises = deletedItems.map(item => {
-                    try {
-                        switch (item.type) {
-                            case 'Product':
-                                // Product üçün restore: deleteType-u NONE və isActive-i true et
-                                return productApi.update(item.id, {
-                                    deleteType: 'NONE',
-                                    isActive: true
-                                });
-                            case 'Expense':
-                                // Expense üçün restore: deleteType-u NONE et
-                                return expenseApi.update(item.id, {
-                                    deleteType: 'NONE'
-                                });
-                            case 'Sale':
-                                // Sale üçün restore: deleteType-u NONE et
-                                return saleApi.update(item.id, {
-                                    deleteType: 'NONE'
-                                });
-                            case 'Category':
-                                // Category üçün restore: deleteType-u NONE və isActive-i true et
-                                return categoryApi.update(item.id, {
-                                    deleteType: 'NONE',
-                                    isActive: true
-                                });
-                            case 'SubCategory':
-                                // SubCategory üçün restore: deleteType-u NONE və isActive-i true et
-                                return subCategoryApi.update(item.id, {
-                                    deleteType: 'NONE',
-                                    isActive: true
-                                });
-                            case 'Role':
-                                // Role üçün restore: deleteType-u NONE et
-                                return roleApi.update(item.id, {
-                                    deleteType: 'NONE'
-                                });
-                            default:
-                                return Promise.resolve();
-                        }
-                    } catch (error) {
-                        console.error(`Error restoring ${item.type} ${item.id}:`, error);
-                        return Promise.resolve(); // Continue with other items even if one fails
-                    }
-                });
-
-                await Promise.all(restorePromises);
-                setDeletedItems([]);
-                
-                // Custom events dispatch et - event adlarını düzgün formatla
-                deletedItems.forEach(item => {
-                    const eventName = item.type === 'SubCategory' ? 'subCategoryRestored' : `${item.type.toLowerCase()}Restored`;
-                    window.dispatchEvent(new CustomEvent(eventName, { 
-                        detail: { id: item.id } 
-                    }));
-                });
-                
-                Alert.close();
-                setTimeout(() => {
-                    Alert.success(tAlert('success') || 'Uğurlu!', t('restore_all_success') || 'Bütün elementlər bərpa edildi');
-                }, 100);
-            } catch (error) {
-                Alert.close();
-                setTimeout(() => {
-                    Alert.error(tAlert('error') || 'Xəta!', error.response?.data?.message || tAlert('error_text') || 'Elementlər bərpa edilərkən xəta baş verdi');
-                }, 100);
-            }
+            await restorePromise;
+            setDeletedItems(prev => prev.filter(i => !(i.id === item.id && i.type === item.type)));
+            
+            const eventName = item.type === 'SubCategory' ? 'subCategoryRestored' : `${item.type.toLowerCase()}Restored`;
+            window.dispatchEvent(new CustomEvent(eventName, { detail: { id: item.id } }));
+            
+            Alert.success(tAlert('success'), t('restore_success'));
+        } catch (error) {
+            Alert.error(tAlert('error'), error.response?.data?.message || tAlert('error_text'));
+        } finally {
+            setActionId(null);
         }
     };
 
     const handleHardDelete = async (item) => {
+        if (actionId) return;
         const itemName = item.name || item.title || `${item.customerName || ''} ${item.customerSurname || ''}`.trim() || item.id.substring(0, 8);
         const result = await Alert.confirm(
-            tAlert('delete_confirm') || 'Silinsin?',
-            `${tAlert('delete_confirm_text') || 'Bu elementi tamamilə silmək istəyirsiniz?'} ${itemName}?`,
-            {
-                confirmText: tAlert('yes') || 'Bəli',
-                cancelText: tAlert('no') || 'Xeyr',
-                confirmColor: '#EF4444',
-                cancelColor: '#6B7280'
-            }
+            tAlert('delete_confirm'),
+            `${tAlert('delete_confirm_text')} ${itemName}?`,
+            { confirmText: tAlert('yes'), cancelText: tAlert('no'), confirmColor: '#EF4444' }
         );
 
-        if (result.isConfirmed) {
-            try {
-                Alert.loading(t('loading') || 'Yüklənir...');
-                
-                let deletePromise;
+        if (!result.isConfirmed) return;
+
+        setActionId(item.id);
+        try {
+            let deletePromise;
+            const params = selectedBranchId && selectedBranchId !== 'central' ? { branchId: selectedBranchId } : {};
+            
+            // ConvertApi tərəfindən dəstəklənən tiplər
+            const convertTypes = ['Product', 'Sale', 'Expense'];
+            
+            if (convertTypes.includes(item.type)) {
+                // convertApi.hardDeleteAll(entities, params, itemIds)
+                const entityKey = item.type.toLowerCase();
+                deletePromise = convertApi.hardDeleteAll([entityKey], params, [item.id]);
+            } else {
+                // Digər tiplər üçün köhnə qayda
                 switch (item.type) {
-                    case 'Product':
-                        deletePromise = productApi.delete(item.id, 'HARD');
-                        break;
-                    case 'Expense':
-                        deletePromise = expenseApi.delete(item.id, 'HARD');
-                        break;
-                    case 'Sale':
-                        deletePromise = saleApi.delete(item.id, 'HARD');
-                        break;
                     case 'Category':
                         deletePromise = categoryApi.delete(item.id, 'HARD');
                         break;
@@ -335,85 +213,76 @@ export default function DeletedProductsBell() {
                     default:
                         throw new Error('Unknown item type');
                 }
-
-                await deletePromise;
-                setDeletedItems(prev => prev.filter(i => i.id !== item.id || i.type !== item.type));
-                
-                // Custom event dispatch et
-                window.dispatchEvent(new CustomEvent(`${item.type.toLowerCase()}Deleted`, { 
-                    detail: { id: item.id } 
-                }));
-                
-                Alert.close();
-                setTimeout(() => {
-                    Alert.success(tAlert('delete_success') || 'Uğurlu!', tAlert('delete_success_text') || 'Element tamamilə silindi');
-                }, 100);
-            } catch (error) {
-                Alert.close();
-                setTimeout(() => {
-                    Alert.error(tAlert('error') || 'Xəta!', error.response?.data?.message || tAlert('error_text') || 'Element silinərkən xəta baş verdi');
-                }, 100);
             }
+
+            await deletePromise;
+            setDeletedItems(prev => prev.filter(i => !(i.id === item.id && i.type === item.type)));
+            
+            window.dispatchEvent(new CustomEvent(`${item.type.toLowerCase()}Deleted`, { detail: { id: item.id } }));
+            Alert.success(tAlert('delete_success'), tAlert('delete_success_text'));
+        } catch (error) {
+            if (error.response?.status === 404) {
+               // Artıq silinib, sadəcə state-dən çıxart
+               setDeletedItems(prev => prev.filter(i => !(i.id === item.id && i.type === item.type)));
+            } else {
+               Alert.error(tAlert('error'), error.response?.data?.message || tAlert('error_text'));
+            }
+        } finally {
+            setActionId(null);
+        }
+    };
+
+    const handleRestoreAll = async () => {
+        if (deletedItems.length === 0 || isBulkProcessing) return;
+        
+        const result = await Alert.confirm(
+            tAlert('restore_confirm'),
+            `${t('restore_all_confirm')} (${deletedItems.length} ${t('items')})?`,
+            { confirmText: tAlert('yes'), cancelText: tAlert('no'), confirmColor: '#10B981' }
+        );
+
+        if (!result.isConfirmed) return;
+
+        setIsBulkProcessing(true);
+        try {
+            const params = selectedBranchId && selectedBranchId !== 'central' ? { branchId: selectedBranchId } : {};
+            const response = await convertApi.restoreDeleted([], params);
+            if (response.success) {
+                setDeletedItems([]);
+                fetchAllDeletedItems();
+                Alert.success(tAlert('success'), t('restore_all_success'));
+            }
+        } catch (error) {
+            Alert.error(tAlert('error'), 'Xəta baş verdi');
+        } finally {
+            setIsBulkProcessing(false);
         }
     };
 
     const handleDeleteAll = async () => {
-        if (deletedItems.length === 0) return;
+        if (deletedItems.length === 0 || isBulkProcessing) return;
         
         const result = await Alert.confirm(
-            tAlert('delete_confirm') || 'Silinsin?',
-            `${tAlert('delete_confirm_text') || 'Bütün silinmiş elementləri tamamilə silmək istəyirsiniz?'} (${deletedItems.length} ${t('items') || 'element'})?`,
-            {
-                confirmText: tAlert('yes') || 'Bəli',
-                cancelText: tAlert('no') || 'Xeyr',
-                confirmColor: '#EF4444',
-                cancelColor: '#6B7280'
-            }
+            tAlert('delete_confirm'),
+            `${tAlert('delete_confirm_text_all')} (${deletedItems.length} ${t('items')})?`,
+            { confirmText: tAlert('yes'), cancelText: tAlert('no'), confirmColor: '#EF4444' }
         );
 
-        if (result.isConfirmed) {
-            try {
-                Alert.loading(t('loading') || 'Yüklənir...');
-                
-                const deletePromises = deletedItems.map(item => {
-                    switch (item.type) {
-                        case 'Product':
-                            return productApi.delete(item.id, 'HARD');
-                        case 'Expense':
-                            return expenseApi.delete(item.id, 'HARD');
-                        case 'Sale':
-                            return saleApi.delete(item.id, 'HARD');
-                        case 'Category':
-                            return categoryApi.delete(item.id, 'HARD');
-                        case 'SubCategory':
-                            return subCategoryApi.delete(item.id, 'HARD');
-                        case 'Role':
-                            return roleApi.delete(item.id, 'HARD');
-                        default:
-                            return Promise.resolve();
-                    }
-                });
+        if (!result.isConfirmed) return;
 
-                await Promise.all(deletePromises);
+        setIsBulkProcessing(true);
+        try {
+            const params = selectedBranchId && selectedBranchId !== 'central' ? { branchId: selectedBranchId } : {};
+            const response = await convertApi.hardDeleteAll([], params);
+            if (response.success) {
                 setDeletedItems([]);
-                
-                // Custom events dispatch et
-                deletedItems.forEach(item => {
-                    window.dispatchEvent(new CustomEvent(`${item.type.toLowerCase()}Deleted`, { 
-                        detail: { id: item.id } 
-                    }));
-                });
-                
-                Alert.close();
-                setTimeout(() => {
-                    Alert.success(tAlert('delete_success') || 'Uğurlu!', tAlert('delete_success_text') || 'Bütün elementlər tamamilə silindi');
-                }, 100);
-            } catch (error) {
-                Alert.close();
-                setTimeout(() => {
-                    Alert.error(tAlert('error') || 'Xəta!', error.response?.data?.message || tAlert('error_text') || 'Elementlər silinərkən xəta baş verdi');
-                }, 100);
+                fetchAllDeletedItems();
+                Alert.success(tAlert('delete_success'), tAlert('delete_success_text'));
             }
+        } catch (error) {
+            Alert.error(tAlert('error'), 'Xəta baş verdi');
+        } finally {
+            setIsBulkProcessing(false);
         }
     };
 
@@ -421,39 +290,25 @@ export default function DeletedProductsBell() {
 
     const getItemDisplayName = (item) => {
         switch (item.type) {
-            case 'Product':
-                return item.name;
-            case 'Expense':
-                return item.title;
-            case 'Sale':
-                return `${item.customerName || ''} ${item.customerSurname || ''}`.trim() || `Satış #${item.id.substring(0, 8)}`;
-            case 'Category':
-                return item.name;
-            case 'SubCategory':
-                return item.name;
-            case 'Role':
-                return item.name;
-            default:
-                return item.id.substring(0, 8);
+            case 'Product': return item.name;
+            case 'Expense': return item.title;
+            case 'Sale': return `${item.customerName || ''} ${item.customerSurname || ''}`.trim() || `Satış #${item.id.substring(0, 8)}`;
+            case 'Category': return item.name;
+            case 'SubCategory': return item.name;
+            case 'Role': return item.name;
+            default: return item.id.substring(0, 8);
         }
     };
 
     const getItemDisplayInfo = (item) => {
         switch (item.type) {
-            case 'Product':
-                return `Stok: ${item.stock || 0}`;
-            case 'Expense':
-                return `Məbləğ: ${parseFloat(item.amount || 0).toFixed(2)} AZN`;
-            case 'Sale':
-                return `Məbləğ: ${parseFloat(item.totalAmount || 0).toFixed(2)} AZN`;
-            case 'Category':
-                return item.description || '';
-            case 'SubCategory':
-                return item.description || '';
-            case 'Role':
-                return item.isCore ? 'Əsas Rol' : '';
-            default:
-                return '';
+            case 'Product': return `Stok: ${item.stock || 0}`;
+            case 'Expense': return `Məbləğ: ${parseFloat(item.amount || 0).toFixed(2)} AZN`;
+            case 'Sale': return `Məbləğ: ${parseFloat(item.totalAmount || 0).toFixed(2)} AZN`;
+            case 'Category': return item.description || '';
+            case 'SubCategory': return item.description || '';
+            case 'Role': return item.isCore ? 'Əsas Rol' : '';
+            default: return '';
         }
     };
 
@@ -466,7 +321,6 @@ export default function DeletedProductsBell() {
                         ? 'text-red-600 hover:text-red-700 hover:bg-red-50' 
                         : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                 }`}
-                aria-label="Deleted Items"
             >
                 <Trash2 className="w-5 h-5" />
                 {deletedCount > 0 && (
@@ -477,89 +331,82 @@ export default function DeletedProductsBell() {
             </button>
 
             {showDropdown && (
-                <div className="absolute right-0 mt-2 w-96 bg-white border border-gray-200 rounded-lg shadow-xl z-50 max-h-[600px] flex flex-col">
-                    <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-                        <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <div className="absolute right-0 mt-2 w-96 bg-white border border-gray-200 rounded-lg shadow-xl z-50 max-h-[600px] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
+                    <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gray-50/50">
+                        <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
                             <Trash2 className="w-5 h-5 text-red-600" />
                             {t('deleted_items') || 'Silinmiş Elementlər'}
                         </h3>
-                        <button
-                            onClick={() => setShowDropdown(false)}
-                            className="text-gray-400 hover:text-gray-600 transition-colors"
-                        >
+                        <button onClick={() => setShowDropdown(false)} className="text-gray-400 hover:text-gray-600">
                             <X className="w-5 h-5" />
                         </button>
                     </div>
 
-                    {loading ? (
-                        <div className="p-8 text-center text-gray-500">
-                            {t('loading') || 'Yüklənir...'}
+                    {loading && deletedCount === 0 ? (
+                        <div className="p-12 text-center text-gray-400 flex flex-col items-center gap-2">
+                            <Loader2 className="w-8 h-8 animate-spin" />
+                            <p className="text-sm font-medium">{t('loading') || 'Yüklənir...'}</p>
                         </div>
                     ) : deletedCount === 0 ? (
-                        <div className="p-8 text-center text-gray-500">
-                            {t('no_deleted_items') || 'Silinmiş element yoxdur'}
+                        <div className="p-12 text-center text-gray-400 flex flex-col items-center gap-4">
+                            <div className="p-4 bg-gray-50 rounded-full">
+                                <Trash2 className="w-8 h-8 opacity-20" />
+                            </div>
+                            <p className="text-sm font-medium">{t('no_deleted_items') || 'Silinmiş element yoxdur'}</p>
                         </div>
                     ) : (
                         <>
-                            <div className="p-4 border-b border-gray-200 bg-red-50">
-                                <div className="flex items-center justify-between gap-2 mb-2">
-                                    <p className="text-sm text-gray-700">
-                                        {t('total_deleted') || 'Ümumi'}: <span className="font-semibold text-red-600">{deletedCount}</span>
-                                    </p>
+                            <div className="p-4 border-b border-gray-200 bg-red-50/50">
+                                <div className="flex items-center justify-between mb-3 text-sm">
+                                    <span className="text-gray-600 font-medium">{t('total_deleted') || 'Ümumi'}:</span>
+                                    <span className="bg-red-100 text-red-700 font-bold px-2 py-0.5 rounded-full">{deletedCount}</span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <button
                                         onClick={handleRestoreAll}
-                                        className="flex-1 px-3 py-1.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
+                                        disabled={isBulkProcessing}
+                                        className="flex-1 px-3 py-2 bg-green-600 text-white text-xs font-bold rounded-lg hover:bg-green-700 transition-all flex items-center justify-center gap-2 shadow-sm"
                                     >
-                                        <RotateCcw className="w-4 h-4" />
-                                        {t('restore_all') || 'Hamısını Bərpa Et'}
+                                        {isBulkProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+                                        {t('restore_all') || 'Bərpa et'}
                                     </button>
                                     <button
                                         onClick={handleDeleteAll}
-                                        className="flex-1 px-3 py-1.5 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
+                                        disabled={isBulkProcessing}
+                                        className="flex-1 px-3 py-2 bg-red-600 text-white text-xs font-bold rounded-lg hover:bg-red-700 transition-all flex items-center justify-center gap-2 shadow-sm"
                                     >
-                                        <Trash2 className="w-4 h-4" />
-                                        {t('delete_all') || 'Hamısını Sil'}
+                                        {isBulkProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                                        {t('delete_all') || 'Hamısını sil'}
                                     </button>
                                 </div>
                             </div>
-                            <div className="overflow-y-auto flex-1">
+                            <div className="overflow-y-auto flex-1 divide-y divide-gray-100">
                                 {deletedItems.map((item) => {
                                     const Icon = TYPE_ICONS[item.type] || Package;
-                                    const typeLabel = TYPE_LABELS[item.type] || item.type;
+                                    const isProcessing = actionId === item.id;
                                     return (
-                                        <div
-                                            key={`${item.type}-${item.id}`}
-                                            className="p-4 border-b border-gray-100 hover:bg-gray-50 transition-colors"
-                                        >
+                                        <div key={`${item.type}-${item.id}`} className={`p-4 hover:bg-gray-50/80 transition-colors ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
                                             <div className="flex items-start justify-between gap-3">
                                                 <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center gap-2 mb-1">
-                                                        <Icon className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                                                        <span className="text-xs text-gray-500">{typeLabel}</span>
+                                                    <div className="flex items-center gap-1.5 mb-1 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                                                        <Icon className="w-3 h-3" />
+                                                        {TYPE_LABELS[item.type] || item.type}
                                                     </div>
-                                                    <p className="text-sm font-medium text-gray-900 truncate">
-                                                        {getItemDisplayName(item)}
-                                                    </p>
-                                                    {getItemDisplayInfo(item) && (
-                                                        <p className="text-xs text-gray-500 mt-1">
-                                                            {getItemDisplayInfo(item)}
-                                                        </p>
-                                                    )}
+                                                    <p className="text-sm font-bold text-gray-900 truncate">{getItemDisplayName(item)}</p>
+                                                    {getItemDisplayInfo(item) && <p className="text-xs text-gray-500 mt-0.5 font-medium">{getItemDisplayInfo(item)}</p>}
                                                 </div>
-                                                <div className="flex items-center gap-1 flex-shrink-0">
+                                                <div className="flex items-center gap-1">
                                                     <button
                                                         onClick={() => handleRestore(item)}
-                                                        className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                                                        title={t('restore') || 'Bərpa et'}
+                                                        className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors border border-transparent hover:border-emerald-100"
+                                                        title={t('restore')}
                                                     >
                                                         <RotateCcw className="w-4 h-4" />
                                                     </button>
                                                     <button
                                                         onClick={() => handleHardDelete(item)}
-                                                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                        title={t('hard_delete') || 'Tamamilə sil'}
+                                                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
+                                                        title={t('hard_delete')}
                                                     >
                                                         <Trash2 className="w-4 h-4" />
                                                     </button>

@@ -1,8 +1,5 @@
 import prisma from "../lib/prisma.js";
 import { createActivityLog } from "./activityLogController.js";
-import { ensureBranch, createDefaultStocksForBranch, migrateStaffToBranch } from "../utils/branchHelper.js";
-
-// Bütün filialların stok məlumatlarını gətir (məhsul üzrə qruplaşdırılmış)
 export const getAllBranchStocks = async (req, res) => {
     try {
         const stocks = await prisma.branchstock.findMany({
@@ -15,7 +12,8 @@ export const getAllBranchStocks = async (req, res) => {
                 }
             },
             where: {
-                branch: { deleteType: 'NONE' }
+                branch: { deleteType: 'NONE' },
+                stock: { gt: 0 }
             }
         });
 
@@ -132,8 +130,7 @@ export const createBranch = async (req, res) => {
             }
         });
 
-        // Yeni filial üçün bütün mövcud məhsullar üzrə stok qeydləri yarat (0 stok ilə)
-        await createDefaultStocksForBranch(branch.id);
+        // Yeni filial boş stokla yaradılır - məhsullar ayrıca əlavə ediləcək
 
         await createActivityLog({
             staffId: req.staff?.id,
@@ -212,7 +209,8 @@ export const getBranchStocks = async (req, res) => {
         const { id } = req.params;
         const stocks = await prisma.branchstock.findMany({
             where: {
-                branchId: id
+                branchId: id,
+                stock: { gt: 0 }   // yalnız stoku > 0 olan məhsulları qaytart
             },
             include: {
                 product: {
@@ -221,7 +219,10 @@ export const getBranchStocks = async (req, res) => {
                         name: true,
                         barcode: true,
                         unitType: true,
-                        piecesPerBox: true
+                        piecesPerBox: true,
+                        category: {
+                            select: { id: true, name: true }
+                        }
                     }
                 }
             }
@@ -334,28 +335,6 @@ export const syncBranchWithCentral = async (req, res) => {
     }
 };
 
-// Kürdəxanı filialının mövcudluğunu yoxla və yoxdursa yarat
-export const ensureKurdaxaniBranch = async (req, res) => {
-    try {
-        const branch = await ensureBranch("Kürdəxanı", "Kürdəxanı qəsəbəsi");
-        const migratedCount = await migrateStaffToBranch(branch.id);
-
-        return res.status(200).json({
-            success: true,
-            message: migratedCount > 0 
-                ? `Kürdəxanı filialı hazırlandı və ${migratedCount} işçi köçürüldü` 
-                : "Kürdəxanı filialı artıq hazırdır",
-            data: branch
-        });
-    } catch (error) {
-        console.error("ensureKurdaxaniBranch error", error);
-        return res.status(500).json({
-            success: false,
-            message: "Kürdəxanı filialı yaradılarkən xəta baş verdi",
-            error: error.message
-        });
-    }
-};
 
 // Filialı sil (Soft delete)
 export const deleteBranch = async (req, res) => {

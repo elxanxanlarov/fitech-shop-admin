@@ -13,4 +13,5 @@ export const FILIAL_ADMIN_BLOCKED_SETTINGS_SLUGS = new Set([
     'branch-form',
     'branch-detail',
     'stock-transfer-form',
+    'central-warehouse',
 ]);

@@ -1,12 +1,7 @@
 import api from './axios.js';
 
 export const notificationApi = {
-  // Get all notifications
-  getAll: async (isRead = null) => {
-    const params = {};
-    if (isRead !== null) {
-      params.isRead = isRead;
-    }
+  getAll: async (params = {}) => {
     const response = await api.get('/notification', { params });
     return response.data;
   },

@@ -32,65 +32,84 @@ export const getAllProducts = async (req, res) => {
             includeUnassigned
         } = req.query;
 
-        const where = {};
+        const andConditions = [];
 
-        // DeleteType filter - default olaraq yalnız silinməyən məhsulları göstər
-        if (includeDeleted === 'true') {
-            // Bütün məhsulları göstər (silinmişlər də daxil)
-        } else if (deleteType) {
-            where.deleteType = deleteType.toUpperCase();
+        // Branch identity filter - if branchId is provided
+        if (branchId && branchId !== 'central') {
+            if (deleteType?.toUpperCase() === 'SOFT') {
+                // Show ONLY products soft-deleted in this branch
+                andConditions.push({
+                    branchDeletedProducts: {
+                        some: {
+                            branchId: branchId
+                        }
+                    }
+                });
+            } else {
+                // Default: show products NOT soft-deleted in this branch
+                andConditions.push({
+                    branchDeletedProducts: {
+                        none: {
+                            branchId: branchId
+                        }
+                    }
+                });
+                
+                // Also ensure the main product is not soft-deleted globally
+                if (includeDeleted !== 'true') {
+                    andConditions.push({ deleteType: 'NONE' });
+                }
+            }
         } else {
-            // Default: yalnız silinməyən məhsulları göstər
-            where.deleteType = 'NONE';
+            // Default: Central warehouse behavior
+            if (includeDeleted !== 'true') {
+                if (deleteType) {
+                    andConditions.push({ deleteType: deleteType.toUpperCase() });
+                } else {
+                    andConditions.push({ deleteType: 'NONE' });
+                }
+            }
         }
 
         // Category filter by ID (takes precedence over categoryName)
         if (categoryId) {
-            where.categoryId = categoryId;
+            andConditions.push({ categoryId });
         } else if (categoryName) {
-            // Category filter by name (only if categoryId is not provided)
-            // First find the category by name (exact match)
-            // Note: MySQL default collation is case-insensitive for most setups
             const category = await prisma.category.findFirst({
-                where: {
-                    name: categoryName
-                },
+                where: { name: categoryName },
                 select: { id: true }
             });
 
             if (category) {
-                where.categoryId = category.id;
+                andConditions.push({ categoryId: category.id });
             } else {
-                // If category not found, return empty result
-                where.categoryId = 'non-existent-id';
+                andConditions.push({ categoryId: 'non-existent-id' });
             }
         }
 
-        // Subcategory filter by ID (takes precedence over subCategoryName)
+        // Subcategory filter by ID
         if (subCategoryId) {
-            where.subCategoryId = subCategoryId;
+            andConditions.push({ subCategoryId });
         } else if (subCategoryName) {
-            // Subcategory filter by name
             const subCategory = await prisma.subcategory.findFirst({
-                where: {
-                    name: subCategoryName
-                },
+                where: { name: subCategoryName },
                 select: { id: true }
             });
 
             if (subCategory) {
-                where.subCategoryId = subCategory.id;
+                andConditions.push({ subCategoryId: subCategory.id });
             } else {
-                where.subCategoryId = 'non-existent-id';
+                andConditions.push({ subCategoryId: 'non-existent-id' });
             }
         }
 
         // Stock filters based on branchId
         if (branchId && branchId !== 'central') {
             const branchStockFilter = {};
+            let isFilteringByStock = false;
 
-            // Stock status filter for branch
             if (stockStatus) {
+                isFilteringByStock = true;
                 const stockStatusLower = stockStatus.toLowerCase().trim();
                 if (stockStatusLower === 'stokda var' || stockStatusLower === 'in stock') {
                     branchStockFilter.stock = { gt: 10 };
@@ -100,108 +119,107 @@ export const getAllProducts = async (req, res) => {
                     branchStockFilter.stock = 0;
                 }
             } else if (minStock !== undefined || maxStock !== undefined) {
-                // Stock range filter for branch
+                isFilteringByStock = true;
                 branchStockFilter.stock = {};
                 if (minStock !== undefined) branchStockFilter.stock.gte = parseInt(minStock);
                 if (maxStock !== undefined) branchStockFilter.stock.lte = parseInt(maxStock);
-            } else {
-                // Default: həmin filialda olan bütün məhsulları göstər (stok 0 olsa belə)
-                branchStockFilter.stock = { gte: 0 };
             }
 
-            if (includeUnassigned === 'true') {
-                // Kürdəxanı seçiləndə: həmin filialda stoku olan məhsullar + heç bir filial stoku
-                // olmayan köhnə məhsullar da göstərilsin
-                where.OR = [
-                    { branchStocks: { some: { branchId: branchId, ...branchStockFilter } } },
-                    { branchStocks: { none: {} } }
-                ];
-            } else {
-                where.branchStocks = {
-                    some: {
-                        branchId: branchId,
-                        ...branchStockFilter
-                    }
-                };
+            if (isFilteringByStock) {
+                const isSearchingOutOfStock = (stockStatus && (stockStatus.toLowerCase().includes('yoxdur') || stockStatus.toLowerCase().includes('out of stock'))) || (branchStockFilter.stock === 0);
+
+                if (isSearchingOutOfStock) {
+                    andConditions.push({
+                        OR: [
+                            { branchStocks: { some: { branchId: branchId, stock: 0 } } },
+                            { branchStocks: { none: { branchId: branchId } } }
+                        ]
+                    });
+                } else {
+                    andConditions.push({
+                        branchStocks: {
+                            some: {
+                                branchId: branchId,
+                                ...branchStockFilter
+                            }
+                        }
+                    });
+                }
             }
+            // If NOT filtering by stock, we don't add any branchStocks condition.
+            // This makes the product visible in all branches even if no stock record exists yet.
         } else {
             // Default stock filtering (Central Warehouse)
             if (stockStatus) {
                 const stockStatusLower = stockStatus.toLowerCase().trim();
                 if (stockStatusLower === 'stokda var' || stockStatusLower === 'in stock') {
-                    where.stock = { gt: 10 };
+                    andConditions.push({ stock: { gt: 10 } });
                 } else if (stockStatusLower === 'az stok' || stockStatusLower === 'low stock') {
-                    where.stock = { gte: 1, lte: 10 };
+                    andConditions.push({ stock: { gte: 1, lte: 10 } });
                 } else if (stockStatusLower === 'stokda yoxdur' || stockStatusLower === 'out of stock') {
-                    where.stock = 0;
+                    andConditions.push({ stock: 0 });
                 }
             } else if (minStock !== undefined || maxStock !== undefined) {
-                where.stock = {};
-                if (minStock !== undefined) where.stock.gte = parseInt(minStock);
-                if (maxStock !== undefined) where.stock.lte = parseInt(maxStock);
+                const stockFilter = {};
+                if (minStock !== undefined) stockFilter.gte = parseInt(minStock);
+                if (maxStock !== undefined) stockFilter.lte = parseInt(maxStock);
+                andConditions.push({ stock: stockFilter });
             }
         }
 
         // Has image filter
-        if (hasImage === 'true') where.imageUrl = { not: null };
-        else if (hasImage === 'false') where.imageUrl = null;
+        if (hasImage === 'true') andConditions.push({ imageUrl: { not: null } });
+        else if (hasImage === 'false') andConditions.push({ imageUrl: null });
 
         // Status filter
         if (isActive !== undefined) {
-            where.isActive = isActive === 'true' || isActive === true;
+            andConditions.push({ isActive: isActive === 'true' || isActive === true });
         }
 
         // Official status filter
         if (isOfficial !== undefined) {
             const isOfficialValue = isOfficial.toLowerCase().trim();
             if (isOfficialValue === 'rəsmi' || isOfficialValue === 'official' || isOfficialValue === 'true') {
-                where.isOfficial = true;
+                andConditions.push({ isOfficial: true });
             } else if (isOfficialValue === 'qeyri-rəsmi' || isOfficialValue === 'unofficial' || isOfficialValue === 'false') {
-                where.isOfficial = false;
+                andConditions.push({ isOfficial: false });
             }
         }
 
         // Price range filters
         if (minPurchasePrice !== undefined || maxPurchasePrice !== undefined) {
-            where.purchasePrice = {};
-            if (minPurchasePrice !== undefined) {
-                where.purchasePrice.gte = new Prisma.Decimal(minPurchasePrice);
-            }
-            if (maxPurchasePrice !== undefined) {
-                where.purchasePrice.lte = new Prisma.Decimal(maxPurchasePrice);
-            }
+            const purchaseFilter = {};
+            if (minPurchasePrice !== undefined) purchaseFilter.gte = new Prisma.Decimal(minPurchasePrice);
+            if (maxPurchasePrice !== undefined) purchaseFilter.lte = new Prisma.Decimal(maxPurchasePrice);
+            andConditions.push({ purchasePrice: purchaseFilter });
         }
 
         if (minSalePrice !== undefined || maxSalePrice !== undefined) {
-            where.salePrice = {};
-            if (minSalePrice !== undefined) {
-                where.salePrice.gte = new Prisma.Decimal(minSalePrice);
-            }
-            if (maxSalePrice !== undefined) {
-                where.salePrice.lte = new Prisma.Decimal(maxSalePrice);
-            }
+            const saleFilter = {};
+            if (minSalePrice !== undefined) saleFilter.gte = new Prisma.Decimal(minSalePrice);
+            if (maxSalePrice !== undefined) saleFilter.lte = new Prisma.Decimal(maxSalePrice);
+            andConditions.push({ salePrice: saleFilter });
         }
 
         // Search
-        // Note: MySQL default collation is case-insensitive, so mode is not needed
         if (search && search.trim()) {
             const searchTerm = search.trim();
             const searchConditions = [
                 { name: { contains: searchTerm } },
                 { invoiceName: { contains: searchTerm } },
-                { barcode: { contains: searchTerm } }
+                { barcode: { contains: searchTerm } },
+                {
+                    AND: [
+                        { description: { not: null } },
+                        { description: { contains: searchTerm } }
+                    ]
+                }
             ];
 
-            // Description field null ola bilər, ona görə də null check edirik
-            searchConditions.push({
-                AND: [
-                    { description: { not: null } },
-                    { description: { contains: searchTerm } }
-                ]
-            });
-
-            where.OR = searchConditions;
+            andConditions.push({ OR: searchConditions });
         }
+
+        const where = andConditions.length > 0 ? { AND: andConditions } : {};
 
         const products = await prisma.product.findMany({
             where,
@@ -459,31 +477,22 @@ export const createProduct = async (req, res) => {
             }
         });
 
-        // Hər bir filial üçün BranchStock yaradılmasını təmin et (0 stok ilə)
-        try {
-            const branches = await prisma.branch.findMany({
-                where: { isActive: true, deleteType: 'NONE' }
-            });
-
-            if (branches.length > 0) {
-                const branchStockData = branches.map(branch => {
-                    const isSelectedBranch = branchId && branchId === branch.id;
-                    return {
-                        branchId: branch.id,
+        // Əgər konkret filial seçilibsə, yalnız həmin filial üçün BranchStock qeydi yaradılır.
+        // Artıq bütün filiallar üçün avtomatik 0-stoklu qeydlər yaradılmır.
+        if (branchId && branchId !== 'central') {
+            try {
+                await prisma.branchstock.create({
+                    data: {
+                        branchId: branchId,
                         productId: newProduct.id,
-                        stock: isSelectedBranch ? calculatedStock : 0,
-                        fullBoxes: isSelectedBranch ? calculatedFullBoxes : 0,
-                        openedBoxQuantity: isSelectedBranch ? calculatedOpenedBoxQuantity : 0
-                    };
+                        stock: calculatedStock,
+                        fullBoxes: calculatedFullBoxes,
+                        openedBoxQuantity: calculatedOpenedBoxQuantity
+                    }
                 });
-
-                await prisma.branchstock.createMany({
-                    data: branchStockData,
-                    skipDuplicates: true
-                });
+            } catch (branchStockError) {
+                console.error("Filial stoku yaradılarkən xəta:", branchStockError);
             }
-        } catch (branchStockError) {
-            console.error("Filial stokları yaradılarkən xəta:", branchStockError);
         }
 
         // Activity log yarat
@@ -924,6 +933,7 @@ export const updateStock = async (req, res) => {
 export const deleteProduct = async (req, res) => {
     try {
         const { id } = req.params;
+        const branchId = req.query.branchId || req.body.branchId;
         const { deleteType = 'SOFT' } = req.body; // Default: SOFT delete
 
         // Ensure deleteType is valid
@@ -932,6 +942,7 @@ export const deleteProduct = async (req, res) => {
         const existingProduct = await prisma.product.findUnique({
             where: { id },
             include: {
+                branchDeletedProducts: branchId ? { where: { branchId } } : false,
                 _count: {
                     select: {
                         saleItems: true,
@@ -949,6 +960,39 @@ export const deleteProduct = async (req, res) => {
                 success: false,
                 message: "Məhsul tapılmadı",
             });
+        }
+
+        // Branch-specific soft delete
+        if (validDeleteType === 'SOFT' && branchId && branchId !== 'central') {
+            await prisma.branchDeletedProduct.upsert({
+                where: {
+                    branchId_productId: {
+                        branchId,
+                        productId: id
+                    }
+                },
+                create: {
+                    branchId,
+                    productId: id
+                },
+                update: {
+                    deletedAt: new Date()
+                }
+            });
+
+            // Log activity
+            try {
+                await createActivityLog({
+                    staffId: req.staffId || null,
+                    branchId: branchId,
+                    entityType: "Product",
+                    entityId: id,
+                    action: "SOFT_DELETE",
+                    description: `Məhsul filiala görə silindi (soft delete): ${existingProduct.name}`,
+                });
+            } catch (err) {}
+
+            return res.json({ success: true, message: "Məhsul filialdan silindi" });
         }
 
         // DeleteType-a görə silmə
@@ -969,7 +1013,6 @@ export const deleteProduct = async (req, res) => {
 
                 // 2. Satış maddələrini və satışları sil
                 prisma.saleitem.deleteMany({ where: { productId: id } }),
-                // Qeyd: Digər əlaqəli cədvəllər (Receipt, CreditPayment) cascade deyilse onları da silmek lazım olar
                 prisma.receipt.deleteMany({ where: { saleId: { in: saleIds } } }),
                 prisma.creditpayment.deleteMany({ where: { saleId: { in: saleIds } } }),
                 prisma.notification.deleteMany({ where: { saleId: { in: saleIds } } }),
@@ -978,6 +1021,10 @@ export const deleteProduct = async (req, res) => {
                 // 3. Yekun təslimat və transfer maddələrini sil
                 prisma.finaldeliveryitem.deleteMany({ where: { productId: id } }),
                 prisma.stocktransferitem.deleteMany({ where: { productId: id } }),
+                
+                // All branch deletes and stocks
+                prisma.branchDeletedProduct.deleteMany({ where: { productId: id } }),
+                prisma.branchstock.deleteMany({ where: { productId: id } }),
 
                 // 4. Məhsulun özünü sil
                 prisma.product.delete({ where: { id } })
@@ -1005,6 +1052,10 @@ export const deleteProduct = async (req, res) => {
                         deleteType: 'SOFT',
                         isActive: false
                     }
+                }),
+                // Optionally clear branch-specific soft deletes if globally soft-deleted
+                prisma.branchDeletedProduct.deleteMany({
+                    where: { productId: id }
                 })
             ]);
         }
@@ -1309,29 +1360,7 @@ export const importProductsFromExcel = async (req, res) => {
                 imported.push(product);
                 successCount++;
 
-                // Hər bir filial üçün BranchStock yaradılmasını təmin et (0 stok ilə)
-                try {
-                    const branches = await prisma.branch.findMany({
-                        where: { isActive: true, deleteType: 'NONE' }
-                    });
-
-                    if (branches.length > 0) {
-                        const branchStockData = branches.map(branch => ({
-                            branchId: branch.id,
-                            productId: product.id,
-                            stock: 0,
-                            fullBoxes: 0,
-                            openedBoxQuantity: 0
-                        }));
-
-                        await prisma.branchstock.createMany({
-                            data: branchStockData,
-                            skipDuplicates: true
-                        });
-                    }
-                } catch (branchStockError) {
-                    console.error("Filial stokları yaradılarkən xəta (vBulk):", branchStockError);
-                }
+                // Məhsul yalnız mərkəzi anbarda yaradılır (heç bir filiala avtomatik bağlanmır)
 
                 // Activity log
                 try {

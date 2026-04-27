@@ -6,8 +6,7 @@ import Alert from '../ui/Alert';
 import SearchDropdown from '../ui/SearchDropdown';
 import { MdFolder, MdDescription, MdArrowBack } from 'react-icons/md';
 import { BiBuildings } from 'react-icons/bi';
-import { subCategoryApi, categoryApi, branchApi } from '../../api';
-import { useBranch } from '../../hooks';
+import { subCategoryApi, categoryApi } from '../../api';
 
 export default function SubCategoryForm() {
     const navigate = useNavigate();
@@ -24,9 +23,7 @@ export default function SubCategoryForm() {
         ? `/admin/category-form?id=${categoryIdParam}`
         : '/admin/category-management';
     const isEditMode = !!id;
-    const { selectedBranchId, selectedBranchName } = useBranch();
-    const initialBranchIdRef = useRef(selectedBranchId);
-    const initialBranchNameRef = useRef(selectedBranchName);
+
     
     const [formData, setFormData] = useState({
         name: '',
@@ -173,8 +170,7 @@ export default function SubCategoryForm() {
                 name: formData.name.trim(),
                 description: formData.description?.trim() || null,
                 categoryId: formData.categoryId,
-                isActive: formData.isActive,
-                branchId: null
+                isActive: formData.isActive
             };
 
             if (isEditMode) {

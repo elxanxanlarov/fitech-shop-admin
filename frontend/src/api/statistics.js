@@ -45,5 +45,13 @@ export const statisticsApi = {
     const response = await api.get('/statistics/customers', { params });
     return response.data;
   },
+  getLedger: async (startDate = null, endDate = null, branchId = null) => {
+    const params = {};
+    if (startDate) params.startDate = startDate;
+    if (endDate) params.endDate = endDate;
+    if (branchId != null && branchId !== '') params.branchId = branchId;
+    const response = await api.get('/statistics/ledger', { params });
+    return response.data;
+  },
 };
 

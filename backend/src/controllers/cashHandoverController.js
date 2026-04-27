@@ -1,5 +1,6 @@
 import prisma from "../lib/prisma.js";
 import { createActivityLog } from "./activityLogController.js";
+import { computeCashboxBalance, buildBranchFilter } from "../services/cashboxService.js";
 
 // Bütün məbləğ təslimlərini gətir
 export const getAllCashHandovers = async (req, res) => {
@@ -193,36 +194,11 @@ export const createCashHandover = async (req, res) => {
             handoverDate.setHours(0, 0, 0, 0);
         }
 
-        const currentBranchFilter = (branchId && branchId !== 'central') ? { branchId } : { branchId: null };
+        const branchFilter = buildBranchFilter(branchId);
 
-        // Ümumi təslim edilməmiş (payout gözləyən) gəliri hesabla (bütün tarixlər üzrə)
-        const totalSalesCashAgg = await prisma.sale.aggregate({
-            where: { deleteType: 'NONE', isRefunded: false, paymentType: 'cash', ...currentBranchFilter },
-            _sum: { paidAmount: true }
-        });
-        const totalCreditCashAgg = await prisma.creditpayment.aggregate({
-            where: { paymentType: 'cash', ...currentBranchFilter },
-            _sum: { amount: true }
-        });
-        const totalReturnsAgg = await prisma.salereturn.aggregate({
-            where: { sale: { deleteType: 'NONE', paymentType: 'cash', ...currentBranchFilter } },
-            _sum: { returnedAmount: true }
-        });
-        const totalExpensesAgg = await prisma.expense.aggregate({
-            where: { deleteType: 'NONE', ...currentBranchFilter },
-            _sum: { amount: true }
-        });
-        const allHandoversAgg = await prisma.cashhandover.aggregate({
-            where: { deleteType: 'NONE', ...currentBranchFilter },
-            _sum: { amount: true }
-        });
-
-        const totalAvailableAllTime = 
-            (parseFloat(totalSalesCashAgg._sum.paidAmount || 0) + 
-            parseFloat(totalCreditCashAgg._sum.amount || 0)) - 
-            (parseFloat(totalReturnsAgg._sum.returnedAmount || 0) + 
-            parseFloat(totalExpensesAgg._sum.amount || 0) + 
-            parseFloat(allHandoversAgg._sum.amount || 0));
+        // Kəssa balasnı hesabla (vahid service ilə)
+        const cashbox = await computeCashboxBalance(branchFilter);
+        const totalAvailableAllTime = cashbox.balance;
 
         const roundedTotalAvailable = Math.round(totalAvailableAllTime * 100) / 100;
         const roundedAmount = Math.round(parseFloat(amount) * 100) / 100;
@@ -360,38 +336,15 @@ export const updateCashHandover = async (req, res) => {
 
         // Əgər məbləğ və ya tarix dəyişirsə, ümumi gəliri yoxla
         if (amount !== undefined || date !== undefined) {
-            const currentBranchId = branchId || existingCashHandover.branchId;
-            const currentBranchFilter = (currentBranchId && currentBranchId !== 'central') ? { branchId: currentBranchId } : { branchId: null };
-            const saleBranchFilter = (currentBranchId && currentBranchId !== 'central') ? { branchId: currentBranchId } : { branchId: null };
+            const updateBranchFilter = buildBranchFilter(
+                currentBranchId && currentBranchId !== 'central' ? currentBranchId : 
+                (existingCashHandover.branchId === null ? 'central' : undefined)
+            );
 
-            // Ümumi gəlir və təslimləri hesabla (cari record istisna olmaqla)
-            const totalSalesCashAgg = await prisma.sale.aggregate({
-                where: { deleteType: 'NONE', isRefunded: false, paymentType: 'cash', ...saleBranchFilter },
-                _sum: { paidAmount: true }
-            });
-            const totalCreditCashAgg = await prisma.creditpayment.aggregate({
-                where: { paymentType: 'cash', ...currentBranchFilter },
-                _sum: { amount: true }
-            });
-            const totalReturnsAgg = await prisma.salereturn.aggregate({
-                where: { sale: { deleteType: 'NONE', paymentType: 'cash', ...saleBranchFilter } },
-                _sum: { returnedAmount: true }
-            });
-            const totalExpensesAgg = await prisma.expense.aggregate({
-                where: { deleteType: 'NONE', ...currentBranchFilter },
-                _sum: { amount: true }
-            });
-            const otherHandoversAgg = await prisma.cashhandover.aggregate({
-                where: { deleteType: 'NONE', id: { not: id }, ...currentBranchFilter },
-                _sum: { amount: true }
-            });
+            // Kəssa balasnı hesabla (cari id xaric) — vahid service ilə
+            const cashbox = await computeCashboxBalance(updateBranchFilter, { excludeHandoverId: id });
+            const totalAvailableAllTime = cashbox.balance;
 
-            const totalAvailableAllTime = 
-                (parseFloat(totalSalesCashAgg._sum.paidAmount || 0) + 
-                parseFloat(totalCreditCashAgg._sum.amount || 0)) - 
-                (parseFloat(totalReturnsAgg._sum.returnedAmount || 0) + 
-                parseFloat(totalExpensesAgg._sum.amount || 0) + 
-                parseFloat(otherHandoversAgg._sum.amount || 0));
 
             const roundedTotalAvailable = Math.round(totalAvailableAllTime * 100) / 100;
             const roundedAmount = Math.round((amount !== undefined ? parseFloat(amount) : parseFloat(existingCashHandover.amount)) * 100) / 100;
@@ -587,14 +540,20 @@ export const getAvailableRevenueByDate = async (req, res) => {
         const nextDate = new Date(selectedDate);
         nextDate.setDate(nextDate.getDate() + 1);
 
-        const currentBranchFilter = (branchId && branchId !== 'central') ? { branchId } : { branchId: null };
-        const saleBranchFilter = (branchId && branchId !== 'central') ? { branchId } : { branchId: null };
+        let currentBranchFilter = {};
+        let saleBranchFilter = {};
+        if (branchId && branchId !== 'central') {
+            currentBranchFilter = { branchId };
+            saleBranchFilter = { branchId };
+        } else if (branchId === 'central') {
+            currentBranchFilter = { branchId: null };
+            saleBranchFilter = { branchId: null };
+        }
 
         // Həmin günün satışlarını hesabla (Nəğd)
         const salesAggregation = await prisma.sale.aggregate({
             where: {
                 deleteType: 'NONE',
-                isRefunded: false,
                 paymentType: 'cash',
                 ...saleBranchFilter,
                 createdAt: {
@@ -724,8 +683,19 @@ export const getAvailableRevenueByDate = async (req, res) => {
 export const getPayoutPendingDates = async (req, res) => {
     try {
         const { branchId } = req.query;
-        const currentBranchFilter = (branchId && branchId !== 'central') ? { branchId } : { branchId: null };
-        const saleBranchFilter = (branchId && branchId !== 'central') ? { branchId } : { branchId: null };
+        // branchId yoxdursa => hamısı (bütün filiallar)
+        // branchId === 'central' => yalnız filialsız (null)
+        // branchId => konkret filial
+        let currentBranchFilter = {};
+        let saleBranchFilter = {};
+        if (branchId && branchId !== 'central') {
+            currentBranchFilter = { branchId };
+            saleBranchFilter = { branchId };
+        } else if (branchId === 'central') {
+            currentBranchFilter = { branchId: null };
+            saleBranchFilter = { branchId: null };
+        }
+        // branchId yoxdursa: {} = bütün filiallar (statistika ilə eyni)
         // Son 180 günü yoxlayaq (təxminən 6 ay)
         const startDate = new Date();
         startDate.setDate(startDate.getDate() - 180);
@@ -870,56 +840,22 @@ export const getPayoutPendingDates = async (req, res) => {
             .filter(item => item.availableRevenue > 0.01) // Keep showing individual positive days
             .sort((a, b) => b.date.localeCompare(a.date));
 
-        // Calculate the real total available revenue across ALL time (matching create/update logic)
-        // We aggregate EVERYTHING to get the true balance of the cash box
-        const [salesAgg, creditAgg, returnsAgg, expensesAgg, handoversAgg] = await Promise.all([
-            prisma.sale.aggregate({
-                where: { deleteType: 'NONE', isRefunded: false, paymentType: 'cash', ...saleBranchFilter },
-                _sum: { paidAmount: true, profitAmount: true }
-            }),
-            prisma.creditpayment.aggregate({
-                where: { paymentType: 'cash', sale: saleBranchFilter },
-                _sum: { amount: true }
-            }),
-            prisma.salereturn.aggregate({
-                where: { sale: { deleteType: 'NONE', paymentType: 'cash', ...saleBranchFilter } },
-                _sum: { returnedAmount: true }
-            }),
-            prisma.expense.aggregate({
-                where: { deleteType: 'NONE', ...currentBranchFilter },
-                _sum: { amount: true }
-            }),
-            prisma.cashhandover.aggregate({
-                where: { deleteType: 'NONE', ...currentBranchFilter },
-                _sum: { amount: true }
-            })
-        ]);
-
-        const allSalesCash = parseFloat(salesAgg._sum.paidAmount || 0);
-        const allSalesProfit = parseFloat(salesAgg._sum.profitAmount || 0); // Get profit
-        const allCreditCash = parseFloat(creditAgg._sum.amount || 0);
-        const allReturnsCash = parseFloat(returnsAgg._sum.returnedAmount || 0);
-        const allExpensesCash = parseFloat(expensesAgg._sum.amount || 0);
-        const allHandoversCash = parseFloat(handoversAgg._sum.amount || 0);
-
-        const totalCashIn = allSalesCash + allCreditCash;
-        const totalCashOut = allReturnsCash + allExpensesCash;
-        const netCashBalance = totalCashIn - totalCashOut - allHandoversCash;
+        // K\u0259ssa balans\u0131n\u0131 vahid service il\u0259 hesabla
+        const allTimeResult = await computeCashboxBalance(currentBranchFilter);
 
         return res.status(200).json({
             success: true,
             data: pendingDates,
-            totalAvailable: Math.max(0, parseFloat(netCashBalance.toFixed(2))),
+            totalAvailable: Math.max(0, allTimeResult.balance),
             breakdown: {
-                cashIn: totalCashIn,
-                cashOut: totalCashOut,
-                sales: allSalesCash,
-                profit: allSalesProfit, // Add to breakdown
-                credits: allCreditCash,
-                returns: allReturnsCash,
-                expenses: allExpensesCash,
-                handovers: allHandoversCash,
-                netBalance: netCashBalance
+                cashIn:    allTimeResult.cashIn,
+                cashOut:   allTimeResult.cashOut,
+                sales:     allTimeResult.cashSales,
+                credits:   allTimeResult.creditPayments,
+                returns:   allTimeResult.returns,
+                expenses:  allTimeResult.expenses,
+                handovers: allTimeResult.handovers,
+                netBalance: allTimeResult.balance,
             }
         });
     } catch (error) {

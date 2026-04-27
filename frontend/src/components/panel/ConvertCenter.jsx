@@ -97,32 +97,6 @@ const ENTITY_CONFIG = [
         badgeColor: 'bg-indigo-100 text-indigo-700',
         btnColor: 'bg-indigo-600 hover:bg-indigo-700',
     },
-    {
-        key: 'category',
-        label: 'Kateqoriya',
-        description: 'Filialsız kateqoriyaları seçilmiş filiala bağla',
-        icon: Tag,
-        color: 'pink',
-        bgColor: 'bg-pink-50',
-        borderColor: 'border-pink-200',
-        iconBg: 'bg-pink-100',
-        iconColor: 'text-pink-600',
-        badgeColor: 'bg-pink-100 text-pink-700',
-        btnColor: 'bg-pink-600 hover:bg-pink-700',
-    },
-    {
-        key: 'subCategory',
-        label: 'Alt Kateqoriya',
-        description: 'Filialsız alt kateqoriyaları seçilmiş filiala bağla',
-        icon: Layers,
-        color: 'rose',
-        bgColor: 'bg-rose-50',
-        borderColor: 'border-rose-200',
-        iconBg: 'bg-rose-100',
-        iconColor: 'text-rose-600',
-        badgeColor: 'bg-rose-100 text-rose-700',
-        btnColor: 'bg-rose-600 hover:bg-rose-700',
-    },
 ];
 
 export default function ConvertCenter() {
@@ -140,8 +114,7 @@ export default function ConvertCenter() {
                 setBranches(response.data);
                 setTargetBranchId((prev) => {
                     if (prev && response.data.some((b) => b.id === prev)) return prev;
-                    const k = response.data.find((b) => b.name === 'Kürdəxanı');
-                    return k?.id ?? response.data[0]?.id ?? '';
+                    return response.data[0]?.id ?? '';
                 });
             }
         } catch (e) {
@@ -196,9 +169,8 @@ export default function ConvertCenter() {
 
         if (!result.isConfirmed) return;
 
-        setConverting(entityKey);
         try {
-            const response = await convertApi.assignToKurdaxani([entityKey], targetBranchId);
+            const response = await convertApi.assignToBranch([entityKey], targetBranchId);
             if (response.success) {
                 setConverted(prev => ({ ...prev, [entityKey]: true }));
                 Alert.success('Uğurlu!', response.message);
@@ -237,7 +209,7 @@ export default function ConvertCenter() {
 
         setConverting('all');
         try {
-            const response = await convertApi.assignToKurdaxani([], targetBranchId);
+            const response = await convertApi.assignToBranch([], targetBranchId);
             if (response.success) {
                 const allKeys = ENTITY_CONFIG.reduce((acc, e) => ({ ...acc, [e.key]: true }), {});
                 setConverted(allKeys);
@@ -263,7 +235,7 @@ export default function ConvertCenter() {
                 <div>
                     <h1 className="text-3xl font-bold text-gray-800">Convert Mərkəzi</h1>
                     <p className="mt-1 text-sm text-gray-500">
-                        Filialsız məlumatları seçdiyiniz filiala bağlayın (defolt Kürdəxanı)
+                        Filialsız məlumatları seçdiyiniz filiala bağlayın
                     </p>
                 </div>
                 <div className="flex flex-col sm:flex-row sm:items-center gap-3">
@@ -420,18 +392,6 @@ export default function ConvertCenter() {
                 })}
             </div>
 
-            <section
-                className="pt-10 mt-10 border-t border-gray-200"
-                aria-label="Silinmiş elementlər"
-            >
-                <p className="text-sm font-medium text-gray-700 mb-1">
-                    Silinmiş elementlər
-                </p>
-                <p className="text-xs text-gray-500 mb-4">
-                    Filialsız köçürmələrdən sonra soft silinmiş qeydləri buradan da idarə edə bilərsiniz.
-                </p>
-                <DeletedElements embedded />
-            </section>
         </div>
     );
 }

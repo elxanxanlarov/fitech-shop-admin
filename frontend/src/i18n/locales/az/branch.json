@@ -106,5 +106,14 @@
     "accept": "Qəbul Et",
     "reject": "Ləğv Et",
     "sender": "Göndərən",
-    "date": "Tarix"
+    "date": "Tarix",
+    "confirm_accept_transfer": "Bu köçürməni qəbul etmək istədiyinizə əminsiniz? Məhsullar stokunuza əlavə olunacaq.",
+    "confirm_reject_transfer": "Bu köçürməni ləğv etmək istədiyinizə əminsiniz? Məhsullar göndərən filiala geri qayıdacaq.",
+    "history": "Tarixçə",
+    "to": "Hədəf",
+    "from": "Mənbə",
+    "created_by": "Yaradan",
+    "no_history_yet": "Hələ ki tarixçə yoxdur",
+    "shipped": "Yoldadır",
+    "pending": "Gözləyir"
 }

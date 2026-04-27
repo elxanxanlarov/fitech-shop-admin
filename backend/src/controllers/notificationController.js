@@ -3,11 +3,17 @@ import prisma from "../lib/prisma.js";
 // Bütün bildirişləri əldə et
 export const getAllNotifications = async (req, res) => {
     try {
-        const { isRead } = req.query;
+        const { isRead, branchId } = req.query;
 
         const where = {};
         if (isRead !== undefined) {
             where.isRead = isRead === 'true';
+        }
+        if (branchId) {
+            where.OR = [
+                { branchId: branchId },
+                { branchId: null } // Global notifications
+            ];
         }
 
         const notifications = await prisma.notification.findMany({
@@ -106,6 +112,7 @@ export const createNotification = async (data) => {
                 title: data.title,
                 message: data.message,
                 saleId: data.saleId || null,
+                branchId: data.branchId || null,
                 dueDate: data.dueDate || null
             }
         });

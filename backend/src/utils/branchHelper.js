@@ -30,8 +30,8 @@ export const ensureBranch = async (name, address = "") => {
     });
     console.log(`✅ Yeni filial yaradıldı: ${name}`);
 
-    // Yeni filial üçün stok qeydlərini yarat
-    await createDefaultStocksForBranch(branch.id);
+    // Yeni filial üçün artıq avtomatik stok qeydləri yaradılmır
+    // await createDefaultStocksForBranch(branch.id);
 
     return branch;
 };

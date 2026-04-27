@@ -8,6 +8,7 @@
   "customer_management": "Customer Management",
   "product_management": "Product Management",
   "product_branch_transfer": "Product transfer",
+  "product_branch_inventory": "Product Branch Inventory",
   "invoice_name_mapping": "Invoice Names",
   "sale_management": "Sale",
   "expense_management": "Expenses",
@@ -16,5 +17,8 @@
   "statistics": "Statistics",
   "convert_center": "Convert",
   "deleted_elements": "Deleted Items",
+  "branch_deleted_products": "Branch Deleted Products",
+  "sync_center": "Sync Center",
+  "sales_ledger": "Sales Ledger",
   "settings": "Settings"
 }

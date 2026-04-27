@@ -1,5 +1,6 @@
 import prisma from '../lib/prisma.js';
 import { Prisma } from '@prisma/client';
+import { computeCashboxBalance, buildBranchFilter } from '../services/cashboxService.js';
 
 /** Satış sorğularında filial: konkret id, 'central' → yalnız mərkəzi (branchId null), boş → süzülmür */
 function saleBranchWhere(branchId) {
@@ -27,79 +28,95 @@ export const getOverallStatistics = async (req, res) => {
             dateFilter = { createdAt: { gte: start, lte: end } };
         }
 
-        // Yalnız silinməyən və tam qaytarılmayan satışları nəzərə al
-        const salesFilter = { deleteType: 'NONE', isRefunded: false, ...dateFilter };
-
-        // Branch filter
+        // Branch filter base
+        const branchWhere = {};
         if (branchId && branchId !== 'central') {
-            salesFilter.branchId = branchId;
+            branchWhere.branchId = branchId;
         } else if (branchId === 'central') {
-            salesFilter.branchId = null;
+            branchWhere.branchId = null;
         }
 
-        // ================= TOTAL SALES =================
-        const totalSales = await prisma.sale.count({ where: salesFilter });
+        // ================= SALES CATEGORIES =================
 
-        const salesAggregation = await prisma.sale.aggregate({
-            where: salesFilter,
+        // 1. GROSS (Everything - not deleted)
+        const grossFilter = { deleteType: 'NONE', ...dateFilter, ...branchWhere };
+        const grossSalesCount = await prisma.sale.count({ where: grossFilter });
+        const grossAggregation = await prisma.sale.aggregate({
+            where: grossFilter,
             _sum: { totalAmount: true, profitAmount: true }
         });
 
-        // ================= TOTAL RETURNS =================
-        // Yalnız silinməmiş satışlara aid qaytarmaları göstər
+        // 2. REFUNDED (Fully refunded sales)
+        const refundedFilter = { ...grossFilter, isRefunded: true };
+        const refundedSalesCount = await prisma.sale.count({ where: refundedFilter });
+        const refundedAggregation = await prisma.sale.aggregate({
+            where: refundedFilter,
+            _sum: { totalAmount: true, profitAmount: true }
+        });
+
+        // 3. NET (Active sales only)
+        const netSalesCount = grossSalesCount - refundedSalesCount;
+        const netSalesAmount = Number(grossAggregation._sum.totalAmount || 0) - Number(refundedAggregation._sum.totalAmount || 0);
+        const netSalesProfit = Number(grossAggregation._sum.profitAmount || 0) - Number(refundedAggregation._sum.profitAmount || 0);
+
+        // ================= RETURNS & PARTIALS =================
+
+        // 4. TOTAL RETURNS (All salereturn records)
         const returnsFilter = {
             ...dateFilter,
             sale: {
                 deleteType: 'NONE',
-                branchId: branchId === 'central' ? null : (branchId || undefined)
+                ...branchWhere
             }
         };
-
-        const totalReturns = await prisma.salereturn.count({ where: returnsFilter });
-
+        const totalReturnsCount = await prisma.salereturn.count({ where: returnsFilter });
         const returnsAggregation = await prisma.salereturn.aggregate({
             where: returnsFilter,
             _sum: { returnedAmount: true }
         });
 
-        // Qaytarma zamanı itirilən qazancı hesabla (SaleReturnItem-dəki loss-ların cəmi)
-        // Yalnız silinməmiş satışlara aid qaytarmaları nəzərə al
-        const returnItemsLoss = await prisma.salereturnitem.aggregate({
+        // 5. PARTIAL RETURNS LOSS (Loss from returns belonging to NON-refunded sales)
+        const partialReturnLossAgg = await prisma.salereturnitem.aggregate({
             where: {
                 return: {
                     ...dateFilter,
                     sale: {
-                        deleteType: 'NONE'
+                        deleteType: 'NONE',
+                        isRefunded: false,
+                        ...branchWhere
                     }
                 }
             },
-            _sum: {
-                loss: true
-            }
+            _sum: { loss: true, totalPrice: true }
         });
 
-        // ================= NET SALES =================
-        const netSalesAmount = (salesAggregation._sum.totalAmount || 0) - (returnsAggregation._sum.returnedAmount || 0);
-        // Qazancdan qaytarma zamanı itirilən qazancı çıx (loss), qaytarma məbləğini deyil
-        const totalProfit = salesAggregation._sum.profitAmount || new Prisma.Decimal(0);
-        const totalLoss = returnItemsLoss._sum.loss || new Prisma.Decimal(0);
-        const netProfit = parseFloat(totalProfit.sub(totalLoss).toString());
+        const partialReturnLoss = Number(partialReturnLossAgg._sum.loss || 0);
+        const partialReturnAmount = Number(partialReturnLossAgg._sum.totalPrice || 0);
+
+        // 6. FINAL PROFIT (Net Profit - Partial Return Loss)
+        const finalProfit = netSalesProfit - partialReturnLoss;
 
         // ================= PRODUCTS =================
         let totalProducts, activeProducts, deletedProducts, stockAggregation;
 
+        const currentBranchFilter = (branchId && branchId !== 'central') ? { branchId } : (branchId === 'central' ? { branchId: null } : {});
+
         if (branchId && branchId !== 'central') {
-            totalProducts = await prisma.branchstock.count({
-                where: {
-                    branchId: branchId,
-                    product: { deleteType: 'NONE' }
+            // All products that are not soft-deleted globally AND not soft-deleted in this branch
+            const branchVisibleFilter = {
+                deleteType: 'NONE',
+                branchDeletedProducts: {
+                    none: {
+                        branchId: branchId
+                    }
                 }
+            };
+
+            totalProducts = await prisma.product.count({
+                where: branchVisibleFilter
             });
-            activeProducts = await prisma.branchstock.count({
-                where: {
-                    branchId: branchId,
-                    product: { isActive: true, deleteType: 'NONE' }
-                }
+            activeProducts = await prisma.product.count({
+                where: { ...branchVisibleFilter, isActive: true }
             });
             stockAggregation = await prisma.branchstock.aggregate({
                 where: {
@@ -108,7 +125,7 @@ export const getOverallStatistics = async (req, res) => {
                 },
                 _sum: { stock: true }
             });
-            // Deleted products are usually global or central warehouse concern
+            // Global deleted products count
             deletedProducts = await prisma.product.count({ where: { deleteType: { not: 'NONE' } } });
         } else {
             totalProducts = await prisma.product.count({ where: { deleteType: 'NONE' } });
@@ -121,13 +138,11 @@ export const getOverallStatistics = async (req, res) => {
         const hardDeletedProducts = await prisma.product.count({ where: { deleteType: 'HARD' } });
         const archivedProducts = await prisma.product.count({ where: { deleteType: 'ARCHIVED' } });
 
-        const currentBranchFilter = (branchId && branchId !== 'central') ? { branchId } : (branchId === 'central' ? { branchId: null } : {});
-
         // ================= STAFF =================
         const totalStaff = await prisma.staff.count({ where: currentBranchFilter });
         const activeStaff = await prisma.staff.count({ where: { isActive: true, ...currentBranchFilter } });
 
-        // ================= EXPENSES =================
+        // ================= EXPENSES & HANDOVER =================
         let expenseDateFilter = {};
         if (startDate && endDate) {
             const start = new Date(startDate); start.setHours(0, 0, 0, 0);
@@ -139,15 +154,8 @@ export const getOverallStatistics = async (req, res) => {
             _sum: { amount: true }
         });
 
-        // ================= CASH HANDOVER =================
-        let cashHandoverDateFilter = {};
-        if (startDate && endDate) {
-            const start = new Date(startDate); start.setHours(0, 0, 0, 0);
-            const end = new Date(endDate); end.setHours(23, 59, 59, 999);
-            cashHandoverDateFilter = { date: { gte: start, lte: end } };
-        }
         const cashHandoverAggregation = await prisma.cashhandover.aggregate({
-            where: { deleteType: 'NONE', ...cashHandoverDateFilter, ...currentBranchFilter },
+            where: { deleteType: 'NONE', ...expenseDateFilter, ...currentBranchFilter },
             _sum: { amount: true },
             _count: true
         });
@@ -160,169 +168,91 @@ export const getOverallStatistics = async (req, res) => {
             _sum: { creditTotalAmount: true, creditRemainingAmount: true }
         });
         const activeCredits = await prisma.sale.count({ where: { isCredit: true, isRefunded: false, isCreditPaid: false, deleteType: 'NONE' } });
-        const totalCreditPaid = (creditSalesAggregation._sum.creditTotalAmount || 0) - (creditSalesAggregation._sum.creditRemainingAmount || 0);
+        const totalCreditPaid = Number(creditSalesAggregation._sum.creditTotalAmount || 0) - Number(creditSalesAggregation._sum.creditRemainingAmount || 0);
 
         // ================= TODAY STATS =================
         const today = new Date(); today.setHours(0, 0, 0, 0);
         const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
 
-        let todaySales = 0;
-        let todaySalesAggregation = { _sum: { totalAmount: 0, profitAmount: 0 } };
-        let todayReturnsAggregation = { _sum: { returnedAmount: 0 } };
-        let todayExpensesAggregation = { _sum: { amount: 0 } };
-        let todayCashHandoverAggregation = { _sum: { amount: 0 }, _count: 0 };
-        let todayCreditSales = 0;
-        let todayCreditSalesAggregation = { _sum: { creditTotalAmount: 0, creditRemainingAmount: 0 } };
+        const todayGrossFilter = { deleteType: 'NONE', createdAt: { gte: today, lt: tomorrow }, ...currentBranchFilter };
+        const todayGrossCount = await prisma.sale.count({ where: todayGrossFilter });
+        const todayGrossAgg = await prisma.sale.aggregate({ where: todayGrossFilter, _sum: { totalAmount: true, profitAmount: true } });
 
-        if (!startDate || !endDate) {
-            const todaySalesFilter = {
-                deleteType: 'NONE', isRefunded: false,
-                createdAt: { gte: today, lt: tomorrow },
-                ...currentBranchFilter
-            };
-            todaySales = await prisma.sale.count({ where: todaySalesFilter });
-            todaySalesAggregation = await prisma.sale.aggregate({ where: todaySalesFilter, _sum: { totalAmount: true, profitAmount: true } });
+        const todayRefundedFilter = { ...todayGrossFilter, isRefunded: true };
+        const todayRefundedCount = await prisma.sale.count({ where: todayRefundedFilter });
+        const todayRefundedAgg = await prisma.sale.aggregate({ where: todayRefundedFilter, _sum: { totalAmount: true, profitAmount: true } });
 
-            // Bu günkü qaytarmalar - yalnız silinməmiş satışlara aid
-            todayReturnsAggregation = await prisma.salereturn.aggregate({
-                where: {
+        const todayNetCount = todayGrossCount - todayRefundedCount;
+        const todayNetAmount = Number(todayGrossAgg._sum.totalAmount || 0) - Number(todayRefundedAgg._sum.totalAmount || 0);
+        const todayNetProfit = Number(todayGrossAgg._sum.profitAmount || 0) - Number(todayRefundedAgg._sum.profitAmount || 0);
+
+        // Today partial loss
+        const todayPartialLossAgg = await prisma.salereturnitem.aggregate({
+            where: {
+                return: {
                     createdAt: { gte: today, lt: tomorrow },
-                    sale: {
-                        deleteType: 'NONE',
-                        ...currentBranchFilter
-                    }
-                },
-                _sum: { returnedAmount: true }
-            });
-
-            todayExpensesAggregation = await prisma.expense.aggregate({
-                where: { deleteType: 'NONE', date: { gte: today, lt: tomorrow }, ...currentBranchFilter },
-                _sum: { amount: true }
-            });
-            todayCashHandoverAggregation = await prisma.cashhandover.aggregate({
-                where: { deleteType: 'NONE', date: { gte: today, lt: tomorrow }, ...currentBranchFilter },
-                _sum: { amount: true }, _count: true
-            });
-            const todayCreditFilter = {
-                isCredit: true, isRefunded: false, deleteType: 'NONE',
-                createdAt: { gte: today, lt: tomorrow },
-                ...currentBranchFilter
-            };
-            todayCreditSales = await prisma.sale.count({ where: todayCreditFilter });
-            todayCreditSalesAggregation = await prisma.sale.aggregate({ where: todayCreditFilter, _sum: { creditTotalAmount: true, creditRemainingAmount: true } });
-        }
-
-        // Bu günkü qaytarma loss-larını hesabla (yalnız silinməmiş satışlara aid)
-        let todayLoss = new Prisma.Decimal(0);
-        if (!startDate || !endDate) {
-            const todayReturnItemsLoss = await prisma.salereturnitem.aggregate({
-                where: {
-                    return: {
-                        createdAt: { gte: today, lt: tomorrow },
-                        sale: {
-                            deleteType: 'NONE',
-                            ...currentBranchFilter
-                        }
-                    }
-                },
-                _sum: { loss: true }
-            });
-            todayLoss = todayReturnItemsLoss._sum.loss || new Prisma.Decimal(0);
-        }
-
-        // ================= NET TODAY =================
-        const todayNetAmount = (todaySalesAggregation._sum.totalAmount || 0) - (todayReturnsAggregation._sum.returnedAmount || 0);
-        // Bu günkü qazancdan qaytarma loss-larını çıx
-        const todayTotalProfit = new Prisma.Decimal(todaySalesAggregation._sum.profitAmount || 0);
-        const todayNetProfit = parseFloat(todayTotalProfit.sub(todayLoss).toString());
-
-        // ================= NET REVENUE (after cash handover) =================
-        const totalCashHandover = cashHandoverAggregation._sum.amount || 0;
-        const todayCashHandover = todayCashHandoverAggregation._sum.amount || 0;
-
-        // Xalis gəlir (Cash Handover çıxıldıqdan sonra)
-        const netRevenueAfterHandover = netSalesAmount - totalCashHandover;
-        const todayNetRevenueAfterHandover = todayNetAmount - todayCashHandover;
-
-        // ================= KASSA (CASHBOX) - ALL TIME =================
-        // Kassa həmişə mövcud vəziyyəti göstərməlidir (tarix filtri olmadan)
-        const kassaBranchFilter = {};
-        if (branchId && branchId !== 'central') {
-            kassaBranchFilter.branchId = branchId;
-        } else if (branchId === 'central') {
-            kassaBranchFilter.branchId = null;
-        }
-
-        // 1. Nakit satışlar (Bütün zamanlar)
-        const totalCashSalesAllTime = await prisma.sale.aggregate({
-            where: { ...kassaBranchFilter, deleteType: 'NONE', paymentType: 'cash', isRefunded: false },
-            _sum: { totalAmount: true }
-        });
-
-        // 2. Kredit ödənişləri (Nakit olanlar - Bütün zamanlar)
-        const totalCashCreditPaymentsAllTime = await prisma.creditpayment.aggregate({
-            where: {
-                ...kassaBranchFilter,
-                paymentType: 'cash',
-                sale: { deleteType: 'NONE' }
-            },
-            _sum: { amount: true }
-        });
-
-        // 3. Qaytarmalar (Nakit olan satışlara aid qaytarmalar - Bütün zamanlar)
-        const totalCashReturnsAllTime = await prisma.salereturn.aggregate({
-            where: {
-                ...kassaBranchFilter,
-                sale: {
-                    paymentType: 'cash',
-                    deleteType: 'NONE'
+                    sale: { deleteType: 'NONE', isRefunded: false, ...currentBranchFilter }
                 }
             },
-            _sum: { returnedAmount: true }
+            _sum: { loss: true }
         });
-
-        // 4. Bütün xərclər (Bütün zamanlar)
-        const totalExpensesAllTime = await prisma.expense.aggregate({
-            where: { ...kassaBranchFilter, deleteType: 'NONE' },
+        const todayFinalProfit = todayNetProfit - Number(todayPartialLossAgg._sum.loss || 0);
+        
+        // Today Expenses
+        const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+        const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
+        const todayExpensesAgg = await prisma.expense.aggregate({
+            where: { deleteType: 'NONE', date: { gte: todayStart, lte: todayEnd }, ...currentBranchFilter },
             _sum: { amount: true }
         });
 
-        // 5. Bütün təslimatlar (Bütün zamanlar)
-        const totalHandoversAllTime = await prisma.cashhandover.aggregate({
-            where: { ...kassaBranchFilter, deleteType: 'NONE' },
-            _sum: { amount: true }
+        // Today Handovers
+        const todayHandoverAgg = await prisma.cashhandover.aggregate({
+            where: { deleteType: 'NONE', date: { gte: todayStart, lte: todayEnd }, ...currentBranchFilter },
+            _sum: { amount: true },
+            _count: true
         });
 
-        const cashboxBalance =
-            (totalCashSalesAllTime._sum.totalAmount || 0) +
-            (totalCashCreditPaymentsAllTime._sum.amount || 0) -
-            (totalCashReturnsAllTime._sum.returnedAmount || 0) -
-            (totalExpensesAllTime._sum.amount || 0) -
-            (totalHandoversAllTime._sum.amount || 0);
+        // ================= KASSA (CASHBOX) - ALL TIME =================
+        const kassaBranchFilter = buildBranchFilter(branchId);
+        const cashboxResult = await computeCashboxBalance(kassaBranchFilter);
+        const cashboxBalance = cashboxResult.balance;
 
         // ================= RESPONSE =================
         res.json({
             success: true,
             data: {
                 sales: {
-                    total: totalSales,
-                    totalAmount: netSalesAmount,
-                    totalProfit: netProfit,
-                    netRevenueAfterHandover: netRevenueAfterHandover, // Təslim edildikdən sonra qalan gəlir
+                    gross: {
+                        count: grossSalesCount,
+                        amount: Number(grossAggregation._sum.totalAmount || 0),
+                        profit: Number(grossAggregation._sum.profitAmount || 0)
+                    },
+                    refunded: {
+                        count: refundedSalesCount,
+                        amount: Number(refundedAggregation._sum.totalAmount || 0),
+                        profit: Number(refundedAggregation._sum.profitAmount || 0)
+                    },
+                    net: {
+                        count: netSalesCount,
+                        amount: netSalesAmount,
+                        profit: netSalesProfit
+                    },
+                    partialReturns: {
+                        amount: partialReturnAmount,
+                        loss: partialReturnLoss
+                    },
+                    totalProfit: finalProfit, // Final net profit
                     today: {
-                        count: todaySales,
+                        count: todayNetCount,
                         amount: todayNetAmount,
-                        profit: todayNetProfit,
-                        netRevenueAfterHandover: todayNetRevenueAfterHandover // Bu günkü təslim edildikdən sonra qalan
+                        profit: todayFinalProfit,
+                        grossCount: todayGrossCount
                     }
                 },
                 returns: {
-                    total: totalReturns,
-                    totalAmount: returnsAggregation._sum.totalAmount || 0,
-                    returnedAmount: returnsAggregation._sum.returnedAmount || 0,
-                    today: {
-                        returnedAmount: todayReturnsAggregation._sum.returnedAmount || 0
-                    }
+                    total: totalReturnsCount,
+                    returnedAmount: Number(returnsAggregation._sum.returnedAmount || 0)
                 },
                 products: {
                     total: totalProducts,
@@ -331,20 +261,24 @@ export const getOverallStatistics = async (req, res) => {
                     deleted: { total: deletedProducts, soft: softDeletedProducts, hard: hardDeletedProducts, archived: archivedProducts }
                 },
                 staff: { total: totalStaff, active: activeStaff },
-                expenses: { totalAmount: expensesAggregation._sum.amount || 0, today: { amount: todayExpensesAggregation._sum.amount || 0 } },
-                cashHandover: { total: cashHandoverAggregation._count || 0, totalAmount: cashHandoverAggregation._sum.amount || 0, today: { count: todayCashHandoverAggregation._count || 0, amount: todayCashHandoverAggregation._sum.amount || 0 } },
+                expenses: { 
+                    totalAmount: Number(expensesAggregation._sum.amount || 0),
+                    today: { amount: Number(todayExpensesAgg._sum.amount || 0) }
+                },
+                cashHandover: { 
+                    total: cashHandoverAggregation._count || 0, 
+                    totalAmount: Number(cashHandoverAggregation._sum.amount || 0),
+                    today: { 
+                        count: todayHandoverAgg._count || 0,
+                        amount: Number(todayHandoverAgg._sum.amount || 0)
+                    }
+                },
                 credits: {
                     total: totalCreditSales,
                     totalAmount: creditSalesAggregation._sum.creditTotalAmount || 0,
                     paidAmount: totalCreditPaid,
                     remainingAmount: creditSalesAggregation._sum.creditRemainingAmount || 0,
-                    active: activeCredits,
-                    today: {
-                        count: todayCreditSales,
-                        amount: todayCreditSalesAggregation._sum.creditTotalAmount || 0,
-                        paidAmount: (todayCreditSalesAggregation._sum.creditTotalAmount || 0) - (todayCreditSalesAggregation._sum.creditRemainingAmount || 0),
-                        remainingAmount: todayCreditSalesAggregation._sum.creditRemainingAmount || 0
-                    }
+                    active: activeCredits
                 },
                 cashbox: {
                     balance: cashboxBalance
@@ -827,3 +761,118 @@ export const getCustomerStatistics = async (req, res) => {
     }
 };
 
+/**
+ * getSalesLedger — Superadmin \u00fc\u00e7\u00fcn sat\u0131\u015f d\u0259ft\u0259ri
+ * H\u0259r sat\u0131\u015f\u0131n qiym\u0259tini siyah\u0131 \u015f\u0259klind\u0259 qaytar\u0131r: 20 + 40 + 15 = 75
+ * H\u0259m\u00e7inin kassadan kassa balans\u0131n\u0131, x\u0259rcl\u0259ri, t\u0259slimatlar\u0131 g\u00f6st\u0259rir.
+ */
+export const getSalesLedger = async (req, res) => {
+    try {
+        const { startDate, endDate, branchId } = req.query;
+
+        // Date filter
+        let dateFilter = {};
+        if (startDate && endDate) {
+            const start = new Date(startDate); start.setHours(0, 0, 0, 0);
+            const end = new Date(endDate);     end.setHours(23, 59, 59, 999);
+            dateFilter = { createdAt: { gte: start, lte: end } };
+        }
+
+        const branchFilter = buildBranchFilter(branchId);
+
+        // Satışlar (Bütün satışlar, silinməmiş)
+        const sales = await prisma.sale.findMany({
+            where: { deleteType: 'NONE', ...branchFilter, ...dateFilter },
+            select: {
+                id: true,
+                totalAmount: true,
+                paidAmount: true,
+                profitAmount: true,
+                paymentType: true,
+                isCredit: true,
+                isRefunded: true,
+                refundedAt: true,
+                createdAt: true,
+                customerName: true,
+                customerSurname: true,
+                branch: { select: { name: true } },
+                items: {
+                    select: {
+                        quantity: true,
+                        pricePerItem: true,
+                        totalPrice: true,
+                        product: { select: { name: true } },
+                    }
+                },
+            },
+            orderBy: { createdAt: 'desc' }, // Ən sonuncular yuxarıda
+        });
+
+        // Expense/handover date filter
+        let expenseDateFilter = {};
+        if (startDate && endDate) {
+            const s = new Date(startDate); s.setHours(0,0,0,0);
+            const e = new Date(endDate);   e.setHours(23,59,59,999);
+            expenseDateFilter = { date: { gte: s, lte: e } };
+        }
+
+        const [expensesAgg, handoversAgg, cashbox] = await Promise.all([
+            prisma.expense.aggregate({
+                where: { deleteType: 'NONE', ...branchFilter, ...expenseDateFilter },
+                _sum: { amount: true },
+            }),
+            prisma.cashhandover.aggregate({
+                where: { deleteType: 'NONE', ...branchFilter, ...expenseDateFilter },
+                _sum: { amount: true },
+                _count: true,
+            }),
+            computeCashboxBalance(branchFilter),
+        ]);
+
+        const totalSalesAmount = sales.reduce((s, x) => s + Number(x.totalAmount), 0);
+        const totalProfit      = sales.reduce((s, x) => s + Number(x.profitAmount || 0), 0);
+        const totalExpenses    = Number(expensesAgg._sum.amount  || 0);
+        const totalHandovers   = Number(handoversAgg._sum.amount || 0);
+        const handoverCount    = handoversAgg._count || 0;
+
+        return res.json({
+            success: true,
+            data: {
+                sales: sales.map(s => ({
+                    id:          s.id,
+                    totalAmount: Number(s.totalAmount),
+                    paidAmount:  Number(s.paidAmount),
+                    profitAmount: Number(s.profitAmount || 0),
+                    paymentType: s.paymentType,
+                    isCredit:    s.isCredit,
+                    createdAt:   s.createdAt,
+                    customerName: s.customerName,
+                    customerSurname: s.customerSurname,
+                    branchName:  s.branch?.name ?? null,
+                    items: s.items.map(i => ({
+                        productName:  i.product?.name ?? '-',
+                        quantity:     i.quantity,
+                        pricePerItem: Number(i.pricePerItem),
+                        totalPrice:   Number(i.totalPrice),
+                    })),
+                })),
+                summary: {
+                    totalSales:     sales.length,
+                    totalAmount:    Math.round(totalSalesAmount * 100) / 100,
+                    totalProfit:    Math.round(totalProfit * 100) / 100,
+                    totalExpenses:  Math.round(totalExpenses * 100) / 100,
+                    totalHandovers: Math.round(totalHandovers * 100) / 100,
+                    handoverCount,
+                    cashboxBalance: cashbox.balance,
+                    cashIn:        cashbox.cashIn,
+                    cashOut:       cashbox.cashOut,
+                    cashSales:     cashbox.cashSales,
+                    creditPayments: cashbox.creditPayments,
+                },
+            }
+        });
+    } catch (error) {
+        console.error('getSalesLedger error:', error);
+        return res.status(500).json({ success: false, message: 'Sat\u0131\u015f d\u0259ft\u0259ri al\u0131nark\u0259n x\u0259ta ba\u015f verdi', error: error.message });
+    }
+};

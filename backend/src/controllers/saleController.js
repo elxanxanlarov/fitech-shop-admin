@@ -459,171 +459,134 @@ export const updateSale = async (req, res) => {
 export const deleteSale = async (req, res) => {
     try {
         const { id } = req.params;
-        const { deleteType = 'SOFT' } = req.body; // Default: SOFT delete
+        const { deleteType = 'SOFT' } = req.body;
         
-        // Ensure deleteType is valid
         const validDeleteType = (deleteType && typeof deleteType === 'string' && deleteType.toUpperCase() === 'HARD') ? 'HARD' : 'SOFT';
         
         console.log(`deleteSale request, id: ${id}, deleteType: ${validDeleteType}`);
+        
         const existingSale = await prisma.sale.findUnique({ 
             where: { id },
-            include: { items: true }
+            include: { 
+                items: { include: { product: true } },
+                returns: { include: { items: true } }
+            }
         });
         
         if (!existingSale) {
+            console.log(`Sale not found: ${id}`);
             return res.status(404).json({ success: false, message: "Satış tapılmadı" });
         }
 
-        // DeleteType-a görə silmə
         if (validDeleteType === 'HARD') {
-            // Hard delete - stokları geri qaytar və tamamilə sil
-            // Qaytarmaları yüklə (qalan miqdarı hesablamaq üçün)
-            const saleReturns = await prisma.salereturn.findMany({
-                where: { saleId: id },
-                include: {
-                    items: {
-                        include: {
-                            saleItem: true
-                        }
-                    }
-                }
-            });
-
-            // Hər bir sale item üçün qaytarılan miqdarı hesabla
-            const returnedQuantities = new Map();
-            saleReturns.forEach(saleReturn => {
-                saleReturn.items.forEach(returnItem => {
-                    const saleItemId = returnItem.saleItemId;
-                    const returnedQty = returnItem.quantity || 0;
-                    const currentReturned = returnedQuantities.get(saleItemId) || 0;
-                    returnedQuantities.set(saleItemId, currentReturned + returnedQty);
+            await prisma.$transaction(async (tx) => {
+                // Hər bir sale item üçün qaytarılan miqdarı hesabla
+                const returnedQuantities = new Map();
+                existingSale.returns.forEach(saleReturn => {
+                    saleReturn.items.forEach(returnItem => {
+                        const saleItemId = returnItem.saleItemId;
+                        const returnedQty = returnItem.quantity || 0;
+                        const currentReturned = returnedQuantities.get(saleItemId) || 0;
+                        returnedQuantities.set(saleItemId, currentReturned + returnedQty);
+                    });
                 });
-            });
 
-            // Remove related records that reference Sale to avoid foreign key constraint errors
-            try {
                 const saleItemIds = existingSale.items.map(i => i.id);
+                const returnIds = existingSale.returns.map(r => r.id);
 
-                // 1) Delete SaleReturnItem entries that reference these sale items
+                // 1) Delete SaleReturnItem entries
                 if (saleItemIds.length > 0) {
-                    console.log(`Deleting SaleReturnItem by saleItemId count: ${saleItemIds.length}`);
-                    await prisma.salereturnitem.deleteMany({ where: { saleItemId: { in: saleItemIds } } });
+                    await tx.salereturnitem.deleteMany({ where: { saleItemId: { in: saleItemIds } } });
                 }
 
-                // 2) Find SaleReturn records for this sale and delete their items
-                // QAYTARMALARI SİL (lakin stokları azaltma, çünki biz sonra qalan miqdarı geri qaytaracağıq)
-                const returnIds = saleReturns.map(r => r.id);
+                // 2) Delete SaleReturn records
                 if (returnIds.length > 0) {
-                    console.log(`Deleting SaleReturnItem by returnId count: ${returnIds.length}`);
-                    await prisma.salereturnitem.deleteMany({ where: { returnId: { in: returnIds } } });
-                    console.log(`Deleting SaleReturn records count: ${returnIds.length}`);
-                    await prisma.salereturn.deleteMany({ where: { id: { in: returnIds } } });
+                    await tx.salereturnitem.deleteMany({ where: { returnId: { in: returnIds } } });
+                    await tx.salereturn.deleteMany({ where: { id: { in: returnIds } } });
                 }
 
-                // 3) İndi stokları geri qaytar (yalnız qalan miqdarı)
-                // Qaytarma silindiyi üçün artıq qaytarma miqdarı stokda deyil
-                // Biz yalnız qalan (satış - qaytarma) miqdarı geri qaytarmalıyıq
+                // 3) Restore stocks for remaining quantities
                 for (const item of existingSale.items) {
                     const returnedQty = returnedQuantities.get(item.id) || 0;
-                    const remainingQty = item.quantity - returnedQty; // Qalan miqdar
+                    const remainingQty = item.quantity - returnedQty;
                     
-                    // Əgər qalan miqdar varsa, yalnız onu geri qaytar
                     if (remainingQty > 0) {
-                        const product = await prisma.product.findUnique({
-                            where: { id: item.productId }
-                        });
-
+                        const product = item.product;
                         if (product) {
-                            try {
-                                // Stok artır (qutu/ədəd məntiqinə uyğun)
-                                const newStockData = increaseProductStock(product, remainingQty);
-
-                                await prisma.product.update({
+                            if (existingSale.branchId) {
+                                // Filial stokunu artır
+                                const bStock = await tx.branchstock.findFirst({
+                                    where: { branchId: existingSale.branchId, productId: item.productId }
+                                });
+                                if (bStock) {
+                                    const meta = { ...product, ...bStock };
+                                    const newData = increaseProductStock(meta, remainingQty);
+                                    await tx.branchstock.update({
+                                        where: { id: bStock.id },
+                                        data: {
+                                            stock: newData.stock,
+                                            fullBoxes: newData.fullBoxes,
+                                            openedBoxQuantity: newData.openedBoxQuantity
+                                        }
+                                    });
+                                }
+                            } else {
+                                // Mərkəzi stokunu artır
+                                const newData = increaseProductStock(product, remainingQty);
+                                await tx.product.update({
                                     where: { id: item.productId },
                                     data: {
-                                        stock: newStockData.stock,
-                                        fullBoxes: newStockData.fullBoxes,
-                                        openedBoxQuantity: newStockData.openedBoxQuantity
+                                        stock: newData.stock,
+                                        fullBoxes: newData.fullBoxes,
+                                        openedBoxQuantity: newData.openedBoxQuantity
                                     }
                                 });
-                            } catch (stockError) {
-                                console.error(`Stok yenilənərkən xəta (${product.name}):`, stockError);
-                                // Xətanı log et, amma silməni dayandırma
                             }
                         }
                     }
                 }
 
-                // 4) Delete SaleItem records for this sale
+                // 4) Delete SaleItem, Receipts and finally Sale
                 if (saleItemIds.length > 0) {
-                    console.log(`Deleting SaleItem records count: ${saleItemIds.length}`);
-                    await prisma.saleitem.deleteMany({ where: { id: { in: saleItemIds } } });
+                    await tx.saleitem.deleteMany({ where: { id: { in: saleItemIds } } });
                 }
-
-                // 4) Delete any receipts linked to this sale (should cascade, but be explicit)
-                console.log(`Deleting Receipt(s) for sale id: ${id}`);
-                await prisma.receipt.deleteMany({ where: { saleId: id } });
-
-                // Finally, delete the sale
-                await prisma.sale.delete({ where: { id } });
-            } catch (deleteError) {
-                console.error('Error while deleting related sale records', deleteError);
-                throw deleteError; // will be caught by outer catch
-            }
-
-            // Activity log yarat
-            try {
-                await createActivityLog({
-                    staffId: req.staffId || null,
-                    entityType: "Sale",
-                    entityId: existingSale.id,
-                    action: "HARD_DELETE",
-                    description: `Satış tamamilə silindi: ${existingSale.customerName || ''} ${existingSale.customerSurname || ''} - ${existingSale.totalAmount.toString()} AZN`,
-                    changes: {
-                        customerName: existingSale.customerName,
-                        customerSurname: existingSale.customerSurname,
-                        totalAmount: existingSale.totalAmount.toString(),
-                        itemsCount: existingSale.items.length
-                    }
-                });
-            } catch (logError) {
-                console.error("Activity log yaradılarkən xəta:", logError);
-            }
-        } else {
-            // Soft delete - deleteType-u dəyiş
-            await prisma.sale.update({
-                where: { id },
-                data: {
-                    deleteType: 'SOFT'
-                }
+                await tx.receipt.deleteMany({ where: { saleId: id } });
+                await tx.sale.delete({ where: { id } });
             });
 
-            // Activity log yarat
+            // Activity log
             try {
                 await createActivityLog({
                     staffId: req.staffId || null,
                     entityType: "Sale",
-                    entityId: existingSale.id,
-                    action: "SOFT_DELETE",
-                    description: `Satış soft delete edildi: ${existingSale.customerName || ''} ${existingSale.customerSurname || ''} - ${existingSale.totalAmount.toString()} AZN`,
-                    changes: {
-                        customerName: existingSale.customerName,
-                        customerSurname: existingSale.customerSurname,
-                        totalAmount: existingSale.totalAmount.toString(),
-                        itemsCount: existingSale.items.length,
-                        deleteType: 'SOFT'
-                    }
+                    entityId: id,
+                    action: "HARD_DELETE",
+                    description: `Satış tamamilə silindi: ${existingSale.customerName || ''} - ${existingSale.totalAmount.toString()} AZN`,
+                    changes: { customerName: existingSale.customerName, totalAmount: existingSale.totalAmount.toString() }
                 });
-            } catch (logError) {
-                console.error("Activity log yaradılarkən xəta:", logError);
-            }
+            } catch (e) {}
+        } else {
+            // Soft delete
+            await prisma.sale.update({
+                where: { id },
+                data: { deleteType: 'SOFT' }
+            });
+
+            try {
+                await createActivityLog({
+                    staffId: req.staffId || null,
+                    entityType: "Sale",
+                    entityId: id,
+                    action: "SOFT_DELETE",
+                    description: `Satış soft delete edildi: ${existingSale.customerName || ''}`,
+                    changes: { deleteType: 'SOFT' }
+                });
+            } catch (e) {}
         }
 
-        return res.json({ success: true, message: validDeleteType === 'HARD' ? "Satış tamamilə silindi" : "Satış soft delete edildi", data: existingSale });
+        return res.json({ success: true, message: validDeleteType === 'HARD' ? "Satış tamamilə silindi" : "Satış soft delete edildi" });
     } catch (error) {
         console.error("deleteSale error", error);
-        // Return error message for debugging (can be removed in production)
         return res.status(500).json({ success: false, message: "Satış silinərkən xəta baş verdi", error: error.message });
     }
 };
-

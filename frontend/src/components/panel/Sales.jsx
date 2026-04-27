@@ -1,12 +1,12 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useLocation } from 'react-router-dom';
 import TableTemplate from '../ui/TableTamplate';
 import Alert from '../ui/Alert';
 import SearchDropdown from '../ui/SearchDropdown';
-import { Edit, Trash2, Eye, Plus, CreditCard, ShoppingCart, DollarSign, Wallet, TrendingUp, Banknote, ReceiptText, AlertCircle } from 'lucide-react';
+import { Edit, Trash2, Eye, Plus, CreditCard, ShoppingCart, DollarSign, Wallet, TrendingUp, Banknote, ReceiptText, AlertCircle, RefreshCw } from 'lucide-react';
 import { getSaleColumns } from '../../data/table-columns/SaleColumns';
-import { saleApi, receiptApi, productApi, authApi } from '../../api';
+import { saleApi, receiptApi, productApi, authApi, statisticsApi } from '../../api';
 import { useLocalStorage, useBranch } from '../../hooks';
 
 export default function Sales() {
@@ -22,6 +22,7 @@ export default function Sales() {
     const [products, setProducts] = useState([]);
     const [selectedProductId, setSelectedProductId] = useLocalStorage('sales_selectedProductId', '');
     const [loadingProducts, setLoadingProducts] = useState(false);
+    const [cashboxBalance, setCashboxBalance] = useState(0);
     const { selectedBranchId } = useBranch();
 
     // Tarix filteri üçün state
@@ -70,7 +71,23 @@ export default function Sales() {
             }
         };
         fetchProducts();
-    }, []);
+    }, [selectedBranchId]);
+
+    // Fetch cashbox balance
+    const fetchCashboxBalance = useCallback(async () => {
+        try {
+            const response = await statisticsApi.getOverall(null, null, selectedBranchId);
+            if (response.success && response.data?.cashbox) {
+                setCashboxBalance(response.data.cashbox.balance || 0);
+            }
+        } catch (error) {
+            console.error('Error fetching cashbox balance:', error);
+        }
+    }, [selectedBranchId]);
+
+    useEffect(() => {
+        fetchCashboxBalance();
+    }, [fetchCashboxBalance]);
 
     useEffect(() => {
         const fetchSales = async () => {
@@ -105,17 +122,20 @@ export default function Sales() {
         };
         fetchSales();
 
-        // Custom event dinlə - satış bərpa ediləndə yenilə
-        const handleSaleRestored = () => {
+        // Custom event dinlə - satış bərpa edildikdə və ya silindikdə yenilə
+        const handleRefresh = () => {
             fetchSales();
+            fetchCashboxBalance();
         };
 
-        window.addEventListener('saleRestored', handleSaleRestored);
+        window.addEventListener('saleRestored', handleRefresh);
+        window.addEventListener('saleDeleted', handleRefresh);
 
         return () => {
-            window.removeEventListener('saleRestored', handleSaleRestored);
+            window.removeEventListener('saleRestored', handleRefresh);
+            window.removeEventListener('saleDeleted', handleRefresh);
         };
-    }, [t, i18n.language, startDate, endDate, datePreset, selectedBranchId]);
+    }, [t, i18n.language, startDate, endDate, datePreset, selectedBranchId, fetchCashboxBalance]);
 
     // Date preset handler
     const handleDatePresetChange = (preset) => {
@@ -499,7 +519,7 @@ export default function Sales() {
             {filteredData.length > 0 && (
                 <div className="mt-4 space-y-4">
                     {/* Row 1 — main stats */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-xl">
                             <div className="w-11 h-11 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
                                 <ShoppingCart className="w-5 h-5 text-blue-600" />
@@ -530,6 +550,16 @@ export default function Sales() {
                             <div>
                                 <p className="text-xs font-medium text-orange-500 uppercase tracking-wide">Ümumi Qazanc</p>
                                 <p className="text-xl font-bold text-orange-700">{summaryStats.totalProfit.toFixed(2)} <span className="text-sm font-semibold">AZN</span></p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+                            <div className="w-11 h-11 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
+                                <Wallet className="w-5 h-5 text-emerald-600" />
+                            </div>
+                            <div>
+                                <p className="text-xs font-medium text-emerald-500 uppercase tracking-wide">Kassa Balansı</p>
+                                <p className="text-xl font-bold text-emerald-700">{parseFloat(cashboxBalance).toFixed(2)} <span className="text-sm font-semibold">AZN</span></p>
                             </div>
                         </div>
 

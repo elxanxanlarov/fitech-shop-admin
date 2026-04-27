@@ -59,6 +59,23 @@ export const login = async (req, res) => {
       });
     }
 
+    // Giriş saatı yoxlanışı (Superadmin və Baş Adminə aid deyil)
+    const currentHour = new Date().getHours();
+    const roleName = foundStaff.role?.name?.toLowerCase();
+    const isPrivileged = roleName === "superadmin" || (roleName === "admin" && foundStaff.isBoss);
+
+    if (!isPrivileged) {
+      const start = foundStaff.allowedStartHour ?? 9;
+      const end = foundStaff.allowedEndHour ?? 21;
+      
+      if (currentHour < start || currentHour >= end) {
+        return res.status(401).json({
+          success: false,
+          message: `Sistemə giriş icazəniz yoxdur. Sizin iş saatlarınız: ${start}:00 - ${end}:00`,
+        });
+      }
+    }
+
     const token = generateToken(foundStaff.id);
 
     res.cookie("token", token, {

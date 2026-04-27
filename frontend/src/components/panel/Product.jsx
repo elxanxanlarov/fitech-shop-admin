@@ -208,8 +208,8 @@ export default function Product() {
             try {
                 Alert.loading(t('loading'));
 
-                // Default olaraq SOFT delete istifadə et
-                await productApi.delete(product.id, 'SOFT');
+                // Default olaraq SOFT delete istifadə et - filial ID-sini də göndər
+                await productApi.delete(product.id, 'SOFT', selectedBranchId);
 
                 // Soft delete zamanı məhsul siyahıdan çıxır (çünki deleteType filter var)
                 setProductData(prev => prev.filter(item => item.id !== product.id));
@@ -259,7 +259,7 @@ export default function Product() {
             try {
                 Alert.loading(t('loading'));
 
-                await Promise.all(selectedIds.map(id => productApi.delete(id)));
+                await Promise.all(selectedIds.map(id => productApi.delete(id, 'SOFT', selectedBranchId)));
 
                 setProductData(prev => prev.filter(item => !selectedIds.includes(item.id)));
 

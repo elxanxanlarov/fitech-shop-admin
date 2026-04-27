@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Alert from '../ui/Alert';
 import { convertApi } from '../../api';
 import { RefreshCw, Trash2, RotateCcw, Flame } from 'lucide-react';
+import { useBranch } from '../../hooks';
 
 const DELETED_LABELS = {
     product: 'Məhsullar',
@@ -14,6 +15,7 @@ const DELETED_LABELS = {
 };
 
 export default function DeletedElements({ embedded = false }) {
+    const { selectedBranchId } = useBranch();
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
     const [action, setAction] = useState(null); // 'restore' | 'hardDelete'
@@ -21,7 +23,11 @@ export default function DeletedElements({ embedded = false }) {
     const fetchStats = useCallback(async () => {
         setLoading(true);
         try {
-            const response = await convertApi.getStats();
+            const params = {};
+            if (selectedBranchId && selectedBranchId !== 'central') {
+                params.branchId = selectedBranchId;
+            }
+            const response = await convertApi.getStats(params);
             if (response.success) {
                 setStats(response.data);
             }
@@ -31,7 +37,7 @@ export default function DeletedElements({ embedded = false }) {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [selectedBranchId]);
 
     useEffect(() => {
         fetchStats();
@@ -53,7 +59,8 @@ export default function DeletedElements({ embedded = false }) {
         if (!result.isConfirmed) return;
         setAction('restore');
         try {
-            const response = await convertApi.restoreDeleted([]);
+            const params = selectedBranchId && selectedBranchId !== 'central' ? { branchId: selectedBranchId } : {};
+            const response = await convertApi.restoreDeleted([], params);
             if (response.success) {
                 Alert.success('Uğurlu!', response.message);
                 await fetchStats();
@@ -80,7 +87,8 @@ export default function DeletedElements({ embedded = false }) {
         if (!result.isConfirmed) return;
         setAction('hardDelete');
         try {
-            const response = await convertApi.hardDeleteAll([]);
+            const params = selectedBranchId && selectedBranchId !== 'central' ? { branchId: selectedBranchId } : {};
+            const response = await convertApi.hardDeleteAll([], params);
             if (response.success) {
                 Alert.success('Silindi!', response.message);
                 await fetchStats();
@@ -119,16 +127,14 @@ export default function DeletedElements({ embedded = false }) {
                 </button>
             </div>
 
-            <div className={`p-6 rounded-2xl border-2 ${
-                totalDeleted > 0
+            <div className={`p-6 rounded-2xl border-2 ${totalDeleted > 0
                     ? 'bg-red-50 border-red-300'
                     : 'bg-gray-50 border-gray-200'
-            }`}>
+                }`}>
                 <div className="flex items-center justify-between mb-5">
                     <div className="flex items-center gap-3">
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                            totalDeleted > 0 ? 'bg-red-100' : 'bg-gray-100'
-                        }`}>
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${totalDeleted > 0 ? 'bg-red-100' : 'bg-gray-100'
+                            }`}>
                             <Trash2 className={`w-6 h-6 ${totalDeleted > 0 ? 'text-red-600' : 'text-gray-400'}`} />
                         </div>
                         <div>
@@ -140,11 +146,10 @@ export default function DeletedElements({ embedded = false }) {
                             </p>
                         </div>
                     </div>
-                    <span className={`text-sm font-bold px-3 py-1.5 rounded-full ${
-                        totalDeleted > 0
+                    <span className={`text-sm font-bold px-3 py-1.5 rounded-full ${totalDeleted > 0
                             ? 'bg-red-100 text-red-700'
                             : 'bg-gray-100 text-gray-500'
-                    }`}>
+                        }`}>
                         {loading ? '...' : `${totalDeleted} qeyd`}
                     </span>
                 </div>

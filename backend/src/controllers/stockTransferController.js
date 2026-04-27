@@ -1,5 +1,6 @@
 import prisma from "../lib/prisma.js";
 import { createActivityLog } from "./activityLogController.js";
+import { createNotification } from "./notificationController.js";
 
 async function addQuantityToDestinationBranchStock(tx, toBranchId, item) {
     const branchStock = await tx.branchstock.findFirst({
@@ -169,6 +170,17 @@ export const createTransfer = async (req, res) => {
             description: fromBranchId
                 ? `Filialdan-filiala transfer yarad\u0131ld\u0131 (PENDING)`
                 : `Yeni stok transferi yarad\u0131ld\u0131 (PENDING)`
+        });
+
+        const fromBranch = fromBranchId 
+            ? await prisma.branch.findUnique({ where: { id: fromBranchId } })
+            : null;
+
+        await createNotification({
+            type: 'branch_transfer',
+            title: 'Yeni Məhsul Köçürməsi',
+            message: `${fromBranch?.name || 'Mərkəzi Anbar'} tərəfindən yeni məhsul köçürüldü.`,
+            branchId: toBranchId
         });
 
         return res.status(201).json({ success: true, data: result });

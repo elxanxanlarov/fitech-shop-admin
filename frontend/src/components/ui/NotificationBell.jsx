@@ -4,11 +4,13 @@ import { notificationApi } from '../../api';
 import { useClickOutside } from '../../hooks';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 
 export default function NotificationBell() {
     const { t } = useTranslation('sale');
     const { t: tAlert } = useTranslation('alert');
     const navigate = useNavigate();
+    const { user } = useAuth();
     const [notifications, setNotifications] = useState([]);
     const [unreadCount, setUnreadCount] = useState(0);
     const [showDropdown, setShowDropdown] = useState(false);
@@ -27,7 +29,10 @@ export default function NotificationBell() {
     const fetchNotifications = async () => {
         try {
             setLoading(true);
-            const response = await notificationApi.getAll();
+            const params = {};
+            if (user?.branchId) params.branchId = user.branchId;
+            
+            const response = await notificationApi.getAll(params);
             if (response.success && response.date) {
                 setNotifications(response.date);
                 setUnreadCount(response.date.filter(n => !n.isRead).length);
@@ -57,6 +62,9 @@ export default function NotificationBell() {
         }
         if (notification.saleId) {
             navigate(`/admin/sale-form?id=${notification.saleId}`);
+            setShowDropdown(false);
+        } else if (notification.type === 'branch_transfer') {
+            navigate('/admin/product-branch-transfer');
             setShowDropdown(false);
         }
     };

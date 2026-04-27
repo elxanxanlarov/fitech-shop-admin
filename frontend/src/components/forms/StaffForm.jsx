@@ -34,7 +34,9 @@ export default function StaffForm() {
         roleId: '',
         branchId: '',
         isActive: true,
-        isBoss: false
+        isBoss: false,
+        allowedStartHour: 9,
+        allowedEndHour: 21
     });
 
     const [roles, setRoles] = useState([]);
@@ -146,7 +148,9 @@ export default function StaffForm() {
                             roleId: staff.roleId || '',
                             branchId: staff.branchId || '',
                             isActive: staff.isActive !== undefined ? staff.isActive : true,
-                            isBoss: staff.isBoss || false
+                            isBoss: staff.isBoss || false,
+                            allowedStartHour: staff.allowedStartHour !== undefined ? staff.allowedStartHour : 9,
+                            allowedEndHour: staff.allowedEndHour !== undefined ? staff.allowedEndHour : 21
                         });
                     }
                 } catch (error) {
@@ -272,7 +276,9 @@ export default function StaffForm() {
                 roleId: formData.roleId || null,
                 branchId: (formData.isBoss || selectedRole?.name?.toLowerCase() === 'superadmin') ? null : (formData.branchId || null),
                 isActive: formData.isActive,
-                isBoss: formData.isBoss
+                isBoss: formData.isBoss,
+                allowedStartHour: parseInt(formData.allowedStartHour),
+                allowedEndHour: parseInt(formData.allowedEndHour)
             };
 
             // Add password only if provided (create mode or update with password change)
@@ -529,6 +535,54 @@ export default function StaffForm() {
                             return null;
                         })()}
                     </div>
+                </div>
+
+                {/* Login Hours Information */}
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                    <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-3 mb-4">
+                        <MdSecurity className="inline w-5 h-5 mr-2 text-blue-600" />
+                        {t('login_hours')}
+                    </h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                {t('start_hour')}
+                            </label>
+                            <select
+                                value={formData.allowedStartHour}
+                                onChange={(e) => handleInputChange('allowedStartHour', e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                                {[...Array(24).keys()].map(hour => (
+                                    <option key={hour} value={hour}>
+                                        {hour.toString().padStart(2, '0')}:00
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                {t('end_hour')}
+                            </label>
+                            <select
+                                value={formData.allowedEndHour}
+                                onChange={(e) => handleInputChange('allowedEndHour', e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                                {[...Array(24).keys()].map(hour => (
+                                    <option key={hour} value={hour}>
+                                        {hour.toString().padStart(2, '0')}:00
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <p className="mt-4 text-xs text-gray-500 italic">
+                        * {t('login_hours_note')}
+                    </p>
                 </div>
 
                 {/* Password Information - Only for create, if password is being changed, or for superadmin in edit mode */}

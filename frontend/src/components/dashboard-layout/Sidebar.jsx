@@ -15,6 +15,30 @@ const Sidebar = ({ sidebarData, onItemClick, collapsed, onToggleCollapse, isMobi
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
   const { logout: authLogout } = useAuth();
+  const [transferCount, setTransferCount] = useState(0);
+
+  useEffect(() => {
+    const fetchTransferCount = async () => {
+      if (!currentUser?.branchId) return;
+      try {
+        const { stockTransferApi } = await import("../../api");
+        const res = await stockTransferApi.getAll({ 
+          toBranchId: currentUser.branchId, 
+          status: 'PENDING' 
+        });
+        if (res.success) {
+          setTransferCount(res.data?.length || 0);
+        }
+      } catch (error) {
+        console.error("Sidebar count error", error);
+      }
+    };
+
+    fetchTransferCount();
+    const interval = setInterval(fetchTransferCount, 60000);
+    return () => clearInterval(interval);
+  }, [currentUser?.branchId]);
+
   const handleLogout = async () => {
     const result = await Alert.confirm(tAuth('logout_confirm'), tAuth('logout_confirm_text'), {
       confirmText: tAuth('yes'),
@@ -57,29 +81,39 @@ const Sidebar = ({ sidebarData, onItemClick, collapsed, onToggleCollapse, isMobi
           if (!item.requiredRole) return true;
           const userRole = currentUser?.role?.name?.toUpperCase();
           return userRole === item.requiredRole.toUpperCase();
-        }).map((item, index) => (
-          <NavLink
-            key={index}
-            to={item.path}
-            onClick={onItemClick}
-            title={item.title}
-            className={({ isActive }) =>
-              `group flex items-center h-13 ${collapsed ? 'justify-center px-3' : 'justify-start px-3'
-              } py-3 rounded-lg cursor-pointer transition-all duration-200 relative ${isActive
-                ? 'text-red-600 bg-red-50 border-r-4 border-red-600'
-                : 'text-black hover:bg-gray-50 hover:text-gray-700'
-              }`
-            }
-          >
-            <span className={`text-xl ${collapsed ? '' : 'mr-3'} text-current`}>
-              {item.icon}
-            </span>
-            <span className={`font-medium transition-opacity duration-200 ${collapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'
-              }`}>
-              {t(item.title)}
-            </span>
-          </NavLink>
-        ))}
+        }).map((item, index) => {
+          const hasBadge = item.title === 'product_branch_transfer' && transferCount > 0;
+          
+          return (
+            <NavLink
+              key={index}
+              to={item.path}
+              onClick={onItemClick}
+              title={t(item.title)}
+              className={({ isActive }) =>
+                `group flex items-center h-13 ${collapsed ? 'justify-center px-3' : 'justify-start px-3'
+                } py-3 rounded-lg cursor-pointer transition-all duration-200 relative ${isActive
+                  ? 'text-red-600 bg-red-50 border-r-4 border-red-600'
+                  : 'text-black hover:bg-gray-50 hover:text-gray-700'
+                }`
+              }
+            >
+              <span className={`text-xl ${collapsed ? '' : 'mr-3'} text-current`}>
+                {item.icon}
+              </span>
+              <span className={`font-medium transition-opacity duration-200 ${collapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'
+                }`}>
+                {t(item.title)}
+              </span>
+              
+              {hasBadge && (
+                <span className={`absolute ${collapsed ? 'top-2 right-2' : 'right-4'} flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-[10px] text-white font-bold ring-2 ring-white animate-bounce`}>
+                  {transferCount}
+                </span>
+              )}
+            </NavLink>
+          );
+        })}
       </nav>
 
       <div className="p-4 border-t border-gray-200 bg-white">

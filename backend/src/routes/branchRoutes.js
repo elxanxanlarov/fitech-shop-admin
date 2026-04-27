@@ -8,14 +8,12 @@ import {
     getBranchStocks,
     syncBranchWithCentral,
     getAllBranchStocks,
-    ensureKurdaxaniBranch,
     deleteBranch
 } from "../controllers/branchController.js";
 
 const router = express.Router();
 
 router.get("/", getAllBranches);
-router.post("/ensure-kurdaxani", ensureKurdaxaniBranch);
 router.get("/all-stocks", getAllBranchStocks);
 router.get("/:id", getBranchById);
 router.post("/", createBranch);

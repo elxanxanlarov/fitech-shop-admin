@@ -1,4 +1,4 @@
-import { MdPeople, MdBarChart, MdAccessTime, MdSettings, MdShoppingCart, MdPointOfSale, MdAttachMoney, MdAccountBalanceWallet, MdDescription, MdLocalShipping, MdBusiness, MdSync, MdTransform, MdDeleteForever, MdSwapHoriz } from 'react-icons/md'
+import { MdPeople, MdBarChart, MdAccessTime, MdSettings, MdShoppingCart, MdPointOfSale, MdAttachMoney, MdAccountBalanceWallet, MdDescription, MdLocalShipping, MdBusiness, MdSync, MdTransform, MdDeleteForever, MdSwapHoriz, MdWarehouse, MdDeleteSweep, MdCalculate } from 'react-icons/md'
 export const AdminSidebarData = [
   {
     title: 'staff_management',
@@ -29,6 +29,12 @@ export const AdminSidebarData = [
     title: 'product_branch_transfer',
     path: '/admin/product-branch-transfer',
     icon: <MdSwapHoriz />,
+  },
+  {
+    title: 'product_branch_inventory',
+    path: '/admin/central-warehouse',
+    icon: <MdWarehouse />,
+    requiredRole: 'SUPERADMIN',
   },
   {
     title: 'invoice_name_mapping',
@@ -63,9 +69,21 @@ export const AdminSidebarData = [
     requiredRole: 'SUPERADMIN',
   },
   {
+    title: 'branch_deleted_products',
+    path: '/admin/branch-deleted-products',
+    icon: <MdDeleteSweep />,
+    requiredRole: 'SUPERADMIN',
+  },
+  {
     title: 'sync_center',
     path: '/sync-center',
     icon: <MdSync />,
+    requiredRole: 'SUPERADMIN',
+  },
+  {
+    title: 'sales_ledger',
+    path: '/admin/sales-ledger',
+    icon: <MdCalculate />,
     requiredRole: 'SUPERADMIN',
   },
   {

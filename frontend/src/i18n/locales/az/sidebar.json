@@ -8,6 +8,7 @@
   "customer_management": "Müştəri İdarəetməsi",
   "product_management": "Məhsul İdarəetməsi",
   "product_branch_transfer": "Məhsul köçürməsi",
+  "product_branch_inventory": "Məhsulun Filial Paylanması",
   "invoice_name_mapping": "Qaimə Adları",
   "sale_management": "Satış",
   "expense_management": "Xərclər",
@@ -16,5 +17,8 @@
   "statistics": "Statistikalar",
   "convert_center": "Convert",
   "deleted_elements": "Silinmiş Elementlər",
+  "branch_deleted_products": "Filialdan Silinmiş Məhsullar",
+  "sync_center": "Sinxronizasiya",
+  "sales_ledger": "Satış Dəftəri",
   "settings": "Tənzimləmələr"
 }

@@ -76,10 +76,7 @@ export default function BranchSelector() {
         );
     }
 
-    const selectedBranch =
-        selectedBranchId === 'central'
-            ? { name: 'Mərkəz Anbar', id: 'central' }
-            : branches.find((b) => b.id === selectedBranchId);
+    const selectedBranch = branches.find((b) => b.id === selectedBranchId);
 
     return (
         <div className="relative">
@@ -104,20 +101,6 @@ export default function BranchSelector() {
                         </div>
 
                         <div className="my-1 border-t border-slate-100" />
-
-                        <button
-                            type="button"
-                            onClick={() => {
-                                selectBranch('central', '');
-                                setIsOpen(false);
-                            }}
-                            className={`w-full text-left px-4 py-2 text-sm hover:bg-slate-50 transition-colors flex items-center justify-between ${selectedBranchId === 'central' ? 'text-blue-600 font-bold bg-blue-50/50' : 'text-slate-600'}`}
-                        >
-                            Mərkəzi anbar
-                            {selectedBranchId === 'central' && (
-                                <div className="w-1.5 h-1.5 rounded-full bg-blue-600" />
-                            )}
-                        </button>
 
                         {branches.map((branch) => (
                             <button

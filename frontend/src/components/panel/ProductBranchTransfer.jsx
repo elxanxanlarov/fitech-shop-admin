@@ -29,9 +29,11 @@ export default function ProductBranchTransfer() {
     });
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
-    const [activeTab, setActiveTab] = useState('send'); // 'send' or 'inbox'
+    const [activeTab, setActiveTab] = useState('send'); // 'send', 'inbox', 'history'
     const [incomingTransfers, setIncomingTransfers] = useState([]);
+    const [historyTransfers, setHistoryTransfers] = useState([]);
     const [loadingInbox, setLoadingInbox] = useState(false);
+    const [loadingHistory, setLoadingHistory] = useState(false);
 
     useEffect(() => {
         if (filialLocked && user?.branchId) {
@@ -73,7 +75,6 @@ export default function ProductBranchTransfer() {
     }, [fromBranchId, t, tAlert]);
 
     const loadInbox = async () => {
-        if (!user?.branchId && !branches.length) return;
         const targetBranchId = user?.branchId || fromBranchId;
         if (!targetBranchId) return;
 
@@ -93,9 +94,30 @@ export default function ProductBranchTransfer() {
         }
     };
 
+    const loadHistory = async () => {
+        const targetBranchId = user?.branchId || fromBranchId;
+        if (!targetBranchId) return;
+
+        setLoadingHistory(true);
+        try {
+            const res = await stockTransferApi.getAll({ 
+                branchId: targetBranchId
+            });
+            if (res.success) {
+                setHistoryTransfers(res.data || []);
+            }
+        } catch (error) {
+            console.error('Error loading history:', error);
+        } finally {
+            setLoadingHistory(false);
+        }
+    };
+
     useEffect(() => {
         if (activeTab === 'inbox') {
             loadInbox();
+        } else if (activeTab === 'history') {
+            loadHistory();
         }
     }, [activeTab, user?.branchId, fromBranchId]);
 
@@ -218,6 +240,7 @@ export default function ProductBranchTransfer() {
             if (response.success) {
                 Alert.success(tAlert('success'), t('transfer_created_success'));
                 setFormData({ toBranchId: '', note: '', items: [] });
+                // Inbox count yenilənsin deyə yükləmək olar
             }
         } catch (error) {
             console.error('Filial transfer error:', error);
@@ -241,8 +264,8 @@ export default function ProductBranchTransfer() {
 
     const handleAcceptTransfer = async (transferId) => {
         const result = await Alert.confirm(
-            t('accept') || 'Qəbul Et',
-            t('confirm_accept_transfer') || 'Bu köçürməni qəbul etmək istədiyinizə əminsiniz? Məhsullar stokunuza əlavə olunacaq.'
+            t('accept'),
+            t('confirm_accept_transfer')
         );
 
         if (result.isConfirmed) {
@@ -251,6 +274,7 @@ export default function ProductBranchTransfer() {
                 if (res.success) {
                     Alert.success(tAlert('success'), t('status_updated_success'));
                     loadInbox();
+                    if (activeTab === 'history') loadHistory();
                 }
             } catch (error) {
                 console.error('Error accepting transfer:', error);
@@ -261,8 +285,8 @@ export default function ProductBranchTransfer() {
 
     const handleRejectTransfer = async (transferId) => {
         const result = await Alert.confirm(
-            t('reject') || 'Ləğv Et',
-            t('confirm_reject_transfer') || 'Bu köçürməni ləğv etmək istədiyinizə əminsiniz? Məhsullar göndərən filiala geri qayıdacaq.',
+            t('reject'),
+            t('confirm_reject_transfer'),
             { confirmColor: '#EF4444' }
         );
 
@@ -272,11 +296,32 @@ export default function ProductBranchTransfer() {
                 if (res.success) {
                     Alert.success(tAlert('success'), t('status_updated_success'));
                     loadInbox();
+                    if (activeTab === 'history') loadHistory();
                 }
             } catch (error) {
                 console.error('Error rejecting transfer:', error);
                 Alert.error(tAlert('error'), error.response?.data?.message || t('error_updating_status'));
             }
+        }
+    };
+
+    const getStatusStyle = (status) => {
+        switch (status) {
+            case 'COMPLETED': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+            case 'CANCELLED': return 'bg-red-100 text-red-700 border-red-200';
+            case 'SHIPPED': return 'bg-blue-100 text-blue-700 border-blue-200';
+            case 'PENDING': return 'bg-amber-100 text-amber-700 border-amber-200';
+            default: return 'bg-gray-100 text-gray-700 border-gray-200';
+        }
+    };
+
+    const getStatusText = (status) => {
+        switch (status) {
+            case 'COMPLETED': return t('completed') || 'Qəbul edildi';
+            case 'CANCELLED': return t('cancelled') || 'Ləğv edildi';
+            case 'SHIPPED': return t('shipped') || 'Yoldadır';
+            case 'PENDING': return t('pending') || 'Gözləyir';
+            default: return status;
         }
     };
 
@@ -292,8 +337,8 @@ export default function ProductBranchTransfer() {
             </button>
 
             <div className="bg-white rounded-xl shadow-lg border border-gray-100">
-                <div className="bg-gradient-to-r from-teal-600 to-emerald-700 px-6 pt-8 pb-4 text-white rounded-t-xl">
-                    <div className="flex items-center justify-between">
+                <div className="bg-gradient-to-r from-teal-600 to-emerald-700 px-6 pt-8 pb-0 text-white rounded-t-xl overflow-hidden">
+                    <div className="flex items-center justify-between mb-6">
                         <div className="flex items-center gap-4">
                             <div className="p-3 bg-white/20 rounded-lg backdrop-blur-sm">
                                 <Send className="w-8 h-8" />
@@ -306,40 +351,51 @@ export default function ProductBranchTransfer() {
                     </div>
 
                     {/* Tabs */}
-                    <div className="flex gap-2 mt-8">
+                    <div className="flex gap-1">
                         <button
                             onClick={() => setActiveTab('send')}
                             className={`flex items-center gap-2 px-6 py-3 rounded-t-lg font-bold transition-all ${
                                 activeTab === 'send'
                                     ? 'bg-white text-teal-700 shadow-lg'
-                                    : 'bg-teal-700/50 text-white hover:bg-teal-500/50'
+                                    : 'bg-teal-700/50 text-white hover:bg-teal-500/50 hover:translate-y-[-2px]'
                             }`}
                         >
                             <Send className="w-4 h-4" />
-                            {t('to_send') || 'Göndərmək'}
+                            {t('to_send')}
                         </button>
                         <button
                             onClick={() => setActiveTab('inbox')}
                             className={`flex items-center gap-2 px-6 py-3 rounded-t-lg font-bold transition-all relative ${
                                 activeTab === 'inbox'
                                     ? 'bg-white text-teal-700 shadow-lg'
-                                    : 'bg-teal-700/50 text-white hover:bg-teal-500/50'
+                                    : 'bg-teal-700/50 text-white hover:bg-teal-500/50 hover:translate-y-[-2px]'
                             }`}
                         >
                             <Inbox className="w-4 h-4" />
-                            {t('received') || 'Göndərilən'}
+                            {t('received')}
                             {incomingTransfers.length > 0 && (
-                                <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] text-white ring-2 ring-teal-600">
+                                <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] text-white ring-2 ring-teal-600 animate-pulse">
                                     {incomingTransfers.length}
                                 </span>
                             )}
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('history')}
+                            className={`flex items-center gap-2 px-6 py-3 rounded-t-lg font-bold transition-all ${
+                                activeTab === 'history'
+                                    ? 'bg-white text-teal-700 shadow-lg'
+                                    : 'bg-teal-700/50 text-white hover:bg-teal-500/50 hover:translate-y-[-2px]'
+                            }`}
+                        >
+                            <Info className="w-4 h-4" />
+                            {t('history')}
                         </button>
                     </div>
                 </div>
 
                 <div className="p-6">
                     {activeTab === 'send' ? (
-                        <form onSubmit={handleSubmit} className="space-y-8">
+                        <form onSubmit={handleSubmit} className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
                             <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -643,12 +699,12 @@ export default function ProductBranchTransfer() {
                         </button>
                     </div>
                         </form>
-                    ) : (
-                        <div className="space-y-6">
+                    ) : activeTab === 'inbox' ? (
+                        <div className="space-y-6 animate-in fade-in slide-in-from-right-2 duration-300">
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
                                     <Inbox className="w-5 h-5 text-teal-500" />
-                                    {t('incoming_transfers') || 'Gələn Köçürmələr'}
+                                    {t('incoming_transfers')}
                                 </h3>
                                 <button 
                                     onClick={loadInbox}
@@ -669,7 +725,7 @@ export default function ProductBranchTransfer() {
                             ) : incomingTransfers.length === 0 ? (
                                 <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-300">
                                     <Inbox className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                                    <p className="text-gray-500">{t('no_incoming_transfers') || 'Gələn köçürmə yoxdur'}</p>
+                                    <p className="text-gray-500">{t('no_incoming_transfers')}</p>
                                 </div>
                             ) : (
                                 <div className="space-y-4">
@@ -735,6 +791,95 @@ export default function ProductBranchTransfer() {
                                             </div>
                                         </div>
                                     ))}
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="space-y-6 animate-in fade-in slide-in-from-right-2 duration-300">
+                             <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                                    <Info className="w-5 h-5 text-teal-500" />
+                                    {t('transfer_history')}
+                                </h3>
+                                <button 
+                                    onClick={loadHistory}
+                                    className="p-2 text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
+                                >
+                                    <svg className={`w-5 h-5 ${loadingHistory ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            {loadingHistory ? (
+                                <div className="text-center py-12">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600 mx-auto mb-2"></div>
+                                    <p className="text-sm text-gray-500">{t('loading')}...</p>
+                                </div>
+                            ) : historyTransfers.length === 0 ? (
+                                <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-300">
+                                    <Info className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                                    <p className="text-gray-500">{t('no_history_yet')}</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                     {historyTransfers.map((transfer) => {
+                                        const isOutgoing = transfer.fromBranchId === (user?.branchId || fromBranchId);
+                                        return (
+                                            <div key={transfer.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                                                <div className="px-4 py-3 bg-gray-50/50 flex flex-wrap justify-between items-center gap-4 border-b border-gray-100">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`p-2 rounded-lg ${isOutgoing ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
+                                                            {isOutgoing ? <Send className="w-4 h-4" /> : <Inbox className="w-4 h-4" />}
+                                                        </div>
+                                                        <div>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-[10px] font-black uppercase text-gray-400">
+                                                                    {isOutgoing ? 'Çıxan' : 'Gələn'}
+                                                                </span>
+                                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${getStatusStyle(transfer.status)}`}>
+                                                                    {getStatusText(transfer.status)}
+                                                                </span>
+                                                            </div>
+                                                            <div className="text-sm font-bold text-gray-900">
+                                                                {isOutgoing 
+                                                                    ? `${t('to')} ${transfer.toBranch?.name}` 
+                                                                    : `${t('from')} ${transfer.fromBranch?.name || 'Mərkəzi Anbar'}`}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="text-[10px] text-gray-400 uppercase font-black">{new Date(transfer.createdAt).toLocaleDateString('az-AZ')}</div>
+                                                        <div className="text-xs text-gray-500">{new Date(transfer.createdAt).toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' })}</div>
+                                                    </div>
+                                                </div>
+                                                <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div className="space-y-2">
+                                                        {transfer.items?.map((item) => (
+                                                            <div key={item.id} className="flex justify-between items-center text-xs p-2 bg-gray-50 rounded">
+                                                                <span className="font-medium text-gray-700 truncate mr-2">{item.product?.name}</span>
+                                                                <span className="font-bold text-teal-600 whitespace-nowrap">
+                                                                    {item.quantity} {unitSingular(item.product?.unitType)}
+                                                                </span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                    <div className="flex flex-col justify-end text-right">
+                                                        {transfer.staff && (
+                                                            <div className="text-[10px] text-gray-400">
+                                                                {t('created_by') || 'Yaradan'}: <span className="text-gray-600 font-bold">{transfer.staff.name} {transfer.staff.surName}</span>
+                                                            </div>
+                                                        )}
+                                                        {transfer.note && (
+                                                            <div className="mt-1 text-[10px] text-gray-500 italic">
+                                                                "{transfer.note}"
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                     })}
                                 </div>
                             )}
                         </div>

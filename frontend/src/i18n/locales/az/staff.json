@@ -80,5 +80,9 @@
   "head_admin": "Baş Admin (Superadmin-dən aşağı, Admin-dən yuxarı)",
   "head_admin_short": "Baş Admin",
   "admin_role": "Admin (Filial üzrə)",
-  "branch_required": "Filial seçilməlidir"
+  "branch_required": "Filial seçilməlidir",
+  "login_hours": "Sistemə Giriş Saatları",
+  "start_hour": "Başlanğıc Saatı",
+  "end_hour": "Bitmə Saatı",
+  "login_hours_note": "Bu məhdudiyyət yalnız işçilərə aiddir. Superadmin və Baş Adminlərə tətbiq olunmur."
 }
