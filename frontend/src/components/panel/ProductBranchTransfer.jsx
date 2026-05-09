@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { Send, Trash2, ArrowLeft, Package, Info, Inbox, Check, X, Edit2, Printer } from 'lucide-react';
+import { Send, Trash2, ArrowLeft, Package, Info, Inbox, Check, X, Edit2, Printer, RotateCw } from 'lucide-react';
 import Alert from '../ui/Alert';
 import SearchDropdown from '../ui/SearchDropdown';
 import NumericInput from '../ui/NumericInput';
@@ -59,26 +59,27 @@ export default function ProductBranchTransfer() {
         loadBranches();
     }, []);
 
-    useEffect(() => {
+    const loadProducts = useCallback(async () => {
         if (!fromBranchId) {
             setProducts([]);
             return;
         }
-        const loadProducts = async () => {
-            setLoading(true);
-            try {
-                const productsRes = await productApi.getAll({ isActive: true, branchId: fromBranchId });
-                const list = productsRes.date || productsRes.data || [];
-                setProducts(list);
-            } catch (error) {
-                console.error('Error fetching products:', error);
-                Alert.error(tAlert('error'), t('error_fetching_data'));
-            } finally {
-                setLoading(false);
-            }
-        };
-        loadProducts();
+        setLoading(true);
+        try {
+            const productsRes = await productApi.getAll({ isActive: true, branchId: fromBranchId });
+            const list = productsRes.date || productsRes.data || [];
+            setProducts(list);
+        } catch (error) {
+            console.error('Error fetching products:', error);
+            Alert.error(tAlert('error'), t('error_fetching_data'));
+        } finally {
+            setLoading(false);
+        }
     }, [fromBranchId, t, tAlert]);
+
+    useEffect(() => {
+        loadProducts();
+    }, [loadProducts]);
 
     const loadInbox = async () => {
         const targetBranchId = user?.branchId || fromBranchId;
@@ -529,66 +530,77 @@ export default function ProductBranchTransfer() {
                                 </h3>
                                 <p className="text-xs text-teal-600 font-medium">Anbardakı məhsulları transfer siyahısına əlavə edin</p>
                             </div>
-                            <div className="w-full max-w-md">
-                                <SearchDropdown
-                                    placeholder={t('search_product_to_add')}
-                                    options={products}
-                                    value={[]} // Keep empty to allow multi-clicks
-                                    onChange={handleAddItem}
-                                    searchFields={['name', 'barcode']}
-                                    disabled={!fromBranchId || loading}
-                                    renderOption={(option) => {
-                                        const boxes =
-                                            option.piecesPerBox > 1 ? Math.floor(option.stock / option.piecesPerBox) : 0;
-                                        const pieces =
-                                            option.piecesPerBox > 1 ? option.stock % option.piecesPerBox : 0;
-                                        const hasNoStock = option.stock <= 0;
+                            <div className="w-full max-w-md flex items-center gap-2">
+                                <div className="flex-1">
+                                    <SearchDropdown
+                                        placeholder={t('search_product_to_add')}
+                                        options={products}
+                                        value={[]} // Keep empty to allow multi-clicks
+                                        onChange={handleAddItem}
+                                        searchFields={['name', 'barcode']}
+                                        disabled={!fromBranchId || loading}
+                                        renderOption={(option) => {
+                                            const boxes =
+                                                option.piecesPerBox > 1 ? Math.floor(option.stock / option.piecesPerBox) : 0;
+                                            const pieces =
+                                                option.piecesPerBox > 1 ? option.stock % option.piecesPerBox : 0;
+                                            const hasNoStock = option.stock <= 0;
 
-                                        return (
-                                            <div className="flex justify-between items-center w-full">
-                                                <div className="flex flex-col">
-                                                    <span
-                                                        className={`font-medium ${hasNoStock ? 'text-red-700' : 'text-gray-900'}`}
-                                                    >
-                                                        {option.name}
-                                                    </span>
-                                                    {option.piecesPerBox > 1 && (
-                                                        <span className="text-[10px] text-gray-400">
-                                                            1 {t('BOX') || 'Qutu'} = {option.piecesPerBox}{' '}
+                                            return (
+                                                <div className="flex justify-between items-center w-full">
+                                                    <div className="flex flex-col">
+                                                        <span
+                                                            className={`font-medium ${hasNoStock ? 'text-red-700' : 'text-gray-900'}`}
+                                                        >
+                                                            {option.name}
+                                                        </span>
+                                                        {option.piecesPerBox > 1 && (
+                                                            <span className="text-[10px] text-gray-400">
+                                                                1 {t('BOX') || 'Qutu'} = {option.piecesPerBox}{' '}
+                                                                {option.unitType === 'BOX'
+                                                                    ? t('PIECE') || 'Ədəd'
+                                                                    : t(option.unitType) || option.unitType}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex flex-col items-end gap-1">
+                                                        <span
+                                                            className={`text-xs font-bold px-2 py-1 rounded-md border ${
+                                                                hasNoStock
+                                                                    ? 'bg-red-50 text-red-700 border-red-100'
+                                                                    : 'bg-teal-50 text-teal-700 border-teal-100'
+                                                            }`}
+                                                        >
+                                                            {option.stock}{' '}
                                                             {option.unitType === 'BOX'
                                                                 ? t('PIECE') || 'Ədəd'
                                                                 : t(option.unitType) || option.unitType}
                                                         </span>
-                                                    )}
+                                                        {option.piecesPerBox > 1 && (
+                                                            <span
+                                                                className={`text-[10px] font-bold uppercase ${
+                                                                    hasNoStock ? 'text-red-400' : 'text-gray-400'
+                                                                }`}
+                                                            >
+                                                                {boxes} {t('BOX') || 'Qutu'}{' '}
+                                                                {pieces > 0 && `${pieces} ${t('PIECE') || 'Ədəd'}`}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                                <div className="flex flex-col items-end gap-1">
-                                                    <span
-                                                        className={`text-xs font-bold px-2 py-1 rounded-md border ${
-                                                            hasNoStock
-                                                                ? 'bg-red-50 text-red-700 border-red-100'
-                                                                : 'bg-teal-50 text-teal-700 border-teal-100'
-                                                        }`}
-                                                    >
-                                                        {option.stock}{' '}
-                                                        {option.unitType === 'BOX'
-                                                            ? t('PIECE') || 'Ədəd'
-                                                            : t(option.unitType) || option.unitType}
-                                                    </span>
-                                                    {option.piecesPerBox > 1 && (
-                                                        <span
-                                                            className={`text-[10px] font-bold uppercase ${
-                                                                hasNoStock ? 'text-red-400' : 'text-gray-400'
-                                                            }`}
-                                                        >
-                                                            {boxes} {t('BOX') || 'Qutu'}{' '}
-                                                            {pieces > 0 && `${pieces} ${t('PIECE') || 'Ədəd'}`}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        );
-                                    }}
-                                />
+                                            );
+                                        }}
+                                    />
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={loadProducts}
+                                    disabled={loading || !fromBranchId}
+                                    className="p-3 bg-white border border-teal-100 text-teal-600 rounded-xl hover:bg-teal-50 transition-all shadow-sm active:scale-95 disabled:opacity-50"
+                                    title={t('refresh') || 'Yenilə'}
+                                >
+                                    <RotateCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+                                </button>
                             </div>
                         </div>
 
@@ -781,9 +793,9 @@ export default function ProductBranchTransfer() {
                             )}
                         </button>
                     </div>
-                        </form>
-                    ) : activeTab === 'inbox' ? (
-                        <div className="space-y-6 animate-in fade-in slide-in-from-right-2 duration-300">
+                </form>
+            ) : activeTab === 'inbox' ? (
+                <div className="space-y-6 animate-in fade-in slide-in-from-right-2 duration-300">
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
                                     <Inbox className="w-5 h-5 text-teal-500" />

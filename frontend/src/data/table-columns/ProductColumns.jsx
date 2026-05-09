@@ -1,6 +1,6 @@
-import { Package, DollarSign, Tag, Hash } from 'lucide-react';
+import { Package, DollarSign, Tag, Hash, Maximize } from 'lucide-react';
 
-export const getProductColumns = (t, language = 'az') => [
+export const getProductColumns = (t, language = 'az', onScanBarcode) => [
     {
         key: 'name',
         label: t('name'),
@@ -58,10 +58,23 @@ export const getProductColumns = (t, language = 'az') => [
     {
         key: 'barcode',
         label: t('barcode'),
-        render: (value) => (
+        render: (value, item) => (
             <div className="flex items-center space-x-2">
                 <Hash className="w-4 h-4 text-gray-400" />
-                <span className="text-sm text-gray-900 font-mono">{value || '-'}</span>
+                {value ? (
+                    <span className="text-sm text-gray-900 font-mono">{value}</span>
+                ) : (
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (onScanBarcode) onScanBarcode(item);
+                        }}
+                        className="flex items-center justify-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg text-xs font-bold hover:bg-amber-600 transition-all shadow-sm active:scale-95 touch-manipulation min-h-[36px] min-w-[100px]"
+                    >
+                        <Maximize className="w-4 h-4" />
+                        {t('scan') || 'Skan et'}
+                    </button>
+                )}
             </div>
         )
     },

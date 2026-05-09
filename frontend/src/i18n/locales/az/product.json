@@ -247,5 +247,7 @@
   "save_all": "Hamısını Yadda Saxla",
   "valid_products_ready": "məhsul hazırda daxil edilib",
   "fill_required_fields": "Zəhmət olmasa tələb olunan sahələri doldurun (Ad, Alış və Satış qiyməti)",
-  "saving": "Yadda saxlanılır..."
+  "saving": "Yadda saxlanılır...",
+  "scan": "Skan et",
+  "barcode_updated_success": "Barkod uğurla yeniləndi"
 }

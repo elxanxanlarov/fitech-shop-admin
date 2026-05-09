@@ -8,6 +8,7 @@ import { getProductColumns } from '../../data/table-columns/ProductColumns';
 import { productApi, categoryApi, subCategoryApi } from '../../api';
 import ExcelImportModal from '../modals/ExcelImportModal';
 import ExcelTableModal from '../modals/ExcelTableModal';
+import BarcodeScannerModal from '../modals/BarcodeScannerModal';
 import { useBranch } from '../../hooks';
 
 export default function Product() {
@@ -21,6 +22,8 @@ export default function Product() {
     const [subCategories, setSubCategories] = useState([]);
     const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
     const [isExcelTableModalOpen, setIsExcelTableModalOpen] = useState(false);
+    const [isScannerOpen, setIsScannerOpen] = useState(false);
+    const [scanningProduct, setScanningProduct] = useState(null);
     const [filters, setFilters] = useState({});
     const [searchQuery, setSearchQuery] = useState(''); // Actual search query used for API
     const [searchValue, setSearchValue] = useState(searchQuery || ''); // Input value - localStorage-dan ilk dəyər alır
@@ -37,7 +40,36 @@ export default function Product() {
         }
     }, [selectedBranchId]);
 
-    const columns = useMemo(() => getProductColumns(t, i18n.language), [t, i18n.language]);
+    const handleScanBarcode = (product) => {
+        setScanningProduct(product);
+        setIsScannerOpen(true);
+    };
+
+    const handleScanSuccess = async (barcode) => {
+        if (!scanningProduct || !barcode) return;
+
+        try {
+            Alert.loading(t('loading'));
+            const response = await productApi.update(scanningProduct.id, { barcode });
+            
+            if (response.success) {
+                setProductData(prev => prev.map(p => 
+                    p.id === scanningProduct.id ? { ...p, barcode } : p
+                ));
+                Alert.success(tAlert('success'), t('barcode_updated_success') || 'Barkod uğurla yeniləndi');
+            } else {
+                Alert.error(tAlert('error'), response.message || t('error_text'));
+            }
+        } catch (error) {
+            console.error('Error updating barcode:', error);
+            Alert.error(tAlert('error'), error.response?.data?.message || t('error_text'));
+        } finally {
+            setIsScannerOpen(false);
+            setScanningProduct(null);
+        }
+    };
+
+    const columns = useMemo(() => getProductColumns(t, i18n.language, handleScanBarcode), [t, i18n.language]);
 
     // Fetch categories for filter - filial seçiminə uyğun filter et
     useEffect(() => {
@@ -455,6 +487,16 @@ export default function Product() {
                 isOpen={isExcelTableModalOpen}
                 onClose={() => setIsExcelTableModalOpen(false)}
                 onRefresh={fetchProducts}
+            />
+
+            {/* Barcode Scanner Modal */}
+            <BarcodeScannerModal
+                isOpen={isScannerOpen}
+                onClose={() => {
+                    setIsScannerOpen(false);
+                    setScanningProduct(null);
+                }}
+                onScanSuccess={handleScanSuccess}
             />
         </div>
     );
