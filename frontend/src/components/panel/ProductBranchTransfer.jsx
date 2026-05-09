@@ -17,6 +17,9 @@ export default function ProductBranchTransfer() {
     const navigate = useNavigate();
     const { user } = useAuth();
 
+    const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+    const [selectedTransferToPrint, setSelectedTransferToPrint] = useState(null);
+
     const filialLocked = isFilialAdmin(user);
     const canPickSource = !filialLocked;
 
@@ -36,8 +39,6 @@ export default function ProductBranchTransfer() {
     const [loadingInbox, setLoadingInbox] = useState(false);
     const [loadingHistory, setLoadingHistory] = useState(false);
     const [editingId, setEditingId] = useState(null);
-    const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
-    const [selectedTransferToPrint, setSelectedTransferToPrint] = useState(null);
 
     useEffect(() => {
         if (filialLocked && user?.branchId) {
@@ -777,7 +778,7 @@ export default function ProductBranchTransfer() {
                                 </div>
                             ) : (
                                 <div className="space-y-4">
-                                    {incomingTransfers.map((transfer) => (
+                                    {incomingTransfers.map((transfer, i) => (
                                         <div key={transfer.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
                                             <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex flex-wrap justify-between items-center gap-4">
                                                 <div className="flex items-center gap-3">
@@ -797,6 +798,17 @@ export default function ProductBranchTransfer() {
                                                         </div>
                                                     </div>
                                                     <div className="flex gap-2">
+                                                        <button
+                                                            onClick={() => {
+                                                                const actNo = 1001 + (historyTransfers.length + incomingTransfers.length - 1 - i);
+                                                                setSelectedTransferToPrint({ ...transfer, actNumber: actNo });
+                                                                setIsPrintModalOpen(true);
+                                                            }}
+                                                            className="p-2 text-teal-600 hover:bg-teal-50 rounded-lg transition-colors border border-teal-100"
+                                                            title={t('print') || 'Çap Et'}
+                                                        >
+                                                            <Printer className="w-4 h-4" />
+                                                        </button>
                                                         <button
                                                             onClick={() => handleAcceptTransfer(transfer.id)}
                                                             className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-colors shadow-sm"
@@ -871,7 +883,7 @@ export default function ProductBranchTransfer() {
                                 </div>
                             ) : (
                                 <div className="space-y-4">
-                                     {historyTransfers.map((transfer) => {
+                                     {historyTransfers.map((transfer, i) => {
                                         const isOutgoing = transfer.fromBranchId === (user?.branchId || fromBranchId);
                                         return (
                                             <div key={transfer.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
@@ -897,7 +909,7 @@ export default function ProductBranchTransfer() {
                                                         </div>
                                                     </div>
                                                     <div className="flex items-center gap-4">
-                                                        {transfer.status === 'PENDING' && isOutgoing && (
+                                                        {transfer.status === 'PENDING' && (isOutgoing || !user?.branchId) && (
                                                             <button
                                                                 onClick={() => handleEditTransfer(transfer)}
                                                                 className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -908,7 +920,10 @@ export default function ProductBranchTransfer() {
                                                         )}
                                                         <button
                                                             onClick={() => {
-                                                                setSelectedTransferToPrint(transfer);
+                                                                const count = historyTransfers.length;
+                                                                const actNo = 1001 + (count - 1 - i);
+                                                                const data = { ...transfer, actNumber: actNo };
+                                                                setSelectedTransferToPrint(data);
                                                                 setIsPrintModalOpen(true);
                                                             }}
                                                             className="p-2 text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
@@ -955,7 +970,6 @@ export default function ProductBranchTransfer() {
                     )}
                 </div>
             </div>
-
             <TransferPrintModal
                 isOpen={isPrintModalOpen}
                 onClose={() => {

@@ -10,17 +10,17 @@ const TransferPrintModal = ({ isOpen, onClose, transfer }) => {
         marka: 'Ford Transit',
         qn: '31085'
     });
-    const printRef = useRef();
+    const printRef = useRef(null);
 
     const handlePrint = useReactToPrint({
-        content: () => printRef.current,
-        documentTitle: printType === 'sending' ? 'Filiala_Gonderme_Akti' : 'Tehvil_Teslim_Akti',
+        contentRef: printRef,
+        documentTitle: `${printType === 'sending' ? 'Filiala_Gonderme_Akti' : 'Tehvil_Teslim_Akti'}_${transfer?.actNumber || ''}`,
     });
 
-    if (!isOpen || !transfer) return null;
+    const items = transfer?.items || [];
+    const totalPrice = items.reduce((sum, item) => sum + (Number(item.quantity || 0) * Number(item.product?.salePrice || 0)), 0);
 
-    const items = transfer.items || [];
-    const totalPrice = items.reduce((sum, item) => sum + (item.quantity * (item.product?.salePrice || 0)), 0);
+    if (!isOpen || !transfer) return null;
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
@@ -32,8 +32,8 @@ const TransferPrintModal = ({ isOpen, onClose, transfer }) => {
                             <Printer className="w-5 h-5" />
                         </div>
                         <div>
-                            <h2 className="text-lg font-bold text-gray-900">{t('print_transfer_act') || 'Köçürmə Aktını Çap Et'}</h2>
-                            <p className="text-xs text-gray-500">Akt tipini seçin və məlumatları yoxlayın</p>
+                            <h2 className="text-lg font-bold text-gray-900">{t('print_transfer_act') || 'Köçürmə Aktı'}</h2>
+                            <p className="text-xs text-gray-500">{t('check_details_before_print') || 'Məlumatları yoxlayın və çap edin'}</p>
                         </div>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-gray-200 rounded-full transition-colors text-gray-400">
@@ -49,22 +49,20 @@ const TransferPrintModal = ({ isOpen, onClose, transfer }) => {
                             <div className="grid grid-cols-1 gap-2">
                                 <button
                                     onClick={() => setPrintType('sending')}
-                                    className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all ${
-                                        printType === 'sending'
+                                    className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all ${printType === 'sending'
                                             ? 'border-teal-600 bg-teal-50 text-teal-700 shadow-sm'
                                             : 'border-gray-100 hover:border-gray-200 text-gray-600'
-                                    }`}
+                                        }`}
                                 >
                                     <FileText className="w-5 h-5" />
                                     <span className="font-bold text-sm">Filiala Göndərmə Aktı</span>
                                 </button>
                                 <button
                                     onClick={() => setPrintType('handover')}
-                                    className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all ${
-                                        printType === 'handover'
+                                    className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all ${printType === 'handover'
                                             ? 'border-teal-600 bg-teal-50 text-teal-700 shadow-sm'
                                             : 'border-gray-100 hover:border-gray-200 text-gray-600'
-                                    }`}
+                                        }`}
                                 >
                                     <CheckCircle className="w-5 h-5" />
                                     <span className="font-bold text-sm">Təhvil-Təslim Aktı</span>
@@ -103,14 +101,17 @@ const TransferPrintModal = ({ isOpen, onClose, transfer }) => {
                     </div>
 
                     {/* Preview Area */}
-                    <div className="md:col-span-2 bg-gray-100 p-4 rounded-xl overflow-y-auto">
+                    <div className="md:col-span-2 bg-gray-100 p-2 rounded-xl overflow-y-auto max-h-[60vh] border border-gray-200">
                         <div className="text-[10px] font-bold text-gray-400 mb-2 uppercase tracking-widest text-center">Ön Baxış</div>
-                        <div className="bg-white shadow-sm mx-auto overflow-x-auto min-w-[600px]">
+                        <div className="bg-white shadow-sm mx-auto overflow-auto max-w-full">
                             {/* The actual printable component */}
-                            <div ref={printRef} className="p-10 text-black font-serif" style={{ width: '210mm', minHeight: '297mm', margin: '0 auto', backgroundColor: 'white' }}>
+                            <div id="printable-area" ref={printRef} className="p-8 text-black font-serif bg-white" style={{ width: '210mm', minHeight: '297mm', margin: '0 auto', fontSize: '12pt' }}>
                                 <div className="flex justify-between items-start mb-10">
                                     <div className="text-red-600 font-bold text-xl italic">Fitechnlogy MMC</div>
-                                    <div className="font-bold">Tarix: {new Date(transfer.createdAt).toLocaleDateString('az-AZ')}</div>
+                                    <div className="text-right">
+                                        <div className="font-bold">Akt №: {transfer.actNumber || '____'}</div>
+                                        <div className="font-bold">Tarix: {new Date(transfer.createdAt).toLocaleDateString('az-AZ')}</div>
+                                    </div>
                                 </div>
 
                                 <div className="text-center mb-8">
@@ -128,60 +129,60 @@ const TransferPrintModal = ({ isOpen, onClose, transfer }) => {
                                     </div>
                                 )}
 
-                            <table className="w-full border-collapse border border-black mb-10 text-sm">
-                                <thead>
-                                    <tr className="bg-gray-50">
-                                        <th className="border border-black px-2 py-1 text-center w-12">S\s</th>
-                                        <th className="border border-black px-2 py-1 text-left">Malın adı</th>
-                                        <th className="border border-black px-2 py-1 text-center">Ölçü vahidi</th>
-                                        <th className="border border-black px-2 py-1 text-center">Miqdarı</th>
-                                        <th className="border border-black px-2 py-1 text-center">Qiyməti</th>
-                                        <th className="border border-black px-2 py-1 text-center">Ümumi məbləğ</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {items.map((item, index) => (
-                                        <tr key={item.id}>
-                                            <td className="border border-black px-2 py-1 text-center">{index + 1}</td>
-                                            <td className="border border-black px-2 py-1">{item.product?.name}</td>
-                                            <td className="border border-black px-2 py-1 text-center">{item.product?.unitType || 'ƏDƏD'}</td>
-                                            <td className="border border-black px-2 py-1 text-center">{item.quantity}</td>
-                                            <td className="border border-black px-2 py-1 text-center">{Number(item.product?.salePrice || 0).toFixed(2)}</td>
-                                            <td className="border border-black px-2 py-1 text-center">{Number(item.quantity * (item.product?.salePrice || 0)).toFixed(2)}</td>
+                                <table className="w-full border-collapse border border-black mb-10 text-sm">
+                                    <thead>
+                                        <tr className="bg-gray-50">
+                                            <th className="border border-black px-2 py-1 text-center w-12">S\s</th>
+                                            <th className="border border-black px-2 py-1 text-left">Malın adı</th>
+                                            <th className="border border-black px-2 py-1 text-center">Ölçü vahidi</th>
+                                            <th className="border border-black px-2 py-1 text-center">Miqdarı</th>
+                                            <th className="border border-black px-2 py-1 text-center">Qiyməti</th>
+                                            <th className="border border-black px-2 py-1 text-center">Ümumi məbləğ</th>
                                         </tr>
-                                    ))}
-                                    {[...Array(Math.max(0, 4 - items.length))].map((_, i) => (
-                                        <tr key={`empty-${i}`} className="h-8">
-                                            <td className="border border-black px-2 py-1 text-center">{items.length + i + 1}</td>
-                                            <td className="border border-black px-2 py-1"></td>
-                                            <td className="border border-black px-2 py-1"></td>
-                                            <td className="border border-black px-2 py-1"></td>
-                                            <td className="border border-black px-2 py-1"></td>
-                                            <td className="border border-black px-2 py-1"></td>
+                                    </thead>
+                                    <tbody>
+                                        {items.map((item, index) => (
+                                            <tr key={item.id}>
+                                                <td className="border border-black px-2 py-1 text-center">{index + 1}</td>
+                                                <td className="border border-black px-2 py-1">{item.product?.name}</td>
+                                                <td className="border border-black px-2 py-1 text-center">{item.product?.unitType || 'ƏDƏD'}</td>
+                                                <td className="border border-black px-2 py-1 text-center">{item.quantity}</td>
+                                                <td className="border border-black px-2 py-1 text-center">{Number(item.product?.salePrice || 0).toFixed(2)}</td>
+                                                <td className="border border-black px-2 py-1 text-center">{Number(item.quantity * (item.product?.salePrice || 0)).toFixed(2)}</td>
+                                            </tr>
+                                        ))}
+                                        {[...Array(Math.max(0, 4 - items.length))].map((_, i) => (
+                                            <tr key={`empty-${i}`} className="h-8">
+                                                <td className="border border-black px-2 py-1 text-center">{items.length + i + 1}</td>
+                                                <td className="border border-black px-2 py-1"></td>
+                                                <td className="border border-black px-2 py-1"></td>
+                                                <td className="border border-black px-2 py-1"></td>
+                                                <td className="border border-black px-2 py-1"></td>
+                                                <td className="border border-black px-2 py-1"></td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    <tfoot>
+                                        <tr className="font-bold">
+                                            <td colSpan="5" className="border border-black px-2 py-1 text-right italic">Cəmi:</td>
+                                            <td className="border border-black px-2 py-1 text-center underline">{Number(totalPrice || 0).toFixed(2)} AZN</td>
                                         </tr>
-                                    ))}
-                                </tbody>
-                                <tfoot>
-                                    <tr className="font-bold">
-                                        <td colSpan="5" className="border border-black px-2 py-1 text-right italic">Cəmi:</td>
-                                        <td className="border border-black px-2 py-1 text-center underline">{Number(totalPrice || 0).toFixed(2)} AZN</td>
-                                    </tr>
-                                </tfoot>
-                            </table>
+                                    </tfoot>
+                                </table>
 
-                            <div className="grid grid-cols-2 gap-20 mt-20 font-bold text-sm">
-                                <div className="space-y-8">
-                                    <div>Təhvil verən</div>
-                                    <div className="border-b border-black w-full pt-4"></div>
-                                    <div>Tarix: ________________</div>
-                                    <div>M.Y.</div>
+                                <div className="grid grid-cols-2 gap-20 mt-20 font-bold text-sm">
+                                    <div className="space-y-8">
+                                        <div>Təhvil verən</div>
+                                        <div className="border-b border-black w-full pt-4"></div>
+                                        <div>Tarix: ________________</div>
+                                        <div>M.Y.</div>
+                                    </div>
+                                    <div className="space-y-8">
+                                        <div>Təhvil alan</div>
+                                        <div className="border-b border-black w-full pt-4"></div>
+                                        <div>Tarix: ________________</div>
+                                    </div>
                                 </div>
-                                <div className="space-y-8">
-                                    <div>Təhvil alan</div>
-                                    <div className="border-b border-black w-full pt-4"></div>
-                                    <div>Tarix: ________________</div>
-                                </div>
-                            </div>
                             </div>
                         </div>
                     </div>
@@ -196,7 +197,7 @@ const TransferPrintModal = ({ isOpen, onClose, transfer }) => {
                         {t('cancel') || 'Ləğv Et'}
                     </button>
                     <button
-                        onClick={handlePrint}
+                        onClick={() => handlePrint()}
                         className="flex items-center gap-2 px-8 py-2.5 bg-teal-600 text-white rounded-xl hover:bg-teal-700 font-bold transition-all shadow-lg shadow-teal-600/20"
                     >
                         <Printer className="w-4 h-4" />
@@ -205,18 +206,52 @@ const TransferPrintModal = ({ isOpen, onClose, transfer }) => {
                 </div>
             </div>
 
-            <style jsx>{`
+            <style>
+                {`
                 @media print {
-                    @page {
-                        size: A4;
-                        margin: 0;
-                    }
-                    body {
-                        margin: 0;
-                        -webkit-print-color-adjust: exact;
-                    }
+                  /* Bütün səhifəni və modalın kənar elementlərini gizlət */
+                  body * {
+                    visibility: hidden;
+                  }
+
+                  /* Yalnız çap sahəsini və onun daxilindəkiləri göstər */
+                  #printable-area, #printable-area * {
+                    visibility: visible;
+                  }
+
+                  /* Çap sahəsini səhifənin ən yuxarısına yerləşdir */
+                  #printable-area {
+                    position: absolute;
+                    left: 0;
+                    top: 0;
+                    width: 100%;
+                    margin: 0;
+                    padding: 20mm;
+                    visibility: visible;
+                    display: block !important;
+                  }
+
+                  /* Modalın kölgəsini, fonunu və s. deaktiv et */
+                  .fixed, .bg-black\\/60, .bg-white {
+                    background: none !important;
+                    box-shadow: none !important;
+                    position: static !important;
+                    padding: 0 !important;
+                  }
+
+                  @page {
+                    size: A4;
+                    margin: 0;
+                  }
+
+                  /* Rənglərin itməməsi üçün mütləq lazımdır */
+                  * {
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                  }
                 }
-            `}</style>
+                `}
+            </style>
         </div>
     );
 };

@@ -115,5 +115,7 @@
     "created_by": "Yaradan",
     "no_history_yet": "Hələ ki tarixçə yoxdur",
     "shipped": "Yoldadır",
-    "pending": "Gözləyir"
+    "pending": "Gözləyir",
+    "print_transfer_act": "Köçürmə Aktı",
+    "check_details_before_print": "Məlumatları yoxlayın və çap edin"
 }
