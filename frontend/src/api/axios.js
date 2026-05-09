@@ -12,7 +12,14 @@ const api = axios.create({
 
 // Response Interceptor
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Bridge for systemic date/data typo in the backend
+    // If backend returns 'date' instead of 'data', we normalize it here
+    if (response.data && response.data.date !== undefined && response.data.data === undefined) {
+      response.data.data = response.data.date;
+    }
+    return response;
+  },
   (error) => {
     if (error.response?.status === 401) {
       // Token etibarsızdır və ya iş saatı bitib

@@ -3,11 +3,12 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useLocation } from 'react-router-dom';
 import TableTemplate from '../ui/TableTamplate';
 import Alert from '../ui/Alert';
-import { Edit, Trash2, Eye, Plus, FileSpreadsheet } from 'lucide-react';
+import { Edit, Trash2, Eye, Plus, FileSpreadsheet, Upload } from 'lucide-react';
 import { getProductColumns } from '../../data/table-columns/ProductColumns';
 import { productApi, categoryApi, subCategoryApi } from '../../api';
 import ExcelImportModal from '../modals/ExcelImportModal';
-import { useLocalStorage, useBranch } from '../../hooks';
+import ExcelTableModal from '../modals/ExcelTableModal';
+import { useBranch } from '../../hooks';
 
 export default function Product() {
     const { t, i18n } = useTranslation('product');
@@ -19,8 +20,9 @@ export default function Product() {
     const [categories, setCategories] = useState([]);
     const [subCategories, setSubCategories] = useState([]);
     const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
-    const [filters, setFilters] = useLocalStorage('product_filters', {});
-    const [searchQuery, setSearchQuery] = useLocalStorage('product_searchQuery', ''); // Actual search query used for API
+    const [isExcelTableModalOpen, setIsExcelTableModalOpen] = useState(false);
+    const [filters, setFilters] = useState({});
+    const [searchQuery, setSearchQuery] = useState(''); // Actual search query used for API
     const [searchValue, setSearchValue] = useState(searchQuery || ''); // Input value - localStorage-dan ilk dəyər alır
     const { selectedBranchId, selectedBranchName } = useBranch();
 
@@ -282,11 +284,11 @@ export default function Product() {
         navigate(addProductPath);
     };
 
-    const handleExcelImport = async (file) => {
+    const handleExcelImport = async (file, branchId = null) => {
         try {
             Alert.loading(t('uploading') || 'Yüklənir...');
 
-            const result = await productApi.importFromExcel(file);
+            const result = await productApi.importFromExcel(file, branchId);
 
             Alert.close();
 
@@ -357,11 +359,18 @@ export default function Product() {
                 </div>
                 <div className="flex items-center gap-3">
                     <button
-                        onClick={() => setIsExcelModalOpen(true)}
-                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                        onClick={() => setIsExcelTableModalOpen(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-all shadow-md hover:shadow-lg"
                     >
                         <FileSpreadsheet className="w-4 h-4" />
-                        {t('excel_import') || 'Excel ilə Əlavə Et'}
+                        Excel ilə Əlavə Et
+                    </button>
+                    <button
+                        onClick={() => setIsExcelModalOpen(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all shadow-md hover:shadow-lg"
+                    >
+                        <Upload className="w-4 h-4" />
+                        Excel Faylı Yüklə
                     </button>
                     <button
                         onClick={handleAddProduct}
@@ -439,6 +448,13 @@ export default function Product() {
                 isOpen={isExcelModalOpen}
                 onClose={() => setIsExcelModalOpen(false)}
                 onImport={handleExcelImport}
+            />
+
+            {/* Excel Table Bulk Add Modal */}
+            <ExcelTableModal
+                isOpen={isExcelTableModalOpen}
+                onClose={() => setIsExcelTableModalOpen(false)}
+                onRefresh={fetchProducts}
             />
         </div>
     );

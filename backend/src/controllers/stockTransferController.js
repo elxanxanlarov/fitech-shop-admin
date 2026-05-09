@@ -193,6 +193,145 @@ export const createTransfer = async (req, res) => {
     }
 };
 
+export const updateTransfer = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { toBranchId, items, note } = req.body;
+        const staffId = req.staff?.id;
+
+        if (!toBranchId || !items || !Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Filial və məhsullar tələb olunur"
+            });
+        }
+
+        const existingTransfer = await prisma.stocktransfer.findUnique({
+            where: { id },
+            include: { items: true }
+        });
+
+        if (!existingTransfer) {
+            return res.status(404).json({ success: false, message: "Transfer tapılmadı" });
+        }
+
+        if (existingTransfer.status !== 'PENDING') {
+            return res.status(400).json({ success: false, message: "Yalnız 'PENDING' statusundakı transferləri dəyişmək olar" });
+        }
+
+        const result = await prisma.$transaction(async (tx) => {
+            // 1. Köhnə məhsulları mənbəyə geri qaytar
+            for (const item of existingTransfer.items) {
+                if (existingTransfer.fromBranchId) {
+                    const bs = await tx.branchstock.findFirst({
+                        where: { branchId: existingTransfer.fromBranchId, productId: item.productId }
+                    });
+                    const product = await tx.product.findUnique({ where: { id: item.productId } });
+                    const ppb = product?.piecesPerBox || 1;
+
+                    if (bs) {
+                        let newFB = bs.fullBoxes + (item.fullBoxes || 0);
+                        let newOBQ = bs.openedBoxQuantity + (item.openedBoxQuantity || 0);
+                        if (newOBQ >= ppb) { newFB += Math.floor(newOBQ / ppb); newOBQ %= ppb; }
+                        await tx.branchstock.update({
+                            where: { id: bs.id },
+                            data: { stock: bs.stock + item.quantity, fullBoxes: newFB, openedBoxQuantity: newOBQ }
+                        });
+                    }
+                } else {
+                    const product = await tx.product.findUnique({ where: { id: item.productId } });
+                    const ppb = product.piecesPerBox || 1;
+                    let newFB = product.fullBoxes + (item.fullBoxes || 0);
+                    let newOBQ = product.openedBoxQuantity + (item.openedBoxQuantity || 0);
+                    if (newOBQ >= ppb) { newFB += Math.floor(newOBQ / ppb); newOBQ %= ppb; }
+
+                    await tx.product.update({
+                        where: { id: item.productId },
+                        data: { stock: product.stock + item.quantity, fullBoxes: newFB, openedBoxQuantity: newOBQ }
+                    });
+                }
+            }
+
+            // 2. Köhnə item-ləri sil
+            await tx.stocktransferitem.deleteMany({ where: { transferId: id } });
+
+            // 3. Yeni məhsulları yoxla və çıx
+            for (const item of items) {
+                const { productId, quantity, fullBoxes, openedBoxQuantity } = item;
+
+                if (existingTransfer.fromBranchId) {
+                    const branchStock = await tx.branchstock.findFirst({
+                        where: { branchId: existingTransfer.fromBranchId, productId }
+                    });
+
+                    if (!branchStock || branchStock.stock < quantity) {
+                        const product = await tx.product.findUnique({ where: { id: productId }, select: { name: true } });
+                        throw new Error(`Filialda kifayət qədər stok yoxdur: ${product?.name || productId}`);
+                    }
+
+                    const product = await tx.product.findUnique({ where: { id: productId } });
+                    const ppb = product?.piecesPerBox || 1;
+
+                    let newFB = branchStock.fullBoxes - (fullBoxes || 0);
+                    let newOBQ = branchStock.openedBoxQuantity - (openedBoxQuantity || 0);
+                    if (newOBQ < 0) { newFB -= 1; newOBQ += ppb; }
+                    if (newFB < 0) {
+                        throw new Error(`Filialda qutu sayısı kifayət deyil: ${product?.name || productId}`);
+                    }
+
+                    await tx.branchstock.update({
+                        where: { id: branchStock.id },
+                        data: { stock: branchStock.stock - quantity, fullBoxes: newFB, openedBoxQuantity: newOBQ }
+                    });
+                } else {
+                    const product = await tx.product.findUnique({ where: { id: productId } });
+                    if (!product) throw new Error(`Məhsul tapılmadı: ${productId}`);
+                    if (product.stock < quantity) throw new Error(`Mərkəz anbarda kifayət qədər stok yoxdur: ${product.name}`);
+
+                    let newFB = product.fullBoxes - (fullBoxes || 0);
+                    let newOBQ = product.openedBoxQuantity - (openedBoxQuantity || 0);
+                    if (newOBQ < 0) { newFB -= 1; newOBQ += (product.piecesPerBox || 1); }
+                    if (newFB < 0) throw new Error(`Mərkəz anbarda qutu sayısı kifayət deyil: ${product.name}`);
+
+                    await tx.product.update({
+                        where: { id: productId },
+                        data: { stock: product.stock - quantity, fullBoxes: newFB, openedBoxQuantity: newOBQ }
+                    });
+                }
+
+                // Yeni item-ləri yarat
+                await tx.stocktransferitem.create({
+                    data: { transferId: id, productId, quantity, fullBoxes, openedBoxQuantity }
+                });
+            }
+
+            // 4. Transfer recordunu yenilə
+            const updatedTransfer = await tx.stocktransfer.update({
+                where: { id },
+                data: { toBranchId, note }
+            });
+
+            return updatedTransfer;
+        });
+
+        await createActivityLog({
+            staffId,
+            entityType: 'StockTransfer',
+            entityId: id,
+            action: 'UPDATE',
+            description: `Transfer redaktə edildi: ${id}`
+        });
+
+        return res.status(200).json({ success: true, data: result });
+    } catch (error) {
+        console.error("updateTransfer error", error);
+        return res.status(500).json({
+            success: false,
+            message: error.message || "Transfer yenilənərkən xəta baş verdi"
+        });
+    }
+};
+
 
 // Transfer statusunu yenilə (Məsələn PENDING -> SHIPPED -> COMPLETED)
 export const updateTransferStatus = async (req, res) => {

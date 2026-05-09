@@ -9,6 +9,10 @@ export const stockTransferApi = {
     const response = await api.post('/stock-transfer', data);
     return response.data;
   },
+  update: async (id, data) => {
+    const response = await api.put(`/stock-transfer/${id}`, data);
+    return response.data;
+  },
   updateStatus: async (id, status) => {
     const response = await api.put(`/stock-transfer/${id}/status`, { status });
     return response.data;

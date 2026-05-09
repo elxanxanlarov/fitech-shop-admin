@@ -95,9 +95,10 @@ export default function NotificationBell() {
             </button>
 
             {showDropdown && (
-                <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50 max-h-96 overflow-hidden flex flex-col">
-                    <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-                        <h3 className="text-lg font-semibold text-gray-900">
+                <div className="absolute right-[-40px] sm:right-0 mt-3 w-[calc(100vw-2rem)] sm:w-96 bg-white rounded-3xl shadow-2xl border border-slate-100 z-50 max-h-[80vh] sm:max-h-[600px] overflow-hidden flex flex-col animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/30">
+                        <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                            <Bell className="w-5 h-5 text-blue-600" />
                             {t('notifications') || 'Bildirişlər'}
                         </h3>
                         {unreadCount > 0 && (

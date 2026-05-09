@@ -23,6 +23,12 @@ export const productApi = {
     return response.data;
   },
 
+  // Bulk create products
+  bulkCreate: async (productsData) => {
+    const response = await api.post('/product/bulk-create', productsData);
+    return response.data;
+  },
+
   // Update product
   update: async (id, productData) => {
     const response = await api.put(`/product/${id}`, productData);
@@ -44,9 +50,11 @@ export const productApi = {
   },
 
   // Import products from Excel
-  importFromExcel: async (file) => {
+  importFromExcel: async (file, branchId = null) => {
     const formData = new FormData();
     formData.append('file', file);
+    if (branchId) formData.append('branchId', branchId);
+    
     const response = await api.post('/product/import', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',

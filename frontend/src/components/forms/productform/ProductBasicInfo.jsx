@@ -4,6 +4,8 @@ import Input from '../../ui/Input';
 import SearchDropdown from '../../ui/SearchDropdown';
 import { MdInventory, MdDescription, MdQrCode, MdCloudUpload } from 'react-icons/md';
 import { BiBuildings } from 'react-icons/bi';
+import { AiOutlineScan } from 'react-icons/ai';
+import BarcodeScannerModal from '../../modals/BarcodeScannerModal';
 
 export default function ProductBasicInfo({
     formData,
@@ -25,6 +27,7 @@ export default function ProductBasicInfo({
     onProductSelect
 }) {
     const { t } = useTranslation('product');
+    const [isScannerOpen, setIsScannerOpen] = React.useState(false);
 
     // Get image URL for preview
     const getImageUrl = () => {
@@ -71,7 +74,7 @@ export default function ProductBasicInfo({
                         onChange={(e) => onInputChange('name', e.target.value)}
                         error={errors.name}
                         placeholder={t('name_placeholder') || 'Məhsul adını daxil edin'}
-                        icon={<MdInventory />}
+                        leftIcon={<MdInventory />}
                         required
                     />
                 ) : (
@@ -115,7 +118,7 @@ export default function ProductBasicInfo({
                             onSearchChange={(searchTerm) => {
                                 // Axtarış zamanı formData.name-i yenilə (yeni ad yazmaq üçün)
                                 if (searchTerm) {
-                                    const matchingProduct = existingProducts.find(p => 
+                                    const matchingProduct = existingProducts.find(p =>
                                         p.name?.toLowerCase() === searchTerm.toLowerCase()
                                     );
                                     if (!matchingProduct) {
@@ -134,14 +137,40 @@ export default function ProductBasicInfo({
                     </div>
                 )}
 
-                <Input
-                    label={t('barcode')}
-                    type="text"
-                    value={formData.barcode}
-                    onChange={(e) => onInputChange('barcode', e.target.value)}
-                    error={errors.barcode}
-                    placeholder={t('barcode_placeholder') || 'Barcode daxil edin'}
-                    icon={<MdQrCode />}
+                <div className="flex flex-col gap-1">
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                        {t('barcode')}
+                    </label>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                        <div className="flex-1">
+                            <Input
+                                showLabel={false}
+                                type="text"
+                                value={formData.barcode}
+                                onChange={(e) => onInputChange('barcode', e.target.value)}
+                                error={errors.barcode}
+                                placeholder={t('barcode_placeholder') || 'Barcode daxil edin'}
+                                leftIcon={<MdQrCode />}
+                                containerClassName="space-y-0"
+                            />
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setIsScannerOpen(true)}
+                            className="px-6 h-[46px] bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all duration-200 flex items-center justify-center gap-2 shadow-sm active:scale-95 whitespace-nowrap w-full sm:w-auto"
+                        >
+                            <AiOutlineScan className="w-5 h-5" />
+                            <span className="font-semibold text-sm">{t('scan') || 'Scan'}</span>
+                        </button>
+                    </div>
+                </div>
+
+                <BarcodeScannerModal
+                    isOpen={isScannerOpen}
+                    onClose={() => setIsScannerOpen(false)}
+                    onScanSuccess={(decodedText) => {
+                        onInputChange('barcode', decodedText);
+                    }}
                 />
 
                 <div className="md:col-span-2">
@@ -152,7 +181,7 @@ export default function ProductBasicInfo({
                         onChange={(e) => onInputChange('description', e.target.value)}
                         error={errors.description}
                         placeholder={t('description_placeholder') || 'Məhsul təsviri daxil edin'}
-                        icon={<MdDescription />}
+                        leftIcon={<MdDescription />}
                     />
                 </div>
 

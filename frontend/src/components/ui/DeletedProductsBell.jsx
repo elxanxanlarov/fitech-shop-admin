@@ -331,13 +331,13 @@ export default function DeletedProductsBell() {
             </button>
 
             {showDropdown && (
-                <div className="absolute right-0 mt-2 w-96 bg-white border border-gray-200 rounded-lg shadow-xl z-50 max-h-[600px] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
-                    <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gray-50/50">
-                        <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <div className="absolute right-[-50px] sm:right-0 mt-3 w-[calc(100vw-2rem)] sm:w-[500px] bg-white border border-slate-100 rounded-[2rem] shadow-2xl z-50 max-h-[85vh] sm:max-h-[650px] flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                        <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
                             <Trash2 className="w-5 h-5 text-red-600" />
                             {t('deleted_items') || 'Silinmiş Elementlər'}
                         </h3>
-                        <button onClick={() => setShowDropdown(false)} className="text-gray-400 hover:text-gray-600">
+                        <button onClick={() => setShowDropdown(false)} className="p-2 hover:bg-slate-200/50 rounded-full transition-colors text-slate-400 hover:text-slate-600">
                             <X className="w-5 h-5" />
                         </button>
                     </div>

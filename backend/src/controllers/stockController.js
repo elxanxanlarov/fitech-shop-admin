@@ -6,7 +6,7 @@ import { increaseProductStock, decreaseProductStock, calculateProductStock } fro
 export const getAllStockMovements = async (req, res) => {
     try {
         const { productId, branchId } = req.query;
-        
+
         const where = {};
         if (productId) {
             where.productId = productId;
@@ -89,7 +89,7 @@ export const getStockMovementById = async (req, res) => {
 // Create stock movement
 export const createStockMovement = async (req, res) => {
     try {
-        const { 
+        const {
             productId,
             type,
             quantity,
@@ -137,19 +137,20 @@ export const createStockMovement = async (req, res) => {
 
         // Get current stock (central or branch)
         let productForStock = product;
+        let bStock = null;
         if (branchId && branchId !== 'central') {
-            const bStock = await prisma.branchstock.findFirst({
+            bStock = await prisma.branchstock.findFirst({
                 where: {
                     branchId: branchId,
                     productId: productId
                 }
             });
-            if (!bStock) {
-                // If no record exists, we can create one later or return error
-                // For now, let's assume it should exist (synced)
-                return res.status(404).json({ success: false, message: "Bu filialda məhsul stok kaydı tapılmadı" });
+            if (bStock) {
+                productForStock = { ...product, ...bStock };
+            } else {
+                // Əgər filialda stok kaydı yoxdursa, 0 stok ilə davam edirik
+                productForStock = { ...product, stock: 0, fullBoxes: 0, openedBoxQuantity: 0 };
             }
-            productForStock = { ...product, ...bStock };
         }
 
         const previousStock = calculateProductStock(productForStock);
@@ -222,14 +223,26 @@ export const createStockMovement = async (req, res) => {
 
         // Update product stock (central or branch)
         if (branchId && branchId !== 'central') {
-            await prisma.branchstock.update({
-                where: { id: bStock.id },
-                data: {
-                    stock: newStockData.stock,
-                    fullBoxes: newStockData.fullBoxes,
-                    openedBoxQuantity: newStockData.openedBoxQuantity
-                }
-            });
+            if (bStock) {
+                await prisma.branchstock.update({
+                    where: { id: bStock.id },
+                    data: {
+                        stock: newStockData.stock,
+                        fullBoxes: newStockData.fullBoxes,
+                        openedBoxQuantity: newStockData.openedBoxQuantity
+                    }
+                });
+            } else {
+                await prisma.branchstock.create({
+                    data: {
+                        branchId: branchId,
+                        productId: productId,
+                        stock: newStockData.stock,
+                        fullBoxes: newStockData.fullBoxes,
+                        openedBoxQuantity: newStockData.openedBoxQuantity
+                    }
+                });
+            }
         } else {
             await prisma.product.update({
                 where: { id: productId },

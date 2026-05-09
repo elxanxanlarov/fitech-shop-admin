@@ -237,5 +237,15 @@
   "package": "Paket",
   "calculated_stock_info": "Stok tam qutular və açıq məhsullardan avtomatik hesablanır",
   "branch": "Filial",
-  "select_branch": "Filial seçin"
+  "select_branch": "Filial seçin",
+  "scan_barcode": "Barkodu Skan Et",
+  "scan_hint": "Barkodu kameraya yaxınlaşdırın",
+  "close": "Bağla",
+  "excel_bulk_add": "Excel Üslubunda Məhsul Əlavə Et",
+  "excel_bulk_desc": "Excel-dən kopyalayıb bura yapışdıra və ya birbaşa daxil edə bilərsiniz",
+  "add_row": "Sətir Əlavə Et",
+  "save_all": "Hamısını Yadda Saxla",
+  "valid_products_ready": "məhsul hazırda daxil edilib",
+  "fill_required_fields": "Zəhmət olmasa tələb olunan sahələri doldurun (Ad, Alış və Satış qiyməti)",
+  "saving": "Yadda saxlanılır..."
 }

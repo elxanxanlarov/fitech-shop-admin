@@ -9,3 +9,4 @@ export { useProductFormSubmit } from './useProductFormSubmit';
 export { useProductDiscountHandler } from './useProductDiscountHandler';
 export { useProductFormChangeDetection } from './useProductFormChangeDetection';
 export { useBranch } from '../context/BranchContext';
+export { useAuth } from '../context/AuthContext';

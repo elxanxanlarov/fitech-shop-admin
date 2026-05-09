@@ -1,13 +1,40 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Upload, FileSpreadsheet, AlertCircle, CheckCircle } from 'lucide-react';
+import { X, Upload, FileSpreadsheet, AlertCircle, CheckCircle, MapPin } from 'lucide-react';
 import Alert from '../ui/Alert';
+import { useAuth, useBranch } from '../../hooks';
+import { branchApi } from '../../api';
 
 export default function ExcelImportModal({ isOpen, onClose, onImport }) {
     const { t } = useTranslation('product');
     const { t: tAlert } = useTranslation('alert');
+    const { user } = useAuth();
+    const { selectedBranchId: contextBranchId } = useBranch();
+    
     const [selectedFile, setSelectedFile] = useState(null);
     const [uploading, setUploading] = useState(false);
+    const [branches, setBranches] = useState([]);
+    const [targetBranchId, setTargetBranchId] = useState(contextBranchId || 'central');
+
+    useEffect(() => {
+        const fetchBranches = async () => {
+            try {
+                const response = await branchApi.getAll();
+                if (response.success) {
+                    setBranches(response.data);
+                }
+            } catch (error) {
+                console.error('Fetch branches error:', error);
+            }
+        };
+
+        if (isOpen) {
+            fetchBranches();
+            // Set initial branch based on user or context
+            const initialBranch = user?.branchId || contextBranchId || 'central';
+            setTargetBranchId(initialBranch);
+        }
+    }, [isOpen, user, contextBranchId]);
 
     if (!isOpen) return null;
 
@@ -45,7 +72,7 @@ export default function ExcelImportModal({ isOpen, onClose, onImport }) {
 
         setUploading(true);
         try {
-            await onImport(selectedFile);
+            await onImport(selectedFile, targetBranchId);
             setSelectedFile(null);
             // Reset file input
             const fileInput = document.getElementById('excel-file-input');
@@ -96,16 +123,14 @@ export default function ExcelImportModal({ isOpen, onClose, onImport }) {
                                 <div className="text-sm text-blue-800 space-y-2">
                                     <p className="font-medium">{t('required_columns') || 'Tələb olunan sütunlar:'}</p>
                                     <ul className="list-disc list-inside space-y-1 ml-2">
-                                        <li><strong>{t('name') || 'Ad'}</strong> - {t('excel_name_desc') || 'Məhsul adı (mütləq)'}</li>
-                                        <li><strong>{t('purchase_price') || 'Alış Qiyməti'}</strong> - {t('excel_purchase_price_desc') || 'Alış qiyməti (mütləq)'}</li>
-                                        <li><strong>{t('sale_price') || 'Satış Qiyməti'}</strong> - {t('excel_sale_price_desc') || 'Satış qiyməti (mütləq)'}</li>
-                                        <li><strong>{t('stock') || 'Stok'}</strong> - {t('excel_stock_desc') || 'Stok miqdarı (mütləq)'}</li>
-                                        <li><strong>{t('barcode') || 'Barcode'}</strong> - {t('excel_barcode_desc') || 'Barcode (istəyə bağlı)'}</li>
-                                        <li><strong>{t('description') || 'Təsvir'}</strong> - {t('excel_description_desc') || 'Məhsul təsviri (istəyə bağlı)'}</li>
-                                        <li><strong>{t('category') || 'Kateqoriya'}</strong> - {t('excel_category_desc') || 'Kateqoriya adı (istəyə bağlı)'}</li>
-                                        <li><strong>{t('subcategory') || 'Alt Kateqoriya'}</strong> - {t('excel_subcategory_desc') || 'Alt kateqoriya adı (istəyə bağlı)'}</li>
-                                        <li><strong>{t('is_active') || 'Aktiv'}</strong> - {t('excel_is_active_desc') || 'true/false və ya 1/0 (istəyə bağlı, default: true)'}</li>
-                                        <li><strong>{t('is_official') || 'Rəsmi'}</strong> - {t('excel_is_official_desc') || 'true/false və ya 1/0 (istəyə bağlı, default: false)'}</li>
+                                        <li><strong>Strixkod</strong> - Barkod nömrəsi</li>
+                                        <li><strong>Ad</strong> - Məhsulun adı (mütləq)</li>
+                                        <li><strong>Miqdar</strong> - Stok miqdarı (mütləq)</li>
+                                        <li><strong>Ölçü vahidi</strong> - Ədəd, kq, litr və s.</li>
+                                        <li><strong>Qiymət (AZN)</strong> - Alış qiyməti (mütləq)</li>
+                                        <li><strong>Endirimli qiymət</strong> - Bu sütun keçiləcək</li>
+                                        <li><strong>Cəmi məbləğ</strong> - Bu sütun keçiləcək (cəmi məbləğ)</li>
+                                        <li><strong>Satış Qiyməti</strong> - Satış qiyməti (mütləq)</li>
                                     </ul>
                                 </div>
                             </div>
@@ -121,34 +146,59 @@ export default function ExcelImportModal({ isOpen, onClose, onImport }) {
                             <table className="min-w-full text-sm border-collapse border border-gray-300">
                                 <thead>
                                     <tr className="bg-gray-200">
-                                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold">{t('name') || 'Ad'}</th>
-                                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold">{t('purchase_price') || 'Alış Qiyməti'}</th>
-                                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold">{t('sale_price') || 'Satış Qiyməti'}</th>
-                                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold">{t('stock') || 'Stok'}</th>
-                                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold">{t('barcode') || 'Barcode'}</th>
-                                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold">{t('category') || 'Kateqoriya'}</th>
+                                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Strixkod</th>
+                                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Ad</th>
+                                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Miqdar</th>
+                                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Ölçü vahidi</th>
+                                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Qiymət (AZN)</th>
+                                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Cəmi məbləğ</th>
+                                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold bg-green-100">Satış Qiyməti</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <tr>
-                                        <td className="border border-gray-300 px-3 py-2">Məhsul 1</td>
-                                        <td className="border border-gray-300 px-3 py-2">10.00</td>
-                                        <td className="border border-gray-300 px-3 py-2">15.00</td>
-                                        <td className="border border-gray-300 px-3 py-2">100</td>
-                                        <td className="border border-gray-300 px-3 py-2">123456789</td>
-                                        <td className="border border-gray-300 px-3 py-2">Elektronika</td>
-                                    </tr>
-                                    <tr>
-                                        <td className="border border-gray-300 px-3 py-2">Məhsul 2</td>
-                                        <td className="border border-gray-300 px-3 py-2">20.00</td>
-                                        <td className="border border-gray-300 px-3 py-2">30.00</td>
-                                        <td className="border border-gray-300 px-3 py-2">50</td>
-                                        <td className="border border-gray-300 px-3 py-2">987654321</td>
-                                        <td className="border border-gray-300 px-3 py-2">Geyim</td>
+                                        <td className="border border-gray-300 px-3 py-2">2400000028109</td>
+                                        <td className="border border-gray-300 px-3 py-2">TOZSORAN SULU</td>
+                                        <td className="border border-gray-300 px-3 py-2">2</td>
+                                        <td className="border border-gray-300 px-3 py-2">əd</td>
+                                        <td className="border border-gray-300 px-3 py-2">60.00</td>
+                                        <td className="border border-gray-300 px-3 py-2">120.00</td>
+                                        <td className="border border-gray-300 px-3 py-2 bg-green-50 font-bold">85.00</td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
+                    </div>
+
+                    {/* Branch Selection */}
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                        <div className="flex items-center gap-3 mb-3">
+                            <MapPin className="w-5 h-5 text-blue-600" />
+                            <h3 className="font-semibold text-gray-900">
+                                {t('target_branch') || 'Hədəf Filial'}
+                            </h3>
+                        </div>
+                        <p className="text-sm text-gray-600 mb-3">
+                            {t('import_branch_desc') || 'Məhsulların hansı filiala əlavə olunacağını seçin:'}
+                        </p>
+                        <select
+                            value={targetBranchId}
+                            onChange={(e) => setTargetBranchId(e.target.value)}
+                            disabled={user?.role?.name !== 'superadmin' && user?.isBoss !== true}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        >
+                            <option value="central">{t('central_warehouse') || 'Mərkəzi Anbar'}</option>
+                            {branches.map(branch => (
+                                <option key={branch.id} value={branch.id}>
+                                    {branch.name}
+                                </option>
+                            ))}
+                        </select>
+                        {(user?.role?.name !== 'superadmin' && user?.isBoss !== true) && (
+                            <p className="mt-2 text-xs text-amber-600 italic">
+                                {t('branch_fixed_for_staff') || 'İşçi statusunda olduğunuz üçün filial seçimi sabitdir.'}
+                            </p>
+                        )}
                     </div>
 
                     {/* File Upload */}

@@ -54,21 +54,24 @@ const Sidebar = ({ sidebarData, onItemClick, collapsed, onToggleCollapse, isMobi
   return (
     <div
       ref={sidebarRef}
-      className="h-screen sticky top-0 flex flex-col bg-white border-r border-gray-200 shadow-lg w-full transition-all duration-300 ease-in-out"
+      className="h-screen flex flex-col bg-white border-r border-slate-200 w-full transition-all duration-300 ease-in-out"
     >
-      <div className="p-4 border-b border-gray-200 bg-white">
+      <div className="p-6 border-b border-slate-100 bg-white">
         <div className="flex items-center justify-between">
           {!collapsed && (
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+            <div className="flex items-center gap-3 animate-in fade-in duration-500">
+              <div className="w-10 h-10 bg-slate-900 rounded-2xl flex items-center justify-center shadow-lg shadow-slate-200">
                 <FiHome className="w-5 h-5 text-white" />
               </div>
-              <span className="text-lg font-bold text-black">{t('dashboard')}</span>
+              <div className="flex flex-col">
+                <span className="text-lg font-bold text-slate-900 leading-none">Dashboard</span>
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Admin Panel</span>
+              </div>
             </div>
           )}
           <button
             onClick={onToggleCollapse}
-            className="hidden md:inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white border-2 border-black text-black hover:bg-gray-50 transition-all duration-200 font-bold"
+            className="hidden md:inline-flex items-center justify-center w-8 h-8 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-all duration-200"
             aria-label="Toggle sidebar"
           >
             {collapsed ? <FiChevronsRight className="w-4 h-4" /> : <FiChevronsLeft className="w-4 h-4" />}
@@ -76,7 +79,7 @@ const Sidebar = ({ sidebarData, onItemClick, collapsed, onToggleCollapse, isMobi
         </div>
       </div>
 
-      <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+      <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto custom-scrollbar">
         {sidebarData.filter(item => {
           if (!item.requiredRole) return true;
           const userRole = currentUser?.role?.name?.toUpperCase();
@@ -91,23 +94,22 @@ const Sidebar = ({ sidebarData, onItemClick, collapsed, onToggleCollapse, isMobi
               onClick={onItemClick}
               title={t(item.title)}
               className={({ isActive }) =>
-                `group flex items-center h-13 ${collapsed ? 'justify-center px-3' : 'justify-start px-3'
-                } py-3 rounded-lg cursor-pointer transition-all duration-200 relative ${isActive
-                  ? 'text-red-600 bg-red-50 border-r-4 border-red-600'
-                  : 'text-black hover:bg-gray-50 hover:text-gray-700'
+                `group flex items-center ${collapsed ? 'justify-center px-0 h-12 w-12 mx-auto' : 'justify-start px-4 h-12'
+                } rounded-xl cursor-pointer transition-all duration-200 relative ${isActive
+                  ? 'text-white bg-slate-900 shadow-xl shadow-slate-200'
+                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
                 }`
               }
             >
-              <span className={`text-xl ${collapsed ? '' : 'mr-3'} text-current`}>
+              <span className={`text-xl ${collapsed ? '' : 'mr-3'} transition-transform duration-200 group-hover:scale-110`}>
                 {item.icon}
               </span>
-              <span className={`font-medium transition-opacity duration-200 ${collapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'
-                }`}>
+              <span className={`font-semibold text-sm transition-all duration-200 ${collapsed ? 'hidden' : 'block'}`}>
                 {t(item.title)}
               </span>
               
               {hasBadge && (
-                <span className={`absolute ${collapsed ? 'top-2 right-2' : 'right-4'} flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-[10px] text-white font-bold ring-2 ring-white animate-bounce`}>
+                <span className={`absolute ${collapsed ? 'top-0 right-0 translate-x-1/3 -translate-y-1/3' : 'right-3'} flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] text-white font-bold ring-2 ring-white animate-bounce shadow-lg shadow-red-200`}>
                   {transferCount}
                 </span>
               )}
@@ -116,43 +118,47 @@ const Sidebar = ({ sidebarData, onItemClick, collapsed, onToggleCollapse, isMobi
         })}
       </nav>
 
-      <div className="p-4 border-t border-gray-200 bg-white">
-        <div className="space-y-2">
+      <div className="p-4 mt-auto border-t border-slate-100">
+        <div className="space-y-1">
           <Link
             to={`${profilePath}/profile`}
-            className={`group flex items-center ${collapsed ? 'justify-center px-3' : 'justify-start px-4'
-              } py-3 w-full rounded-lg text-blue-600 hover:bg-blue-50 hover:text-blue-700 transition-all duration-200`}
+            className={`group flex items-center ${collapsed ? 'justify-center p-2' : 'justify-start p-3'
+              } w-full rounded-xl text-slate-600 hover:bg-slate-50 transition-all duration-200`}
           >
-            <div className={`w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center ${collapsed ? '' : 'mr-3'}`}>
-              <span className="text-white font-bold text-sm">
+            <div className={`w-10 h-10 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center shadow-sm ${collapsed ? '' : 'mr-3'} transition-transform group-hover:scale-105`}>
+              <span className="text-blue-600 font-bold text-sm">
                 {currentUser
                   ? `${(currentUser.name || '').charAt(0).toUpperCase()}${(currentUser.surName || '').charAt(0).toUpperCase()}`.trim() || 'U'
                   : 'U'
                 }
               </span>
             </div>
-            <div className={`flex flex-col transition-opacity duration-200 ${collapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'
-              }`}>
-              <span className="font-medium">
-                {currentUser
-                  ? `${currentUser.name || ''} ${currentUser.surName || ''}`.trim() || t('profile')
-                  : t('profile')
-                }
-              </span>
-              <span className="text-xs text-gray-500">{t('profile')}</span>
-            </div>
+            {!collapsed && (
+              <div className="flex flex-col min-w-0">
+                <span className="font-bold text-sm text-slate-800 truncate">
+                  {currentUser
+                    ? `${currentUser.name || ''} ${currentUser.surName || ''}`.trim() || t('profile')
+                    : t('profile')
+                  }
+                </span>
+                <span className="text-[10px] font-medium text-slate-400 uppercase tracking-tight">{t('profile')}</span>
+              </div>
+            )}
           </Link>
 
           <button
-            className={`group flex items-center ${collapsed ? 'justify-center px-3' : 'justify-start px-4'
-              } py-3 w-full rounded-lg text-red-600 hover:bg-red-50 hover:text-red-700 transition-all duration-200`}
+            className={`group flex items-center ${collapsed ? 'justify-center p-2' : 'justify-start p-3'
+              } w-full rounded-xl text-red-500 hover:bg-red-50 transition-all duration-200`}
             onClick={handleLogout}
           >
-            <FiLogOut className={`text-xl ${collapsed ? '' : 'mr-3'}`} />
-            <span className={`font-medium transition-opacity duration-200 ${collapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'
-              }`}>
-              {t('logout')}
-            </span>
+            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${collapsed ? '' : 'mr-3'} transition-transform group-hover:scale-110`}>
+                <FiLogOut className="text-xl" />
+            </div>
+            {!collapsed && (
+              <span className="font-bold text-sm">
+                {t('logout')}
+              </span>
+            )}
           </button>
         </div>
       </div>

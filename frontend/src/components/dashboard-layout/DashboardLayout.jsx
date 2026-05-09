@@ -35,26 +35,38 @@ export default function DashboardLayout({ children, sidebarData, title, profileP
           onMobileClose={handleMobileClose}
         />
       </aside>
-      <div className={`${collapsed ? 'md:pl-20' : 'md:pl-64'} transition-[padding] duration-300 ease-in-out`}>
-        <header className="sticky top-0 z-20 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between gap-3 shadow-sm">
-          <div className="flex items-center gap-3">
+      <div className={`${collapsed ? 'md:pl-20' : 'md:pl-64'} transition-[padding] duration-300 ease-in-out min-h-screen flex flex-col`}>
+        <header className="sticky top-0 z-20 bg-white border-b border-slate-200 px-3 sm:px-6 py-3 flex items-center justify-between gap-2 sm:gap-4 shadow-sm backdrop-blur-md bg-white/80">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button
-              className="md:hidden inline-flex items-center justify-center w-10 h-10 rounded-lg bg-white border-2 border-black text-black shadow-md hover:shadow-lg hover:bg-gray-50 transition-all duration-200 font-bold"
+              className="md:hidden inline-flex items-center justify-center min-w-[40px] h-10 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 transition-all duration-200"
               onClick={() => setIsOpen(true)}
+              aria-label="Open menu"
             >
               <FiMenu className="w-5 h-5" />
             </button>
-            <span className="text-lg font-semibold text-slate-800">{title}</span>
+            <h1 className="text-base sm:text-lg font-bold text-slate-800 truncate">
+              {title}
+            </h1>
           </div>
-          <div className="flex items-center gap-3">
-            <BranchSelector />
-            <DeletedProductsBell />
-            <NotificationBell />
+          
+          <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
+            <div className="hidden sm:block">
+               <BranchSelector />
+            </div>
+            <div className="flex items-center gap-1 sm:gap-2 bg-slate-50 p-1 rounded-xl border border-slate-100">
+              <DeletedProductsBell />
+              <NotificationBell />
+            </div>
+            <div className="h-8 w-[1px] bg-slate-200 mx-1 hidden sm:block" />
             <LanguageSwitcher />
           </div>
         </header>
-        <main className="">
-          {children}
+
+        <main className="flex-1 p-3 sm:p-6 lg:p-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="max-w-[1600px] mx-auto">
+            {children}
+          </div>
         </main>
       </div>
     </div>

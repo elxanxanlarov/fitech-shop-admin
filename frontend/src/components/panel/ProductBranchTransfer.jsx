@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { Send, Trash2, ArrowLeft, Package, Info, Inbox, Check, X } from 'lucide-react';
+import { Send, Trash2, ArrowLeft, Package, Info, Inbox, Check, X, Edit2, Printer } from 'lucide-react';
 import Alert from '../ui/Alert';
 import SearchDropdown from '../ui/SearchDropdown';
 import NumericInput from '../ui/NumericInput';
@@ -9,6 +9,7 @@ import { branchApi, productApi, stockTransferApi } from '../../api';
 import { hasContainer, containerLabel, unitSingular, formatStockShort } from '../../utils/unitHelpers';
 import { useAuth } from '../../context/AuthContext';
 import { isFilialAdmin } from '../../utils/accessHelpers';
+import TransferPrintModal from '../modals/TransferPrintModal';
 
 export default function ProductBranchTransfer() {
     const { t } = useTranslation('branch');
@@ -34,6 +35,9 @@ export default function ProductBranchTransfer() {
     const [historyTransfers, setHistoryTransfers] = useState([]);
     const [loadingInbox, setLoadingInbox] = useState(false);
     const [loadingHistory, setLoadingHistory] = useState(false);
+    const [editingId, setEditingId] = useState(null);
+    const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+    const [selectedTransferToPrint, setSelectedTransferToPrint] = useState(null);
 
     useEffect(() => {
         if (filialLocked && user?.branchId) {
@@ -96,13 +100,15 @@ export default function ProductBranchTransfer() {
 
     const loadHistory = async () => {
         const targetBranchId = user?.branchId || fromBranchId;
-        if (!targetBranchId) return;
-
+        
         setLoadingHistory(true);
         try {
-            const res = await stockTransferApi.getAll({ 
-                branchId: targetBranchId
-            });
+            const params = {};
+            if (targetBranchId) {
+                params.branchId = targetBranchId;
+            }
+            
+            const res = await stockTransferApi.getAll(params);
             if (res.success) {
                 setHistoryTransfers(res.data || []);
             }
@@ -202,7 +208,7 @@ export default function ProductBranchTransfer() {
     };
 
     const handleSubmit = async (e) => {
-        e.preventDefault();
+        if (e) e.preventDefault();
         if (!fromBranchId) {
             Alert.error(tAlert('error'), t('please_select_source_branch'));
             return;
@@ -236,11 +242,18 @@ export default function ProductBranchTransfer() {
                 }))
             };
 
-            const response = await stockTransferApi.create(payload);
+            const response = editingId 
+                ? await stockTransferApi.update(editingId, payload)
+                : await stockTransferApi.create(payload);
+
             if (response.success) {
-                Alert.success(tAlert('success'), t('transfer_created_success'));
+                Alert.success(tAlert('success'), editingId ? t('transfer_updated_success') : t('transfer_created_success'));
                 setFormData({ toBranchId: '', note: '', items: [] });
-                // Inbox count yenilənsin deyə yükləmək olar
+                setEditingId(null);
+                if (editingId) {
+                    setActiveTab('history');
+                    loadHistory();
+                }
             }
         } catch (error) {
             console.error('Filial transfer error:', error);
@@ -248,6 +261,35 @@ export default function ProductBranchTransfer() {
         } finally {
             setSubmitting(false);
         }
+    };
+
+    const handleEditTransfer = (transfer) => {
+        if (transfer.status !== 'PENDING') return;
+
+        setEditingId(transfer.id);
+        setFromBranchId(transfer.fromBranchId || '');
+        setFormData({
+            toBranchId: transfer.toBranchId,
+            note: transfer.note || '',
+            items: transfer.items.map(item => ({
+                productId: item.productId,
+                name: item.product?.name,
+                unitType: item.product?.unitType,
+                maxStock: (item.product?.stock || 0) + item.quantity, // Restore for editing
+                quantity: item.quantity,
+                piecesPerBox: item.product?.piecesPerBox || 1,
+                fullBoxes: item.fullBoxes || 0,
+                openedBoxQuantity: item.openedBoxQuantity || 0
+            }))
+        });
+        setActiveTab('send');
+    };
+
+    const handleCancelEdit = () => {
+        setEditingId(null);
+        setFormData({ toBranchId: '', note: '', items: [] });
+        if (filialLocked) setFromBranchId(user?.branchId || '');
+        else setFromBranchId('');
     };
 
     if (filialLocked && !user?.branchId) {
@@ -344,8 +386,12 @@ export default function ProductBranchTransfer() {
                                 <Send className="w-8 h-8" />
                             </div>
                             <div>
-                                <h1 className="text-2xl font-bold">{t('product_branch_transfer')}</h1>
-                                <p className="text-teal-100 opacity-90">{t('product_branch_transfer_desc')}</p>
+                                <h1 className="text-2xl font-bold">
+                                    {editingId ? t('edit_transfer') || 'Transferi Redaktə Et' : t('product_branch_transfer')}
+                                </h1>
+                                <p className="text-teal-100 opacity-90">
+                                    {editingId ? t('edit_transfer_desc') || 'Gözləyən transferi yeniləyin' : t('product_branch_transfer_desc')}
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -409,7 +455,8 @@ export default function ProductBranchTransfer() {
                                         setFromBranchId(e.target.value);
                                         setFormData((p) => ({ ...p, items: [] }));
                                     }}
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-white"
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-white disabled:bg-gray-100 disabled:text-gray-500"
+                                    disabled={!!editingId}
                                 >
                                     <option value="">{t('select_branch')}</option>
                                     {branches.map((branch) => (
@@ -673,17 +720,18 @@ export default function ProductBranchTransfer() {
                     <div className="flex gap-4 pt-6 border-t border-gray-100">
                         <button
                             type="button"
-                            onClick={() => navigate('/admin/products')}
+                            onClick={editingId ? handleCancelEdit : () => navigate('/admin/products')}
                             className="flex-1 px-6 py-4 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 font-bold transition-all"
                         >
                             {t('cancel')}
                         </button>
                         <button
-                            type="submit"
+                            type="button"
+                            onClick={handleSubmit}
                             disabled={
                                 submitting ||
                                 formData.items.length === 0 ||
-                                !fromBranchId ||
+                                (!fromBranchId && !editingId) ||
                                 !formData.toBranchId
                             }
                             className="flex-[2] flex items-center justify-center gap-3 px-12 py-4 bg-teal-600 text-white rounded-xl hover:bg-teal-700 font-bold transition-all disabled:opacity-50 shadow-lg"
@@ -693,7 +741,7 @@ export default function ProductBranchTransfer() {
                             ) : (
                                 <>
                                     <Send className="w-5 h-5" />
-                                    {t('submit_filial_transfer')}
+                                    {editingId ? (t('save_changes') || 'Yadda Saxla') : t('submit_filial_transfer')}
                                 </>
                             )}
                         </button>
@@ -848,9 +896,30 @@ export default function ProductBranchTransfer() {
                                                             </div>
                                                         </div>
                                                     </div>
-                                                    <div className="text-right">
-                                                        <div className="text-[10px] text-gray-400 uppercase font-black">{new Date(transfer.createdAt).toLocaleDateString('az-AZ')}</div>
-                                                        <div className="text-xs text-gray-500">{new Date(transfer.createdAt).toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' })}</div>
+                                                    <div className="flex items-center gap-4">
+                                                        {transfer.status === 'PENDING' && isOutgoing && (
+                                                            <button
+                                                                onClick={() => handleEditTransfer(transfer)}
+                                                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                                title={t('edit') || 'Redaktə et'}
+                                                            >
+                                                                <Edit2 className="w-4 h-4" />
+                                                            </button>
+                                                        )}
+                                                        <button
+                                                            onClick={() => {
+                                                                setSelectedTransferToPrint(transfer);
+                                                                setIsPrintModalOpen(true);
+                                                            }}
+                                                            className="p-2 text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
+                                                            title={t('print') || 'Çap Et'}
+                                                        >
+                                                            <Printer className="w-4 h-4" />
+                                                        </button>
+                                                        <div className="text-right">
+                                                            <div className="text-[10px] text-gray-400 uppercase font-black">{new Date(transfer.createdAt).toLocaleDateString('az-AZ')}</div>
+                                                            <div className="text-xs text-gray-500">{new Date(transfer.createdAt).toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' })}</div>
+                                                        </div>
                                                     </div>
                                                 </div>
                                                 <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -886,6 +955,15 @@ export default function ProductBranchTransfer() {
                     )}
                 </div>
             </div>
+
+            <TransferPrintModal
+                isOpen={isPrintModalOpen}
+                onClose={() => {
+                    setIsPrintModalOpen(false);
+                    setSelectedTransferToPrint(null);
+                }}
+                transfer={selectedTransferToPrint}
+            />
         </div>
     );
 }

@@ -540,6 +540,118 @@ export const createProduct = async (req, res) => {
     }
 };
 
+export const bulkCreateProducts = async (req, res) => {
+    try {
+        const { products, branchId } = req.body;
+
+        if (!products || !Array.isArray(products) || products.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Məhsul siyahısı boşdur",
+            });
+        }
+
+        const results = [];
+        const errors = [];
+        let successCount = 0;
+
+        for (const prod of products) {
+            try {
+                const {
+                    name,
+                    barcode,
+                    purchasePrice,
+                    salePrice,
+                    stock,
+                    unitType
+                } = prod;
+
+                if (!name || !purchasePrice || !salePrice) {
+                    errors.push({ name: name || 'Adsız', error: "Ad, alış və satış qiyməti mütləqdir" });
+                    continue;
+                }
+
+                // Check for existing barcode
+                if (barcode) {
+                    const existing = await prisma.product.findFirst({
+                        where: { barcode: barcode.trim() }
+                    });
+                    if (existing) {
+                        errors.push({ name: name, error: `Barcode "${barcode}" artıq istifadə olunur` });
+                        continue;
+                    }
+                }
+
+                const purchasePriceDecimal = new Prisma.Decimal(purchasePrice);
+                const salePriceDecimal = new Prisma.Decimal(salePrice);
+                const calculatedStock = stock ? parseInt(stock) : 0;
+                const finalUnitType = unitType || 'PIECE';
+
+                const newProduct = await prisma.product.create({
+                    data: {
+                        name: name.trim(),
+                        barcode: barcode?.trim() || null,
+                        purchasePrice: purchasePriceDecimal,
+                        salePrice: salePriceDecimal,
+                        stock: branchId && branchId !== 'central' ? 0 : calculatedStock,
+                        unitType: finalUnitType,
+                        isActive: true,
+                        isOfficial: false,
+                        deleteType: 'NONE'
+                    }
+                });
+
+                if (branchId && branchId !== 'central') {
+                    await prisma.branchstock.create({
+                        data: {
+                            branchId: branchId,
+                            productId: newProduct.id,
+                            stock: calculatedStock,
+                            fullBoxes: 0,
+                            openedBoxQuantity: 0
+                        }
+                    });
+                }
+
+                // Activity log
+                await createActivityLog({
+                    staffId: req.staffId || null,
+                    entityType: "Product",
+                    entityId: newProduct.id,
+                    action: "CREATE",
+                    description: `Toplu əlavə etmə ilə məhsul yaradıldı: ${newProduct.name}`,
+                    changes: {
+                        name: newProduct.name,
+                        stock: calculatedStock
+                    }
+                });
+
+                results.push(newProduct);
+                successCount++;
+            } catch (err) {
+                console.error("Bulk create single product error:", err);
+                errors.push({ name: prod.name || 'Naməlum', error: err.message });
+            }
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: `${successCount} məhsul uğurla əlavə edildi`,
+            data: {
+                successCount,
+                errorCount: errors.length,
+                errors
+            }
+        });
+    } catch (error) {
+        console.error("bulkCreateProducts error", error);
+        return res.status(500).json({
+            success: false,
+            message: "Toplu əlavə etmə zamanı xəta baş verdi",
+        });
+    }
+};
+
 export const updateProduct = async (req, res) => {
     try {
         const { id } = req.params;
@@ -1107,6 +1219,7 @@ export const deleteProduct = async (req, res) => {
 
 export const importProductsFromExcel = async (req, res) => {
     try {
+        const { branchId } = req.body;
         if (!req.file) {
             return res.status(400).json({
                 success: false,
@@ -1147,35 +1260,29 @@ export const importProductsFromExcel = async (req, res) => {
             else if ((normalized.includes('qaimə') || normalized.includes('qayime') || normalized.includes('invoice')) && (normalized.includes('ad') || normalized.includes('name'))) {
                 if (!columnMap['invoice_name']) columnMap['invoice_name'] = index;
             }
-            // Purchase Price - check if contains "alış" and "qiymət"
-            else if (normalized.includes('alış') && (normalized.includes('qiymət') || normalized.includes('qiymat'))) {
+            // Purchase Price - check if contains "alış" or "qiymət"
+            else if ((normalized.includes('alış') || normalized === 'qiymət' || normalized === 'qiymat' || normalized.includes('qiymət (azn)')) && !normalized.includes('satış') && !normalized.includes('cəmi')) {
                 if (!columnMap['purchase_price']) columnMap['purchase_price'] = index;
             }
-            // Sale Price - check if contains "satış" and "qiymət"
-            else if (normalized.includes('satış') && (normalized.includes('qiymət') || normalized.includes('qiymat'))) {
-                if (!columnMap['sale_price']) columnMap['sale_price'] = index;
+            // Sale Price - strictly prioritize "satış" variations
+            else if ((normalized.includes('satı') || normalized.includes('sati') || normalized.includes('sale')) && !normalized.includes('alış') && !normalized.includes('purchase') && !normalized.includes('cəmi')) {
+                columnMap['sale_price'] = index;
             }
-            // If header contains both "alış" and "satış", it might be a combined column
-            // In that case, we need to check the next column or split
-            else if (normalized.includes('alış') && normalized.includes('satış')) {
-                // This is a combined column, we'll try to split or use next column
-                // For now, treat first part as purchase_price
-                if (!columnMap['purchase_price']) columnMap['purchase_price'] = index;
-                // Check if next column exists and might be sale_price
-                if (index + 1 < headerRow.length) {
-                    const nextHeader = String(headerRow[index + 1] || '').toLowerCase().trim();
-                    if (nextHeader.includes('qiymət') || nextHeader === 'qiymət' || nextHeader === 'qiymat') {
-                        if (!columnMap['sale_price']) columnMap['sale_price'] = index + 1;
-                    }
-                }
+            // Fallback for sale price ONLY if no explicit "satış" column was found yet
+            else if ((normalized.includes('cəmi') || normalized.includes('mebleğ') || normalized.includes('mebleg')) && !normalized.includes('alış') && !columnMap['sale_price']) {
+                columnMap['sale_price'] = index;
             }
-            // Stock
-            else if (normalized === 'stok' || (normalized.includes('stok') && !normalized.includes('qiymət'))) {
+            // Stock / Quantity
+            else if (normalized === 'stok' || normalized === 'miqdar' || (normalized.includes('miqdar') && !normalized.includes('qiymət'))) {
                 if (!columnMap['stock']) columnMap['stock'] = index;
             }
-            // Barcode
-            else if (normalized === 'barcode' || normalized === 'barkod') {
+            // Barcode / Strixkod
+            else if (normalized === 'barcode' || normalized === 'barkod' || normalized === 'strixkod' || normalized === 'strix-kod') {
                 if (!columnMap['barcode']) columnMap['barcode'] = index;
+            }
+            // Unit Type / Ölçü vahidi
+            else if (normalized.includes('ölçü') || normalized.includes('vahidi') || normalized === 'unit' || normalized === 'unit_type') {
+                if (!columnMap['unit_type']) columnMap['unit_type'] = index;
             }
             // Description
             else if (normalized === 'təsvir' || normalized === 'tesvir' || normalized === 'description') {
@@ -1242,6 +1349,7 @@ export const importProductsFromExcel = async (req, res) => {
         // Fetch all categories and subcategories for mapping
         const categories = await prisma.category.findMany();
         const subCategories = await prisma.subcategory.findMany();
+        const branches = await prisma.branch.findMany();
 
         const categoryMap = new Map(categories.map(cat => [cat.name.toLowerCase().trim(), cat.id]));
         const subCategoryMap = new Map(subCategories.map(sub => [sub.name.toLowerCase().trim(), sub.id]));
@@ -1262,18 +1370,29 @@ export const importProductsFromExcel = async (req, res) => {
                 if (!name || !purchasePriceStr || !salePriceStr || !stockStr) {
                     errors.push({
                         row: rowNumber,
-                        error: "Ad, Alış Qiyməti, Satış Qiyməti və Stok mütləqdir"
+                        error: "Ad, Qiymət (Alış), Cəmi məbləğ (Satış) və Miqdar (Stok) mütləqdir"
                     });
                     errorCount++;
                     continue;
                 }
 
                 // Parse values
-                const purchasePrice = parseFloat(purchasePriceStr);
-                const salePrice = parseFloat(salePriceStr);
+                const purchasePrice = parseFloat(purchasePriceStr.replace(',', '.'));
+                const salePrice = parseFloat(salePriceStr.replace(',', '.'));
                 const stock = parseInt(stockStr);
                 const barcode = row.barcode ? String(row.barcode).trim() : null;
                 const description = row.description ? String(row.description).trim() : null;
+
+                // Unit Type mapping
+                let unitType = 'PIECE';
+                if (row.unit_type) {
+                    const ut = String(row.unit_type).toLowerCase().trim();
+                    if (ut.includes('ədəd') || ut.includes('əd') || ut.includes('pcs') || ut.includes('piece')) unitType = 'PIECE';
+                    else if (ut.includes('qutu') || ut.includes('box')) unitType = 'BOX';
+                    else if (ut.includes('kq') || ut.includes('kg') || ut.includes('kilo')) unitType = 'KILOGRAM';
+                    else if (ut.includes('litr') || ut.includes('ltr') || ut === 'l') unitType = 'LITER';
+                    else if (ut.includes('metr') || ut.includes('mtr') || ut === 'm') unitType = 'METER';
+                }
 
                 // Category mapping
                 let categoryId = null;
@@ -1348,7 +1467,8 @@ export const importProductsFromExcel = async (req, res) => {
                         discountPrice: null,
                         discountPercent: null,
                         barcode: barcode,
-                        stock: stock,
+                        stock: branchId && branchId !== 'central' ? 0 : stock,
+                        unitType: unitType,
                         isActive: isActive,
                         isOfficial: isOfficial,
                         categoryId: categoryId,
@@ -1357,6 +1477,18 @@ export const importProductsFromExcel = async (req, res) => {
                     }
                 });
 
+                if (branchId && branchId !== 'central') {
+                    await prisma.branchstock.create({
+                        data: {
+                            branchId: branchId,
+                            productId: product.id,
+                            stock: stock,
+                            fullBoxes: 0,
+                            openedBoxQuantity: 0
+                        }
+                    });
+                }
+
                 imported.push(product);
                 successCount++;
 
@@ -1364,17 +1496,25 @@ export const importProductsFromExcel = async (req, res) => {
 
                 // Activity log
                 try {
+                    let logDescription = `Məhsul Excel-dən idxal edildi: ${product.name}`;
+                    if (branchId && branchId !== 'central') {
+                        const targetBranch = branches.find(b => b.id === branchId);
+                        if (targetBranch) {
+                            logDescription += ` (${targetBranch.name} filialı)`;
+                        }
+                    }
+
                     await createActivityLog({
                         staffId: req.staffId || null,
                         entityType: "Product",
                         entityId: product.id,
                         action: "CREATE",
-                        description: `Məhsul Excel-dən idxal edildi: ${product.name}`,
+                        description: logDescription,
                         changes: {
                             name: product.name,
                             purchasePrice: product.purchasePrice.toString(),
                             salePrice: product.salePrice.toString(),
-                            stock: product.stock
+                            stock: stock
                         }
                     });
                 } catch (logError) {

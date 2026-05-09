@@ -210,7 +210,7 @@ export default function CashHandoverForm() {
     }, [formData.date, id, isEditMode, formData.branchId]);
 
     const handleUseTotalPending = () => {
-        setFormData(prev => ({ ...prev, amount: totalPendingRevenue.toFixed(2) }));
+        setFormData(prev => ({ ...prev, amount: (totalPendingRevenue || 0).toFixed(2) }));
     };
 
     const validateForm = () => {
@@ -226,9 +226,9 @@ export default function CashHandoverForm() {
 
             if (amount > maxAllowed) {
                 if (isEditMode) {
-                    newErrors.amount = t('max_allowed_today', { amount: availableRevenue.availableRevenue.toFixed(2) });
+                    newErrors.amount = t('max_allowed_today', { amount: (availableRevenue?.availableRevenue || 0).toFixed(2) });
                 } else {
-                    newErrors.amount = t('max_allowed_total', { amount: totalPendingRevenue.toFixed(2) });
+                    newErrors.amount = t('max_allowed_total', { amount: (totalPendingRevenue || 0).toFixed(2) });
                 }
             }
         }
@@ -385,7 +385,7 @@ export default function CashHandoverForm() {
                                             {t('available_for_date') || 'Seçilən tarixdə gəlir'}
                                         </p>
                                         <p className="text-3xl font-black text-blue-900 leading-none tabular-nums">
-                                            {loadingRevenue ? '...' : availableRevenue.availableRevenue.toFixed(2)}
+                                            {loadingRevenue ? '...' : (availableRevenue?.availableRevenue || 0).toFixed(2)}
                                             <span className="text-sm font-bold text-blue-400 ml-1.5 uppercase">AZN</span>
                                         </p>
                                         {availableRevenue.lastHandoverTime && (
@@ -402,11 +402,11 @@ export default function CashHandoverForm() {
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
                                     <p className="text-[10px] text-gray-400 font-black uppercase tracking-wider mb-1">{t('total_revenue') || 'Ümumi'}</p>
-                                    <p className="text-lg font-black text-gray-700">{availableRevenue.totalRevenue.toFixed(2)}</p>
+                                    <p className="text-lg font-black text-gray-700">{(availableRevenue?.totalRevenue || 0).toFixed(2)}</p>
                                 </div>
                                 <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
                                     <p className="text-[10px] text-gray-400 font-black uppercase tracking-wider mb-1">{t('net_cash') || 'Net Kassa'}</p>
-                                    <p className="text-lg font-black text-indigo-600">{availableRevenue.netRevenue.toFixed(2)}</p>
+                                    <p className="text-lg font-black text-indigo-600">{(availableRevenue?.netRevenue || 0).toFixed(2)}</p>
                                 </div>
                             </div>
                         )}
@@ -430,27 +430,27 @@ export default function CashHandoverForm() {
                                     <div className="space-y-4">
                                         <div className="flex justify-between items-center text-gray-600">
                                             <span className="text-xs font-bold uppercase tracking-wider">{t('sales')} (+)</span>
-                                            <span className="text-base font-black text-emerald-600">+{totalBreakdown.sales.toFixed(2)} <span className="text-[10px]">AZN</span></span>
+                                            <span className="text-base font-black text-emerald-600">+{(totalBreakdown?.sales || 0).toFixed(2)} <span className="text-[10px]">AZN</span></span>
                                         </div>
                                         <div className="flex justify-between items-center text-gray-600">
                                             <span className="text-xs font-bold uppercase tracking-wider text-amber-600">{t('profit')}</span>
-                                            <span className="text-base font-black text-amber-600">{totalBreakdown.profit.toFixed(2)} <span className="text-[10px]">AZN</span></span>
+                                            <span className="text-base font-black text-amber-600">{(totalBreakdown?.profit || 0).toFixed(2)} <span className="text-[10px]">AZN</span></span>
                                         </div>
                                         <div className="flex justify-between items-center text-gray-600">
                                             <span className="text-xs font-bold uppercase tracking-wider">{t('returns')} (-)</span>
-                                            <span className="text-base font-black text-red-500">-{totalBreakdown.returns.toFixed(2)} <span className="text-[10px]">AZN</span></span>
+                                            <span className="text-base font-black text-red-500">-{(totalBreakdown?.returns || 0).toFixed(2)} <span className="text-[10px]">AZN</span></span>
                                         </div>
                                         <div className="flex justify-between items-center text-gray-600">
                                             <span className="text-xs font-bold uppercase tracking-wider">{t('expenses')} (-)</span>
-                                            <span className="text-base font-black text-orange-400">-{totalBreakdown.expenses.toFixed(2)} <span className="text-[10px]">AZN</span></span>
+                                            <span className="text-base font-black text-orange-400">-{(totalBreakdown?.expenses || 0).toFixed(2)} <span className="text-[10px]">AZN</span></span>
                                         </div>
                                         <div className="flex justify-between items-center pt-2 border-t border-gray-50 text-indigo-600">
                                             <span className="text-xs font-black uppercase tracking-wider">{t('net_profit')}</span>
-                                            <span className="text-lg font-black">{(totalBreakdown.profit - totalBreakdown.expenses).toFixed(2)} <span className="text-[10px]">AZN</span></span>
+                                            <span className="text-lg font-black">{((totalBreakdown?.profit || 0) - (totalBreakdown?.expenses || 0)).toFixed(2)} <span className="text-[10px]">AZN</span></span>
                                         </div>
                                         <div className="flex justify-between items-center text-gray-400 opacity-60">
                                             <span className="text-xs font-bold uppercase tracking-wider">{t('previous_handovers')} (-)</span>
-                                            <span className="text-base font-black">-{totalBreakdown.handovers.toFixed(2)} <span className="text-[10px]">AZN</span></span>
+                                            <span className="text-base font-black">-{(totalBreakdown?.handovers || 0).toFixed(2)} <span className="text-[10px]">AZN</span></span>
                                         </div>
                                     </div>
 
@@ -460,7 +460,7 @@ export default function CashHandoverForm() {
                                         <div>
                                             <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.1em] mb-2 leading-none">{t('net_balance')}</p>
                                             <p className="text-3xl font-black text-indigo-600 leading-none tabular-nums">
-                                                {totalPendingRevenue.toFixed(2)}
+                                                {(totalPendingRevenue || 0).toFixed(2)}
                                                 <span className="text-sm font-bold text-indigo-300 ml-1.5 uppercase">AZN</span>
                                             </p>
                                         </div>

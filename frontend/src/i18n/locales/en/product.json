@@ -235,5 +235,17 @@
   "piece": "Piece",
   "box": "Box",
   "package": "Package",
-  "calculated_stock_info": "Stock is automatically calculated from full boxes and open items"
+  "calculated_stock_info": "Stock is automatically calculated from full boxes and open items",
+  "branch": "Branch",
+  "select_branch": "Select branch",
+  "scan_barcode": "Scan Barcode",
+  "scan_hint": "Point your camera at the barcode",
+  "close": "Close",
+  "excel_bulk_add": "Excel Style Bulk Add",
+  "excel_bulk_desc": "You can paste from Excel or enter directly in the grid",
+  "add_row": "Add Row",
+  "save_all": "Save All",
+  "valid_products_ready": "products ready to save",
+  "fill_required_fields": "Please fill required fields (Name, Purchase and Sale Price)",
+  "saving": "Saving..."
 }

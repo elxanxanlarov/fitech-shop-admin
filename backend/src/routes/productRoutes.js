@@ -6,6 +6,7 @@ import {
   updateProduct,
   updateStock,
   deleteProduct,
+  bulkCreateProducts,
   importProductsFromExcel,
   getProductSales,
   getProductReturns,
@@ -61,6 +62,7 @@ router.get("/:id/sales", getProductSales);
 router.get("/:id/returns", getProductReturns);
 router.get("/:id", getProductById);
 router.post("/", createProduct);
+router.post("/bulk-create", bulkCreateProducts);
 router.post("/import", excelUpload.single('file'), importProductsFromExcel);
 router.put("/:id", updateProduct);
 router.put("/:id/stock", updateStock);
