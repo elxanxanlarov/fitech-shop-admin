@@ -10,6 +10,14 @@ const TransferPrintModal = ({ isOpen, onClose, transfer }) => {
         marka: 'Ford Transit',
         qn: '31085'
     });
+    const unitMap = {
+        'PIECE': 'ƏDƏD',
+        'BOX': 'QUTU',
+        'KG': 'KQ',
+        'LITER': 'LİTR',
+        'METER': 'METR',
+        'PACHKA': 'PAÇKA'
+    };
     const printRef = useRef(null);
 
     const handlePrint = useReactToPrint({
@@ -19,6 +27,10 @@ const TransferPrintModal = ({ isOpen, onClose, transfer }) => {
 
     const items = transfer?.items || [];
     const totalPrice = items.reduce((sum, item) => sum + (Number(item.quantity || 0) * Number(item.product?.salePrice || 0)), 0);
+
+    // Səhifənin dolğun görünməsi üçün boş sətirlər yaradırıq
+    const minRows = 20; 
+    const emptyRows = items.length < minRows ? Array(minRows - items.length).fill(null) : [];
 
     if (!isOpen || !transfer) return null;
 
@@ -105,7 +117,7 @@ const TransferPrintModal = ({ isOpen, onClose, transfer }) => {
                         <div className="text-[10px] font-bold text-gray-400 mb-2 uppercase tracking-widest text-center">Ön Baxış</div>
                         <div className="bg-white shadow-sm mx-auto overflow-auto max-w-full">
                             {/* The actual printable component */}
-                            <div id="printable-area" ref={printRef} className="p-8 text-black font-serif bg-white" style={{ width: '210mm', minHeight: '297mm', margin: '0 auto', fontSize: '12pt' }}>
+                            <div id="printable-area" ref={printRef} className="p-8 text-black font-serif bg-white" style={{ width: '210mm', margin: '0 auto', fontSize: '12pt' }}>
                                 <div className="flex justify-between items-start mb-10">
                                     <div className="text-red-600 font-bold text-xl italic">Fitechnlogy MMC</div>
                                     <div className="text-right">
@@ -129,29 +141,31 @@ const TransferPrintModal = ({ isOpen, onClose, transfer }) => {
                                     </div>
                                 )}
 
-                                <table className="w-full border-collapse border border-black mb-10 text-sm">
+                                <table className="w-full border-collapse border border-black mb-4 text-sm print-table">
                                     <thead>
-                                        <tr className="bg-gray-50">
-                                            <th className="border border-black px-2 py-1 text-center w-12">S\s</th>
+                                        <tr className="bg-gray-100">
+                                            <th className="border border-black px-2 py-1 text-center w-10">S/s</th>
                                             <th className="border border-black px-2 py-1 text-left">Malın adı</th>
-                                            <th className="border border-black px-2 py-1 text-center">Ölçü vahidi</th>
-                                            <th className="border border-black px-2 py-1 text-center">Miqdarı</th>
-                                            <th className="border border-black px-2 py-1 text-center">Qiyməti</th>
-                                            <th className="border border-black px-2 py-1 text-center">Ümumi məbləğ</th>
+                                            <th className="border border-black px-2 py-1 text-center w-20">Ölçü vahidi</th>
+                                            <th className="border border-black px-2 py-1 text-center w-16">Miqdarı</th>
+                                            <th className="border border-black px-2 py-1 text-center w-20">Qiyməti</th>
+                                            <th className="border border-black px-2 py-1 text-center w-24">Ümumi məbləğ</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {items.map((item, index) => (
-                                            <tr key={item.id}>
+                                            <tr key={item.id} className="h-8">
                                                 <td className="border border-black px-2 py-1 text-center">{index + 1}</td>
                                                 <td className="border border-black px-2 py-1">{item.product?.name}</td>
-                                                <td className="border border-black px-2 py-1 text-center">{item.product?.unitType || 'ƏDƏD'}</td>
+                                                <td className="border border-black px-2 py-1 text-center">{unitMap[item.product?.unitType] || item.product?.unitType || 'ƏDƏD'}</td>
                                                 <td className="border border-black px-2 py-1 text-center">{item.quantity}</td>
                                                 <td className="border border-black px-2 py-1 text-center">{Number(item.product?.salePrice || 0).toFixed(2)}</td>
                                                 <td className="border border-black px-2 py-1 text-center">{Number(item.quantity * (item.product?.salePrice || 0)).toFixed(2)}</td>
                                             </tr>
                                         ))}
-                                        {[...Array(Math.max(0, 4 - items.length))].map((_, i) => (
+                                        
+                                        {/* BOŞ SƏTİRLƏR */}
+                                        {emptyRows.map((_, i) => (
                                             <tr key={`empty-${i}`} className="h-8">
                                                 <td className="border border-black px-2 py-1 text-center">{items.length + i + 1}</td>
                                                 <td className="border border-black px-2 py-1"></td>
@@ -161,26 +175,28 @@ const TransferPrintModal = ({ isOpen, onClose, transfer }) => {
                                                 <td className="border border-black px-2 py-1"></td>
                                             </tr>
                                         ))}
-                                    </tbody>
-                                    <tfoot>
-                                        <tr className="font-bold">
-                                            <td colSpan="5" className="border border-black px-2 py-1 text-right italic">Cəmi:</td>
-                                            <td className="border border-black px-2 py-1 text-center underline">{Number(totalPrice || 0).toFixed(2)} AZN</td>
+
+                                        <tr className="font-bold bg-gray-50">
+                                            <td colSpan="5" className="border border-black px-2 py-2 text-right italic text-lg">Cəmi:</td>
+                                            <td className="border border-black px-2 py-2 text-center underline text-lg">{Number(totalPrice || 0).toFixed(2)} AZN</td>
                                         </tr>
-                                    </tfoot>
+                                    </tbody>
                                 </table>
 
-                                <div className="grid grid-cols-2 gap-20 mt-20 font-bold text-sm">
-                                    <div className="space-y-8">
-                                        <div>Təhvil verən</div>
-                                        <div className="border-b border-black w-full pt-4"></div>
-                                        <div>Tarix: ________________</div>
-                                        <div>M.Y.</div>
-                                    </div>
-                                    <div className="space-y-8">
-                                        <div>Təhvil alan</div>
-                                        <div className="border-b border-black w-full pt-4"></div>
-                                        <div>Tarix: ________________</div>
+                                {/* İMZA BÖLMƏSİ */}
+                                <div className="signature-section mt-8">
+                                    <div className="grid grid-cols-2 gap-16 font-bold text-sm">
+                                        <div className="space-y-6">
+                                            <div>Təhvil verən:</div>
+                                            <div className="border-b border-black w-full h-8"></div>
+                                            <div>Tarix: ________________</div>
+                                            <div className="pt-4 text-xs italic text-gray-600">M.Y.</div>
+                                        </div>
+                                        <div className="space-y-6">
+                                            <div>Təhvil alan:</div>
+                                            <div className="border-b border-black w-full h-8"></div>
+                                            <div>Tarix: ________________</div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -209,42 +225,42 @@ const TransferPrintModal = ({ isOpen, onClose, transfer }) => {
             <style>
                 {`
                 @media print {
-                  /* Bütün səhifəni və modalın kənar elementlərini gizlət */
-                  body * {
-                    visibility: hidden;
+                  @page {
+                    size: A4;
+                    margin: 15mm 10mm;
                   }
-
-                  /* Yalnız çap sahəsini və onun daxilindəkiləri göstər */
-                  #printable-area, #printable-area * {
-                    visibility: visible;
-                  }
-
-                  /* Çap sahəsini səhifənin ən yuxarısına yerləşdir */
+                  body { visibility: hidden; }
+                  #printable-area, #printable-area * { visibility: visible; }
                   #printable-area {
                     position: absolute;
                     left: 0;
                     top: 0;
                     width: 100%;
-                    margin: 0;
-                    padding: 20mm;
+                    padding: 0 !important;
                     visibility: visible;
                     display: block !important;
                   }
-
-                  /* Modalın kölgəsini, fonunu və s. deaktiv et */
-                  .fixed, .bg-black\\/60, .bg-white {
-                    background: none !important;
-                    box-shadow: none !important;
-                    position: static !important;
-                    padding: 0 !important;
+                  
+                  /* Cədvəl sətirlərinin səhifə yarı bölünməməsi üçün */
+                  tr { page-break-inside: avoid; }
+                  
+                  /* İmza hissəsi kəsilməsin və cədvəldən sonra gəlsin */
+                  .signature-section {
+                    page-break-inside: avoid !important;
+                    break-inside: avoid !important;
+                    margin-top: 20px;
+                    display: block !important;
                   }
 
-                  @page {
-                    size: A4;
-                    margin: 0;
+                  .print-table {
+                    width: 100% !important;
+                    border-collapse: collapse !important;
                   }
+                  
+                  /* Cədvəl xətlərinin tam görünməsi üçün */
+                  .print-table th, .print-table td { border: 1px solid black !important; }
 
-                  /* Rənglərin itməməsi üçün mütləq lazımdır */
+                  /* Rənglərin itməməsi üçün */
                   * {
                     -webkit-print-color-adjust: exact !important;
                     print-color-adjust: exact !important;
