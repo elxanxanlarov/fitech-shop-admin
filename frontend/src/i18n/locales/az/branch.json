@@ -117,5 +117,10 @@
     "shipped": "Yoldadır",
     "pending": "Gözləyir",
     "print_transfer_act": "Köçürmə Aktı",
-    "check_details_before_print": "Məlumatları yoxlayın və çap edin"
+    "check_details_before_print": "Məlumatları yoxlayın və çap edin",
+    "add_products": "Məhsul Əlavə Et",
+    "transfer_list": "Transfer Siyahısı",
+    "search_in_list": "Siyahıda axtar...",
+    "max_stock_reached": "Maksimum stok həddinə çatılıb",
+    "no_results_found": "Axtarışa uyğun məhsul tapılmadı"
 }

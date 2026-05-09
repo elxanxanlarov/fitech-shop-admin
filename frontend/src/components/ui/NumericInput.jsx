@@ -118,7 +118,7 @@ export default function NumericInput({
                         onBlur={handleBlur}
                         disabled={disabled}
                         placeholder={placeholder}
-                        className={`w-full h-full border-none focus:ring-0 text-center font-bold text-gray-900 bg-transparent ${currentSize.input}`}
+                        className={`w-full h-full border-none focus:ring-0 font-bold text-gray-900 bg-transparent ${currentSize.input} ${suffix ? 'text-right pr-10' : 'text-center'}`}
                     />
                     {suffix && inputValue !== '' && (
                         <span className="absolute right-2 text-[10px] font-bold text-gray-400 pointer-events-none uppercase">

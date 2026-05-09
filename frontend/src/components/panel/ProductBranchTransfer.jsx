@@ -31,6 +31,7 @@ export default function ProductBranchTransfer() {
         note: '',
         items: []
     });
+    const [listSearch, setListSearch] = useState('');
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [activeTab, setActiveTab] = useState('send'); // 'send', 'inbox', 'history'
@@ -140,7 +141,19 @@ export default function ProductBranchTransfer() {
 
         const existingItemIndex = formData.items.findIndex((item) => item.productId === productId);
         if (existingItemIndex !== -1) {
-            handleRemoveItem(existingItemIndex);
+            // Check if we can add more
+            const currentItem = formData.items[existingItemIndex];
+            if (currentItem.quantity >= currentItem.maxStock) {
+                Alert.warning(tAlert('warning'), t('max_stock_reached') || 'Maksimum stok həddinə çatılıb');
+                return;
+            }
+            updateItemQuantity(existingItemIndex, 'quantity', currentItem.quantity + 1);
+            return;
+        }
+
+        // Prevent adding products with 0 stock
+        if (product.stock <= 0) {
+            Alert.warning(tAlert('warning'), t('max_stock_reached') || 'Maksimum stok həddinə çatılıb');
             return;
         }
 
@@ -149,14 +162,15 @@ export default function ProductBranchTransfer() {
             items: [
                 ...prev.items,
                 {
+                    rowId: crypto.randomUUID(),
                     productId: product.id,
                     name: product.name,
                     unitType: product.unitType,
                     maxStock: product.stock,
                     quantity: 1,
                     piecesPerBox: product.piecesPerBox || 1,
-                    fullBoxes: 0,
-                    openedBoxQuantity: 0
+                    fullBoxes: product.piecesPerBox > 1 ? 0 : 0,
+                    openedBoxQuantity: product.piecesPerBox > 1 ? 1 : 0
                 }
             ]
         }));
@@ -507,16 +521,19 @@ export default function ProductBranchTransfer() {
                     </div>
 
                     <div className="space-y-4">
-                        <div className="flex items-center justify-between flex-wrap gap-4">
-                            <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                                <Package className="w-5 h-5 text-teal-500" />
-                                {t('products')}
-                            </h3>
+                        <div className="flex items-center justify-between flex-wrap gap-4 bg-teal-50/50 p-4 rounded-xl border border-teal-100/50">
+                            <div className="space-y-1">
+                                <h3 className="text-lg font-bold text-teal-900 flex items-center gap-2">
+                                    <Package className="w-5 h-5" />
+                                    {t('add_products') || 'Məhsul Əlavə Et'}
+                                </h3>
+                                <p className="text-xs text-teal-600 font-medium">Anbardakı məhsulları transfer siyahısına əlavə edin</p>
+                            </div>
                             <div className="w-full max-w-md">
                                 <SearchDropdown
                                     placeholder={t('search_product_to_add')}
                                     options={products}
-                                    value={formData.items.map((item) => item.productId)}
+                                    value={[]} // Keep empty to allow multi-clicks
                                     onChange={handleAddItem}
                                     searchFields={['name', 'barcode']}
                                     disabled={!fromBranchId || loading}
@@ -575,6 +592,27 @@ export default function ProductBranchTransfer() {
                             </div>
                         </div>
 
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                                <h3 className="text-sm font-bold text-gray-700">
+                                    {t('transfer_list') || 'Transfer Siyahısı'} 
+                                    <span className="ml-2 px-2 py-0.5 bg-gray-100 rounded-md text-xs text-gray-500">{formData.items.length}</span>
+                                </h3>
+                            </div>
+                            <div className="relative w-64">
+                                <input
+                                    type="text"
+                                    placeholder={t('search_in_list') || 'Siyahıda axtar...'}
+                                    value={listSearch}
+                                    onChange={(e) => setListSearch(e.target.value)}
+                                    className="w-full pl-8 pr-4 py-2 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-white shadow-sm"
+                                />
+                                <svg className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                            </div>
+                        </div>
+
                         <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm">
                             <table className="w-full divide-y divide-gray-200">
                                 <thead className="bg-gray-50">
@@ -585,7 +623,7 @@ export default function ProductBranchTransfer() {
                                         <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">
                                             {t('current_stock')}
                                         </th>
-                                        <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">
+                                        <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase w-72">
                                             {t('quantity')}
                                         </th>
                                         <th className="px-6 py-3 text-center text-xs font-bold text-gray-500 uppercase">
@@ -594,124 +632,120 @@ export default function ProductBranchTransfer() {
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
-                                    {formData.items.length === 0 ? (
+                                    {formData.items.filter(item => 
+                                        item.name.toLowerCase().includes(listSearch.toLowerCase())
+                                    ).length === 0 ? (
                                         <tr>
                                             <td colSpan="4" className="px-6 py-12 text-center text-gray-500">
                                                 <div className="flex flex-col items-center gap-2">
                                                     <Info className="w-8 h-8 text-gray-300" />
-                                                    <p>{t('no_products_added')}</p>
+                                                    <p>{formData.items.length === 0 ? t('no_products_added') : t('no_results_found')}</p>
                                                 </div>
                                             </td>
                                         </tr>
                                     ) : (
-                                        formData.items.map((item, index) => (
-                                            <tr key={item.productId} className="hover:bg-gray-50 transition-colors">
-                                                <td className="px-6 py-4">
-                                                    <div className="font-medium text-gray-900">{item.name}</div>
-                                                    {hasContainer(item) && (
-                                                        <div className="text-[10px] text-gray-400 mt-0.5">
-                                                            1 {containerLabel(item.unitType)} = {item.piecesPerBox}{' '}
-                                                            {unitSingular(item.unitType)}
-                                                        </div>
-                                                    )}
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="flex flex-col gap-1">
-                                                        <span
-                                                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium w-fit ${
-                                                                item.maxStock <= 0
-                                                                    ? 'bg-red-100 text-red-800'
-                                                                    : 'bg-teal-100 text-teal-800'
-                                                            }`}
-                                                        >
-                                                            {item.maxStock} {unitSingular(item.unitType)}
-                                                        </span>
-                                                        {hasContainer(item) && (
-                                                            <div
-                                                                className={`text-[10px] font-bold uppercase px-1 ${
-                                                                    item.maxStock <= 0 ? 'text-red-400' : 'text-gray-500'
-                                                                }`}
-                                                            >
-                                                                {formatStockShort(
-                                                                    item.maxStock,
-                                                                    item.unitType,
-                                                                    item.piecesPerBox
+                                        formData.items
+                                            .filter(item => item.name.toLowerCase().includes(listSearch.toLowerCase()))
+                                            .map((item, index) => {
+                                                // Find real index in original array for updateItemQuantity
+                                                const realIndex = formData.items.findIndex(i => i === item);
+                                                return (
+                                                    <tr key={item.rowId || item.productId} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-6 py-4">
+                                                            <div className="font-medium text-gray-900">{item.name}</div>
+                                                            {hasContainer(item) && (
+                                                                <div className="text-[10px] text-gray-400 mt-0.5">
+                                                                    1 {containerLabel(item.unitType)} = {item.piecesPerBox}{' '}
+                                                                    {unitSingular(item.unitType)}
+                                                                </div>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <div className="flex flex-col gap-1">
+                                                                <span
+                                                                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium w-fit ${
+                                                                        item.maxStock <= 0
+                                                                            ? 'bg-red-100 text-red-800'
+                                                                            : 'bg-teal-100 text-teal-800'
+                                                                    }`}
+                                                                >
+                                                                    {item.maxStock}
+                                                                </span>
+                                                                {hasContainer(item) && (
+                                                                    <div
+                                                                        className={`text-[10px] font-bold uppercase px-1 ${
+                                                                            item.maxStock <= 0 ? 'text-red-400' : 'text-gray-500'
+                                                                        }`}
+                                                                    >
+                                                                        {formatStockShort(
+                                                                            item.maxStock,
+                                                                            item.unitType,
+                                                                            item.piecesPerBox
+                                                                        )}
+                                                                    </div>
                                                                 )}
                                                             </div>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="flex flex-col gap-2">
-                                                        {hasContainer(item) ? (
-                                                            <>
-                                                                <div className="flex items-end gap-2">
-                                                                    <NumericInput
-                                                                        value={item.fullBoxes}
-                                                                        onChange={(val) =>
-                                                                            updateItemQuantity(index, 'fullBoxes', val)
-                                                                        }
-                                                                        min={0}
-                                                                        max={Math.floor(item.maxStock / item.piecesPerBox)}
-                                                                        size="md"
-                                                                        label={containerLabel(item.unitType)}
-                                                                        className="w-28"
-                                                                    />
-                                                                    <span className="text-gray-300 font-bold text-lg mb-1">
-                                                                        +
-                                                                    </span>
-                                                                    <NumericInput
-                                                                        value={item.openedBoxQuantity}
-                                                                        onChange={(val) =>
-                                                                            updateItemQuantity(
-                                                                                index,
-                                                                                'openedBoxQuantity',
-                                                                                val
-                                                                            )
-                                                                        }
-                                                                        min={0}
-                                                                        max={item.piecesPerBox - 1}
-                                                                        size="md"
-                                                                        label={unitSingular(item.unitType)}
-                                                                        className="w-28"
-                                                                    />
-                                                                    <div className="mb-0.5 text-xs text-gray-400 leading-tight">
-                                                                        <div>
-                                                                            ={' '}
-                                                                            <span className="font-bold text-gray-700">
-                                                                                {item.quantity}
-                                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <div className="flex flex-col gap-2">
+                                                                {hasContainer(item) ? (
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className="space-y-1">
+                                                                            <NumericInput
+                                                                                value={item.fullBoxes}
+                                                                                onChange={(val) =>
+                                                                                    updateItemQuantity(realIndex, 'fullBoxes', val)
+                                                                                }
+                                                                                min={0}
+                                                                                max={Math.floor(item.maxStock / item.piecesPerBox)}
+                                                                                size="sm"
+                                                                                className="w-24 text-center"
+                                                                            />
                                                                         </div>
-                                                                        <div className="text-[10px]">
-                                                                            {unitSingular(item.unitType)}
+                                                                        <div className="text-gray-300 font-bold text-sm mt-4">+</div>
+                                                                        <div className="space-y-1">
+                                                                            <NumericInput
+                                                                                value={item.openedBoxQuantity}
+                                                                                onChange={(val) =>
+                                                                                    updateItemQuantity(realIndex, 'openedBoxQuantity', val)
+                                                                                }
+                                                                                min={0}
+                                                                                max={item.piecesPerBox - 1}
+                                                                                size="sm"
+                                                                                className="w-24 text-center"
+                                                                            />
+                                                                        </div>
+                                                                        <div className="mt-4 text-[10px] text-teal-600 font-black whitespace-nowrap bg-teal-50 px-2 py-1 rounded">
+                                                                            {item.quantity}
                                                                         </div>
                                                                     </div>
-                                                                </div>
-                                                            </>
-                                                        ) : (
-                                                            <NumericInput
-                                                                value={item.quantity}
-                                                                onChange={(val) =>
-                                                                    updateItemQuantity(index, 'quantity', val)
-                                                                }
-                                                                min={0}
-                                                                max={item.maxStock}
-                                                                suffix={unitSingular(item.unitType)}
-                                                            />
-                                                        )}
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4 text-center">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleRemoveItem(index)}
-                                                        className="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 rounded-lg transition-colors"
-                                                    >
-                                                        <Trash2 className="w-5 h-5" />
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        ))
+                                                                ) : (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <NumericInput
+                                                                            value={item.quantity}
+                                                                            onChange={(val) =>
+                                                                                updateItemQuantity(realIndex, 'quantity', val)
+                                                                            }
+                                                                            min={0}
+                                                                            max={item.maxStock}
+                                                                            className="w-32 font-bold"
+                                                                        />
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-center">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleRemoveItem(realIndex)}
+                                                                className="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 rounded-lg transition-colors"
+                                                            >
+                                                                <Trash2 className="w-5 h-5" />
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })
                                     )}
                                 </tbody>
                             </table>
