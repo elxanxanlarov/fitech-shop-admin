@@ -196,6 +196,100 @@ export const deleteProduct = async (req, res) => {
   }
 };
 
+export const adjustStock = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { type, quantity, note } = req.body; // type: 'IN', 'OUT', 'ADJUSTMENT'
+
+    if (!['IN', 'OUT', 'ADJUSTMENT'].includes(type)) {
+      return res.status(400).json({ success: false, message: "Yanlış əməliyyat növü" });
+    }
+
+    const qty = parseFloat(quantity);
+    if (isNaN(qty) || qty <= 0) {
+      return res.status(400).json({ success: false, message: "Miqdar 0-dan böyük olmalıdır" });
+    }
+
+    const product = await prisma.ismayilliMagazaProduct.findUnique({ where: { id } });
+    if (!product) {
+      return res.status(404).json({ success: false, message: "Məhsul tapılmadı" });
+    }
+
+    let newQuantity = parseFloat(product.quantity);
+    if (type === 'IN') {
+      newQuantity += qty;
+    } else if (type === 'OUT') {
+      if (newQuantity < qty) {
+        return res.status(400).json({ success: false, message: "Kifayət qədər stok yoxdur" });
+      }
+      newQuantity -= qty;
+    } else {
+      // ADJUSTMENT
+      newQuantity = qty; // direct set
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const updatedProd = await tx.ismayilliMagazaProduct.update({
+        where: { id },
+        data: {
+          quantity: newQuantity,
+          totalPurchasePrice: newQuantity * parseFloat(product.unitPricePurchase),
+          totalSalePrice: newQuantity * parseFloat(product.unitPriceSale)
+        }
+      });
+
+      await tx.ismayilliStockMovement.create({
+        data: {
+          productId: id,
+          type: type,
+          quantity: qty,
+          note: note || null
+        }
+      });
+
+      return updatedProd;
+    });
+
+    return res.status(200).json({ success: true, data: updated });
+  } catch (error) {
+    console.error("adjustStock error", error);
+    return res.status(500).json({ success: false, message: "Stok yenilənərkən xəta baş verdi" });
+  }
+};
+
+export const getStockMovements = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const movements = await prisma.ismayilliStockMovement.findMany({
+      where: { productId: id },
+      orderBy: { createdAt: "desc" }
+    });
+    return res.status(200).json({ success: true, data: movements });
+  } catch (error) {
+    console.error("getStockMovements error", error);
+    return res.status(500).json({ success: false, message: "Stok tarixçəsi alınarkən xəta baş verdi" });
+  }
+};
+
+export const getSalesHistory = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const sales = await prisma.ismayilliSaleItem.findMany({
+      where: { productId: id },
+      include: {
+        sale: true
+      },
+      orderBy: {
+        sale: { createdAt: "desc" }
+      }
+    });
+    return res.status(200).json({ success: true, data: sales });
+  } catch (error) {
+    console.error("getSalesHistory error", error);
+    return res.status(500).json({ success: false, message: "Satış tarixçəsi alınarkən xəta baş verdi" });
+  }
+};
+
 export const bulkDeleteProducts = async (req, res) => {
   try {
     const { ids } = req.body;

@@ -6,8 +6,10 @@ import DeletedProductsBell from "../ui/DeletedProductsBell"
 import BranchSelector from "../ui/BranchSelector"
 import { useState } from "react"
 import { FiMenu } from "react-icons/fi"
+import { useAuth } from "../../context/AuthContext"
 
 export default function DashboardLayout({ children, sidebarData, title, profilePath }) {
+  const { user } = useAuth()
   const [isOpen, setIsOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
   const handleToggleCollapse = () => {
@@ -19,6 +21,9 @@ export default function DashboardLayout({ children, sidebarData, title, profileP
   const handleMobileClose = () => {
     setIsOpen(false)
   }
+  
+  const isIsmayilli = user?.store === 'ISMAYILLI';
+
   return (
     <div className="min-h-screen bg-slate-50">
       {isOpen && <div className="fixed inset-0 bg-black/30 z-30 md:hidden" onClick={handleMobileClose} />}
@@ -54,10 +59,12 @@ export default function DashboardLayout({ children, sidebarData, title, profileP
             <div className="hidden sm:block">
                <BranchSelector />
             </div>
-            <div className="flex items-center gap-1 sm:gap-2 bg-slate-50 p-1 rounded-xl border border-slate-100">
-              <DeletedProductsBell />
-              <NotificationBell />
-            </div>
+            {!isIsmayilli && (
+              <div className="flex items-center gap-1 sm:gap-2 bg-slate-50 p-1 rounded-xl border border-slate-100">
+                <DeletedProductsBell />
+                <NotificationBell />
+              </div>
+            )}
             <div className="h-8 w-[1px] bg-slate-200 mx-1 hidden sm:block" />
             <LanguageSwitcher />
           </div>

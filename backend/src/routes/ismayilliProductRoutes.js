@@ -11,7 +11,10 @@ import {
   updateProduct,
   deleteProduct,
   importExcel,
-  bulkDeleteProducts
+  bulkDeleteProducts,
+  adjustStock,
+  getStockMovements,
+  getSalesHistory
 } from "../controllers/ismayilliProductController.js";
 import { authenticateToken } from "../middleware/authMiddleware.js";
 
@@ -35,5 +38,10 @@ router.get("/products/:id", getProductById);
 router.post("/products", createProduct);
 router.put("/products/:id", updateProduct);
 router.delete("/products/:id", deleteProduct);
+
+// Stok və Tarixçə
+router.post("/products/:id/adjust-stock", adjustStock);
+router.get("/products/:id/stock-movements", getStockMovements);
+router.get("/products/:id/sales-history", getSalesHistory);
 
 export default router;

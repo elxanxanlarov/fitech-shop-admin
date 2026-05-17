@@ -11,9 +11,11 @@ import ExcelTableModal from '../modals/ExcelTableModal';
 import BarcodeScannerModal from '../modals/BarcodeScannerModal';
 import ProductStockHistoryModal from '../modals/ProductStockHistoryModal';
 import { useBranch } from '../../hooks';
-import { History, ShoppingCart } from 'lucide-react';
+import { History, ShoppingCart, RefreshCcw } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 export default function Product() {
+    const { user } = useAuth();
     const { t, i18n } = useTranslation('product');
     const { t: tAlert } = useTranslation('alert');
     const navigate = useNavigate();
@@ -406,14 +408,45 @@ export default function Product() {
         setSearchQuery('');
     }, [setFilters, setSearchValue, setSearchQuery]);
 
+    const handleBulkAssignBarcodes = async () => {
+        if (!window.confirm('DİQQƏT! Bütün məhsulların barkodunu "2000006xxxxxx" formatında təsadüfi olaraq yenidən təyin etmək istədiyinizdən əminsiniz? Bu əməliyyat geri qaytarıla bilməz!')) {
+            return;
+        }
+
+        try {
+            Alert.loading('Bütün barkodlar təyin edilir...');
+            const res = await productApi.bulkAssignBarcodes();
+            if (res.success) {
+                Alert.success('Uğurlu', res.message || 'Barkodlar uğurla təyin edildi');
+                fetchProducts(); // Refresh list
+            } else {
+                Alert.error('Xəta', res.message || 'Barkodlar təyin edilərkən xəta baş verdi');
+            }
+        } catch (error) {
+            console.error('Bulk assign barcodes error:', error);
+            Alert.error('Xəta', 'Server ilə əlaqə saxlanılarkən xəta baş verdi');
+        }
+    };
+
+    const isHeadAdmin = user?.role?.name?.toLowerCase() === 'superadmin';
+
     return (
         <div className="p-6">
-            <div className="mb-6 flex justify-between items-center">
+            <div className="mb-6 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">{t('product_management')}</h1>
                     <p className="text-gray-600">{t('manage_products')}</p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
+                    {isHeadAdmin && (
+                        <button
+                            onClick={handleBulkAssignBarcodes}
+                            className="flex items-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg font-bold text-sm transition-all border border-indigo-200"
+                            title="Bütün məhsullara avtomatik barkod təyin et"
+                        >
+                            <RefreshCcw className="w-4 h-4" /> Kütləvi Barkod Təyin Et
+                        </button>
+                    )}
                     <button
                         onClick={() => setIsExcelTableModalOpen(true)}
                         className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-all shadow-md hover:shadow-lg"

@@ -74,5 +74,11 @@ export const productApi = {
     const response = await api.get(`/product/${productId}/returns`);
     return response.data;
   },
+
+  // Bulk assign barcodes
+  bulkAssignBarcodes: async () => {
+    const response = await api.post('/product/bulk-assign-barcodes');
+    return response.data;
+  },
 };
 

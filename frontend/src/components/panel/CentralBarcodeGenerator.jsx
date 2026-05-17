@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useLocation } from 'react-router-dom';
-import { ismayilliApi } from '../../api';
+import { productApi } from '../../api';
 import Alert from '../ui/Alert';
 import JsBarcode from 'jsbarcode';
-import { Barcode, Search, Sparkles, Printer, Save, RefreshCw, Layers, CheckCircle2 } from 'lucide-react';
+import { Barcode, Search, Sparkles, Printer, Save, Layers, CheckCircle2, RefreshCcw } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
-export default function IsmayilliBarcodeGenerator() {
-  const location = useLocation();
+export default function CentralBarcodeGenerator() {
+  const { user } = useAuth();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   
@@ -20,9 +20,14 @@ export default function IsmayilliBarcodeGenerator() {
   const [barcodeValue, setBarcodeValue] = useState('');
   const [saving, setSaving] = useState(false);
 
+  const isHeadAdmin = useMemo(() => {
+    if (!user || !user.role) return false;
+    const r = user.role.name?.toLowerCase();
+    return r === 'superadmin';
+  }, [user]);
+
   useEffect(() => {
     fetchProducts();
-    // Close dropdown on click outside
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
         setShowDropdown(false);
@@ -32,7 +37,6 @@ export default function IsmayilliBarcodeGenerator() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Re-render barcode when barcode value changes
   useEffect(() => {
     if (barcodeValue) {
       try {
@@ -54,19 +58,9 @@ export default function IsmayilliBarcodeGenerator() {
   const fetchProducts = async () => {
     setLoading(true);
     try {
-      const res = await ismayilliApi.getAllProducts();
+      const res = await productApi.getAll();
       if (res.success) {
         setProducts(res.data);
-        
-        // Check for auto-select from location state
-        if (location.state?.selectedBarcode) {
-          const autoSelectTarget = res.data.find(p => p.barcode === location.state.selectedBarcode);
-          if (autoSelectTarget) {
-            setSelectedProduct(autoSelectTarget);
-            setBarcodeValue(autoSelectTarget.barcode || '');
-            setSearchQuery(autoSelectTarget.name);
-          }
-        }
       }
     } catch (err) {
       console.error("Fetch products error:", err);
@@ -97,14 +91,12 @@ export default function IsmayilliBarcodeGenerator() {
       Alert.error('Xəta', 'Zəhmət olmasa əvvəlcə məhsul seçin');
       return;
     }
-    // EAN-13 style random retail code starting with 200 (store coupon / retail prefix)
-    const prefix = '2000';
+    const prefix = '2000006';
     let code = prefix;
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 5; i++) {
       code += Math.floor(Math.random() * 10);
     }
     
-    // Add check digit
     let sum = 0;
     for (let i = 0; i < 12; i++) {
       sum += parseInt(code[i]) * (i % 2 === 0 ? 1 : 3);
@@ -123,7 +115,6 @@ export default function IsmayilliBarcodeGenerator() {
       return;
     }
 
-    // Check if barcode belongs to another product
     const conflict = products.find(p => p.barcode === barcodeValue.trim() && p.id !== selectedProduct.id);
     if (conflict) {
       Alert.error('Xəta', `Bu ştrixkod artıq digər bir məhsula aiddir: "${conflict.name}"`);
@@ -137,11 +128,9 @@ export default function IsmayilliBarcodeGenerator() {
         ...selectedProduct,
         barcode: barcodeValue.trim()
       };
-      const res = await ismayilliApi.updateProduct(selectedProduct.id, payload);
+      const res = await productApi.update(selectedProduct.id, payload);
       if (res.success) {
         Alert.success('Uğurlu', 'Məhsulun ştrixkodu uğurla yeniləndi!');
-        
-        // Update local list
         setProducts(prev => prev.map(p => p.id === selectedProduct.id ? { ...p, barcode: barcodeValue.trim() } : p));
         setSelectedProduct(prev => ({ ...prev, barcode: barcodeValue.trim() }));
       }
@@ -212,43 +201,43 @@ export default function IsmayilliBarcodeGenerator() {
               display: -webkit-box;
               -webkit-line-clamp: 2;
               -webkit-box-orient: vertical;
-              margin: 0.5px 0;
+              word-break: break-word;
             }
-            .barcode-wrapper {
+            .barcode-area {
               display: flex;
-              align-items: center;
               justify-content: center;
+              align-items: center;
               width: 100%;
-              height: 8mm;
+              height: 10mm;
             }
-            .barcode-wrapper svg {
-              width: 100%;
-              height: 100%;
-              max-height: 24px;
+            .barcode-area svg {
+              max-height: 100%;
+              max-width: 100%;
             }
             .price-tag {
-              font-size: 6.5px;
+              font-size: 6px;
               font-weight: 900;
-              color: #000;
+              color: #020617;
               border-top: 0.5px dashed #cbd5e1;
               width: 100%;
               padding-top: 0.5px;
+              white-space: nowrap;
             }
           </style>
         </head>
         <body>
           <div class="label-card">
-            <div class="store-header">İsmayıllı</div>
+            <div class="store-header">Fitech</div>
             <div class="product-name">${selectedProduct.name}</div>
-            <div class="barcode-wrapper">
-              ${svgHtml}
-            </div>
-            <div class="price-tag">${parseFloat(selectedProduct.unitPriceSale).toFixed(2)} AZN</div>
+            <div class="barcode-area">${svgHtml}</div>
+            <div class="price-tag">Qiymət: ${parseFloat(selectedProduct.salePrice || selectedProduct.unitPriceSale || 0).toFixed(2)} AZN</div>
           </div>
           <script>
             window.onload = function() {
-              window.print();
-              setTimeout(function() { window.close(); }, 500);
+              setTimeout(() => {
+                window.print();
+                window.close();
+              }, 300);
             };
           </script>
         </body>
@@ -258,28 +247,59 @@ export default function IsmayilliBarcodeGenerator() {
     printWindow.document.close();
   };
 
+  const handleBulkAssignBarcodes = async () => {
+    if (!window.confirm('DİQQƏT! Bütün məhsulların barkodunu "2000006xxxxxx" formatında təsadüfi olaraq yenidən təyin etmək istədiyinizdən əminsiniz? Bu əməliyyat geri qaytarıla bilməz!')) {
+      return;
+    }
+
+    try {
+      Alert.loading('Bütün barkodlar təyin edilir...');
+      const res = await productApi.bulkAssignBarcodes();
+      if (res.success) {
+        Alert.success('Uğurlu', res.message || 'Barkodlar uğurla təyin edildi');
+        fetchProducts(); // Refresh list
+        setSelectedProduct(null);
+        setBarcodeValue('');
+        setSearchQuery('');
+      } else {
+        Alert.error('Xəta', res.message || 'Barkodlar təyin edilərkən xəta baş verdi');
+      }
+    } catch (error) {
+      console.error('Bulk assign barcodes error:', error);
+      Alert.error('Xəta', 'Server ilə əlaqə saxlanılarkən xəta baş verdi');
+    }
+  };
+
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
       {/* Header */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-        <div className="p-3 bg-purple-50 text-purple-600 rounded-xl">
-          <Barcode className="w-8 h-8" />
-        </div>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Ştrixkod Generator (İsmayıllı)</h1>
-          <p className="text-slate-500 text-sm mt-1">İsmayıllı məhsulları üçün sürətli ştrixkod yaradılması, redaktəsi və etiket çapı</p>
+          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+            <Barcode className="text-purple-600 w-7 h-7" /> Mərkəzi Ştrixkod Yaradıcı
+          </h1>
+          <p className="text-slate-500 text-sm mt-1">Fitech (Mərkəzi anbar) məhsulları üçün ştrixkod dizaynı və çapı</p>
         </div>
+        
+        {isHeadAdmin && (
+          <button
+            onClick={handleBulkAssignBarcodes}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl font-bold text-sm transition-all border border-indigo-200"
+            title="Bütün məhsullara avtomatik barkod təyin et"
+          >
+            <RefreshCcw className="w-4 h-4" /> Kütləvi Barkod Təyin Et
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
-        {/* Left Side: Search & Selection (3 cols) */}
+        {/* Left Side: Controls (3 cols) */}
         <div className="md:col-span-3 space-y-6">
-          {/* Search Box */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
-            <label className="block text-sm font-bold text-slate-700">Məhsul Seçin</label>
-            <div ref={dropdownRef} className="relative">
+          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4 relative">
+            <label className="block text-sm font-bold text-slate-700 uppercase tracking-wider">Məhsul Seçimi</label>
+            <div className="relative" ref={dropdownRef}>
               <div className="relative">
-                <Search className="absolute left-3 top-3 w-5 h-5 text-slate-400" />
+                <Search className="absolute left-3 top-3.5 w-5 h-5 text-slate-400" />
                 <input
                   type="text"
                   placeholder="Məhsul adı və ya barkoduna görə axtarın..."
@@ -289,11 +309,11 @@ export default function IsmayilliBarcodeGenerator() {
                     setShowDropdown(true);
                   }}
                   onFocus={() => setShowDropdown(true)}
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500 font-medium transition-all"
+                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 font-medium transition-all"
                 />
               </div>
 
-              {/* Search Dropdown */}
+              {/* Dropdown */}
               {showDropdown && searchQuery.trim() && (
                 <div className="absolute top-full left-0 right-0 bg-white border border-slate-200 mt-2 rounded-xl shadow-lg z-50 max-h-60 overflow-y-auto divide-y divide-slate-50">
                   {loading ? (
@@ -312,7 +332,7 @@ export default function IsmayilliBarcodeGenerator() {
                           <span className="text-xs text-slate-400 font-mono">{p.barcode || 'Barkodsuz'}</span>
                         </div>
                         <span className="text-xs font-bold text-purple-600 shrink-0">
-                          {parseFloat(p.unitPriceSale).toFixed(2)} AZN
+                          {parseFloat(p.salePrice || p.unitPriceSale || 0).toFixed(2)} AZN
                         </span>
                       </div>
                     ))
@@ -327,7 +347,7 @@ export default function IsmayilliBarcodeGenerator() {
             <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
               <div className="border-b border-slate-100 pb-3 flex justify-between items-center">
                 <h3 className="font-bold text-slate-900 flex items-center gap-2">
-                  <Layers className="text-purple-600 w-5 h-5" /> Məhsul Məlumatları
+                  <Layers className="text-purple-600 w-5 h-5" /> Məlumatlar
                 </h3>
                 <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 items-center gap-1">
                   <CheckCircle2 className="w-3.5 h-3.5" /> Seçilib
@@ -336,7 +356,7 @@ export default function IsmayilliBarcodeGenerator() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <span className="text-xs text-slate-400 font-medium block">Məhsulun Adı</span>
+                  <span className="text-xs text-slate-400 font-medium block">Adı</span>
                   <span className="font-bold text-slate-800 text-sm">{selectedProduct.name}</span>
                 </div>
                 <div>
@@ -344,12 +364,12 @@ export default function IsmayilliBarcodeGenerator() {
                   <span className="font-bold text-slate-800 text-sm">{selectedProduct.category?.name || '-'}</span>
                 </div>
                 <div>
-                  <span className="text-xs text-slate-400 font-medium block">Stok Miqdarı</span>
-                  <span className="font-bold text-slate-800 text-sm">{parseFloat(selectedProduct.quantity)} ədəd</span>
+                  <span className="text-xs text-slate-400 font-medium block">Stok</span>
+                  <span className="font-bold text-slate-800 text-sm">{parseFloat(selectedProduct.stock || selectedProduct.quantity || 0)} {selectedProduct.unitType || 'ədəd'}</span>
                 </div>
                 <div>
                   <span className="text-xs text-slate-400 font-medium block">Satış Qiyməti</span>
-                  <span className="font-extrabold text-blue-600 text-sm">{parseFloat(selectedProduct.unitPriceSale).toFixed(2)} AZN</span>
+                  <span className="font-extrabold text-blue-600 text-sm">{parseFloat(selectedProduct.salePrice || selectedProduct.unitPriceSale || 0).toFixed(2)} AZN</span>
                 </div>
               </div>
 
@@ -360,7 +380,7 @@ export default function IsmayilliBarcodeGenerator() {
                     type="text"
                     value={barcodeValue}
                     onChange={(e) => setBarcodeValue(e.target.value)}
-                    placeholder="Ştrixkodu daxil edin və ya yaradın..."
+                    placeholder="Daxil edin və ya yaradın..."
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono font-bold transition-all"
                   />
                   <button
@@ -379,7 +399,7 @@ export default function IsmayilliBarcodeGenerator() {
                   disabled={saving}
                   className="flex-1 flex items-center justify-center gap-2 py-3 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl font-bold transition-all shadow-md shadow-purple-100"
                 >
-                  <Save className="w-4 h-4" /> Barkodu Yadda Saxla
+                  <Save className="w-4 h-4" /> Yadda Saxla
                 </button>
                 <button
                   onClick={handlePrintLabel}
@@ -400,13 +420,12 @@ export default function IsmayilliBarcodeGenerator() {
 
             {selectedProduct && barcodeValue ? (
               <div className="flex flex-col items-center justify-center p-6 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 space-y-4">
-                {/* Visual Stick label mimicking standard 30mm x 20mm barcode tag */}
                 <div 
                   className="bg-white border border-slate-200 shadow-md rounded-lg p-2.5 w-[220px] min-h-[140px] flex flex-col justify-between items-center text-center select-none"
                   style={{ fontFamily: 'system-ui, sans-serif' }}
                 >
                   <div className="text-[7px] font-extrabold uppercase tracking-wider text-slate-400 border-b border-slate-100 pb-1 w-full">
-                    İsmayıllı Mağazası
+                    Fitech
                   </div>
                   <div className="text-[9px] font-bold text-slate-800 line-clamp-2 leading-tight my-1 min-h-[22px] w-full px-1">
                     {selectedProduct.name}
@@ -415,7 +434,7 @@ export default function IsmayilliBarcodeGenerator() {
                     <svg id="barcode-svg" className="w-full max-h-12"></svg>
                   </div>
                   <div className="text-[10px] font-black text-slate-950 border-t border-dashed border-slate-100 pt-1 w-full mt-0.5">
-                    Qiymət: {parseFloat(selectedProduct.unitPriceSale).toFixed(2)} AZN
+                    Qiymət: {parseFloat(selectedProduct.salePrice || selectedProduct.unitPriceSale || 0).toFixed(2)} AZN
                   </div>
                 </div>
                 <p className="text-[10px] text-slate-400 text-center font-medium">Bu görünüş termal barkod kağızı (30mm × 20mm) üçün optimallaşdırılmışdır</p>
@@ -423,7 +442,7 @@ export default function IsmayilliBarcodeGenerator() {
             ) : (
               <div className="flex flex-col items-center justify-center p-12 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-100 text-center text-slate-400 space-y-3">
                 <Barcode className="w-12 h-12 text-slate-300 stroke-[1.5]" />
-                <p className="text-sm font-semibold">Önizləmə üçün məhsul seçin və ştrixkod daxil edin</p>
+                <p className="text-sm font-semibold">Önizləmə üçün məhsul seçin</p>
               </div>
             )}
           </div>

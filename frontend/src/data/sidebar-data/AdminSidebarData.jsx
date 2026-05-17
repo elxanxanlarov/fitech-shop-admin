@@ -1,4 +1,4 @@
-import { MdPeople, MdBarChart, MdAccessTime, MdSettings, MdShoppingCart, MdPointOfSale, MdAttachMoney, MdAccountBalanceWallet, MdDescription, MdLocalShipping, MdBusiness, MdSync, MdTransform, MdDeleteForever, MdSwapHoriz, MdWarehouse, MdDeleteSweep, MdCalculate } from 'react-icons/md'
+import { MdPeople, MdBarChart, MdAccessTime, MdSettings, MdShoppingCart, MdPointOfSale, MdAttachMoney, MdAccountBalanceWallet, MdDescription, MdLocalShipping, MdBusiness, MdSync, MdTransform, MdDeleteForever, MdSwapHoriz, MdWarehouse, MdDeleteSweep, MdCalculate, MdQrCode } from 'react-icons/md'
 export const AdminSidebarData = [
   {
     title: 'staff_management',
@@ -24,6 +24,11 @@ export const AdminSidebarData = [
     title: 'product_management',
     path: '/admin/products',
     icon: <MdShoppingCart />,
+  },
+  {
+    title: 'central_barcode_generator',
+    path: '/admin/central-barcode-generator',
+    icon: <MdQrCode />,
   },
   {
     title: 'product_branch_transfer',

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { ismayilliApi } from '../../api';
+import { ismayilliApi, productApi, saleApi } from '../../api';
 import Alert from '../ui/Alert';
 import { ShoppingCart, X, Plus, Minus, Trash2, CheckCircle2, DollarSign, FileText } from 'lucide-react';
 
@@ -11,6 +11,8 @@ export default function GlobalBarcodeScanner() {
   const [paidAmount, setPaidAmount] = useState('');
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const isIsmayilli = user?.store === 'ISMAYILLI';
 
   // Play standard commercial POS checkout beep sound
   const playBeep = () => {
@@ -31,7 +33,8 @@ export default function GlobalBarcodeScanner() {
   };
 
   useEffect(() => {
-    if (!user || user.store !== 'ISMAYILLI') return;
+    // Only works if logged in
+    if (!user) return;
 
     let buffer = '';
     let lastKeyTime = Date.now();
@@ -72,7 +75,13 @@ export default function GlobalBarcodeScanner() {
 
   const handleFindAndAddProduct = async (barcode) => {
     try {
-      const res = await ismayilliApi.getAllProducts({ search: barcode });
+      let res;
+      if (isIsmayilli) {
+        res = await ismayilliApi.getAllProducts({ search: barcode });
+      } else {
+        res = await productApi.getAll({ search: barcode });
+      }
+
       if (res.success && res.data && res.data.length > 0) {
         // Find exact barcode match
         const matched = res.data.find(p => p.barcode === barcode);
@@ -94,17 +103,23 @@ export default function GlobalBarcodeScanner() {
     setIsOpen(true);
     setBasket(prev => {
       const existingIndex = prev.findIndex(item => item.productId === prod.id);
+      const stockKey = isIsmayilli ? 'quantity' : 'stock';
+      const priceKey = isIsmayilli ? 'unitPriceSale' : 'salePrice';
+      
+      const maxStock = parseFloat(prod[stockKey] || 0);
+      const price = parseFloat(prod[priceKey] || 0);
+
       if (existingIndex > -1) {
         const nextQty = prev[existingIndex].quantity + 1;
-        if (nextQty > parseFloat(prod.quantity)) {
-          Alert.error('Xəta', `Stokda kifayət qədər məhsul yoxdur! Mövcud stok: ${parseFloat(prod.quantity)}`);
+        if (nextQty > maxStock) {
+          Alert.error('Xəta', `Stokda kifayət qədər məhsul yoxdur! Mövcud stok: ${maxStock}`);
           return prev;
         }
         const newBasket = [...prev];
         newBasket[existingIndex].quantity = nextQty;
         return newBasket;
       } else {
-        if (parseFloat(prod.quantity) <= 0) {
+        if (maxStock <= 0) {
           Alert.error('Xəta', 'Bu məhsulun stoku tükənib!');
           return prev;
         }
@@ -112,8 +127,8 @@ export default function GlobalBarcodeScanner() {
           productId: prod.id,
           name: prod.name,
           barcode: prod.barcode,
-          price: parseFloat(prod.unitPriceSale),
-          maxStock: parseFloat(prod.quantity),
+          price: price,
+          maxStock: maxStock,
           quantity: 1
         }];
       }
@@ -152,22 +167,44 @@ export default function GlobalBarcodeScanner() {
     setSubmitting(true);
     try {
       Alert.loading('Satış tamamlanır...');
-      const payload = {
-        items: basket.map(item => ({
-          productId: item.productId,
-          quantity: item.quantity
-        })),
-        paidAmount: paidAmount ? parseFloat(paidAmount) : totalAmount,
-        note: note
-      };
+      let res;
+      
+      if (isIsmayilli) {
+        const payload = {
+          items: basket.map(item => ({
+            productId: item.productId,
+            quantity: item.quantity
+          })),
+          paidAmount: paidAmount ? parseFloat(paidAmount) : totalAmount,
+          note: note
+        };
+        res = await ismayilliApi.createSale(payload);
+      } else {
+        const payload = {
+          items: basket.map(item => ({
+            productId: item.productId,
+            quantity: item.quantity,
+            pricePerItem: item.price
+          })),
+          totalAmount: totalAmount,
+          paidAmount: paidAmount ? parseFloat(paidAmount) : totalAmount,
+          customerName: "Sürətli Müştəri",
+          note: note,
+          branchId: user?.branchId || 'central'
+        };
+        res = await saleApi.create(payload);
+      }
 
-      const res = await ismayilliApi.createSale(payload);
       if (res.success) {
         Alert.success('Uğurlu', 'Sürətli satış uğurla tamamlandı!');
         setBasket([]);
         setPaidAmount('');
         setNote('');
         setIsOpen(false);
+        // Refresh product list slightly delayed
+        setTimeout(() => window.location.reload(), 1500);
+      } else {
+        Alert.error('Xəta', res.message || 'Satış xətası');
       }
     } catch (err) {
       console.error("Global scanner checkout error:", err);
@@ -190,7 +227,9 @@ export default function GlobalBarcodeScanner() {
               <ShoppingCart className="w-6 h-6" />
             </div>
             <div>
-              <h2 className="font-extrabold text-lg">Sürətli Barkod Satışı (İsmayıllı)</h2>
+              <h2 className="font-extrabold text-lg">
+                Sürətli Barkod Satışı {isIsmayilli ? '(İsmayıllı)' : '(Mərkəzi/Filial)'}
+              </h2>
               <p className="text-white/80 text-xs">Barkod oxuyucu vasitəsilə sürətli kassa satışı</p>
             </div>
           </div>

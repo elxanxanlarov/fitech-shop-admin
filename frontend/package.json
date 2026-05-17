@@ -12,6 +12,7 @@
   "dependencies": {
     "@tailwindcss/vite": "^4.1.17",
     "axios": "^1.13.2",
+    "dayjs": "^1.11.20",
     "echarts-for-react": "^3.0.5",
     "html5-qrcode": "^2.3.8",
     "i18next": "^25.7.1",

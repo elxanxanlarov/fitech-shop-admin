@@ -1,31 +1,36 @@
 import { useState, useEffect, useMemo } from 'react';
 import { ismayilliApi } from '../../api';
 import Alert from '../ui/Alert';
-import { Plus, Edit, Trash2, Tag, ShoppingCart, Barcode, DollarSign, Layers, Upload, FileSpreadsheet } from 'lucide-react';
+import { Plus, Edit, Trash2, Tag, ShoppingCart, Barcode, DollarSign, Layers, Upload, FileSpreadsheet, QrCode, History, Package } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import IsmayilliStockHistoryModal from './IsmayilliStockHistoryModal';
 
 export default function IsmayilliProducts() {
+  const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  
+
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50);
-  
+
   // Modals
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [historyTab, setHistoryTab] = useState('adjustment');
   const [editingProduct, setEditingProduct] = useState(null);
-  
+
   // Excel upload states
   const [excelFile, setExcelFile] = useState(null);
   const [uploading, setUploading] = useState(false);
-  
+
   // Bulk selection states
   const [selectedProductIds, setSelectedProductIds] = useState([]);
-  
+
   // Forms
   const [productForm, setProductForm] = useState({
     name: '',
@@ -33,8 +38,7 @@ export default function IsmayilliProducts() {
     quantity: '0',
     unitPricePurchase: '0',
     unitPriceSale: '0',
-    categoryId: '',
-    excelId: ''
+    categoryId: ''
   });
   const [categoryName, setCategoryName] = useState('');
 
@@ -79,10 +83,38 @@ export default function IsmayilliProducts() {
       quantity: prod.quantity?.toString() || '0',
       unitPricePurchase: prod.unitPricePurchase?.toString() || '0',
       unitPriceSale: prod.unitPriceSale?.toString() || '0',
-      categoryId: prod.categoryId,
-      excelId: prod.excelId?.toString() || ''
+      categoryId: prod.categoryId
     });
     setIsProductModalOpen(true);
+  };
+
+  const handleGenerateAndPrint = async (prod) => {
+    // If product has barcode, directly navigate
+    if (prod.barcode) {
+      navigate('/admin/ismayilli-barcode-generator', { state: { selectedBarcode: prod.barcode } });
+      return;
+    }
+
+    // Generate barcode if not exists
+    try {
+      Alert.loading('Barkod yaradılır...');
+      const randomPart = Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
+      const newBarcode = `2000006${randomPart}`;
+
+      const payload = { ...prod, barcode: newBarcode };
+
+      const res = await ismayilliApi.updateProduct(prod.id, payload);
+
+      if (res.success) {
+        Alert.success('Uğurlu', 'Barkod yaradıldı, Çap səhifəsinə yönləndirilir...');
+        fetchData(); // background refresh
+        setTimeout(() => {
+          navigate('/admin/ismayilli-barcode-generator', { state: { selectedBarcode: newBarcode } });
+        }, 1000);
+      }
+    } catch (err) {
+      Alert.error('Xəta', 'Barkod yaradılarkən xəta baş verdi');
+    }
   };
 
   const handleProductSubmit = async (e) => {
@@ -221,8 +253,8 @@ export default function IsmayilliProducts() {
   const filteredProducts = useMemo(() => {
     if (!search.trim()) return products;
     const query = search.toLowerCase();
-    return products.filter(p => 
-      p.name.toLowerCase().includes(query) || 
+    return products.filter(p =>
+      p.name.toLowerCase().includes(query) ||
       (p.barcode && p.barcode.toLowerCase().includes(query))
     );
   }, [products, search]);
@@ -341,6 +373,13 @@ export default function IsmayilliProducts() {
                     <td className="p-4 text-sm">
                       <div className="flex gap-2">
                         <button
+                          onClick={() => handleGenerateAndPrint(p)}
+                          className="p-1.5 rounded-lg border border-purple-200 text-purple-600 hover:bg-purple-50 transition-all"
+                          title="Ştrixkod Çap Et"
+                        >
+                          <QrCode className="w-4 h-4" />
+                        </button>
+                        <button
                           onClick={() => handleOpenEditProduct(p)}
                           className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-all"
                           title="Redaktə et"
@@ -362,7 +401,7 @@ export default function IsmayilliProducts() {
             </table>
           </div>
         )}
-        
+
         {/* Pagination Component */}
         {!loading && filteredProducts.length > 0 && (
           <div className="bg-white px-6 py-4 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -426,35 +465,74 @@ export default function IsmayilliProducts() {
       {isProductModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden border border-slate-100 animate-in zoom-in-95 duration-200">
-            <div className="p-6 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-              <h3 className="font-bold text-slate-900 text-lg flex items-center gap-2">
-                <ShoppingCart className="text-purple-600" /> {editingProduct ? 'Məhsulu Redaktə Et' : 'Yeni Məhsul Əlavə Et'}
-              </h3>
-              <button onClick={() => setIsProductModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold">✕</button>
+            <div className="p-6 border-b border-slate-100 bg-slate-50 flex flex-col gap-4">
+              <div className="flex justify-between items-center">
+                <h3 className="font-bold text-slate-900 text-lg flex items-center gap-2">
+                  <ShoppingCart className="text-purple-600" /> {editingProduct ? 'Məhsulu Redaktə Et' : 'Yeni Məhsul Əlavə Et'}
+                </h3>
+                <button onClick={() => setIsProductModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold">✕</button>
+              </div>
+              
+              {editingProduct && (
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHistoryTab('adjustment');
+                      setIsHistoryModalOpen(true);
+                    }}
+                    className="flex-1 px-3 py-2 text-sm font-semibold bg-blue-50 text-blue-700 rounded-lg border border-blue-200 hover:bg-blue-100 transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <Package className="w-4 h-4" /> Stok Tənzimləməsi
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHistoryTab('movements');
+                      setIsHistoryModalOpen(true);
+                    }}
+                    className="flex-1 px-3 py-2 text-sm font-semibold bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-200 hover:bg-emerald-100 transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <History className="w-4 h-4" /> Stok Tarixçəsi
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHistoryTab('sales');
+                      setIsHistoryModalOpen(true);
+                    }}
+                    className="flex-1 px-3 py-2 text-sm font-semibold bg-amber-50 text-amber-700 rounded-lg border border-amber-200 hover:bg-amber-100 transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <DollarSign className="w-4 h-4" /> Satış Tarixçəsi
+                  </button>
+                </div>
+              )}
             </div>
             <form onSubmit={handleProductSubmit} className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Excel ID</label>
-                  <input
-                    type="number"
-                    value={productForm.excelId}
-                    onChange={(e) => setProductForm({ ...productForm, excelId: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    placeholder="Məs. 123"
-                  />
-                </div>
-                <div>
+                <div className="col-span-2">
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Barkod</label>
-                  <div className="relative">
-                    <Barcode className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-                    <input
-                      type="text"
-                      value={productForm.barcode}
-                      onChange={(e) => setProductForm({ ...productForm, barcode: e.target.value })}
-                      className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                      placeholder="Ştrixkod"
-                    />
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Barcode className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                      <input
+                        type="text"
+                        value={productForm.barcode}
+                        onChange={(e) => setProductForm({ ...productForm, barcode: e.target.value })}
+                        className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        placeholder="Ştrixkod daxil edin və ya yaradın"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const randomPart = Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
+                        setProductForm(prev => ({ ...prev, barcode: `2000006${randomPart}` }));
+                      }}
+                      className="px-4 py-2 bg-purple-100 text-purple-700 font-bold text-sm rounded-lg hover:bg-purple-200 transition-colors whitespace-nowrap"
+                    >
+                      Avtomat Yarat
+                    </button>
                   </div>
                 </div>
               </div>
@@ -650,6 +728,18 @@ export default function IsmayilliProducts() {
           </div>
         </div>
       )}
+
+      {/* Stock History & Management Modal */}
+      <IsmayilliStockHistoryModal 
+        isOpen={isHistoryModalOpen} 
+        onClose={() => {
+            setIsHistoryModalOpen(false);
+            fetchData(); // Refresh data to get latest stock if adjusted
+        }} 
+        productId={editingProduct?.id} 
+        product={editingProduct} 
+        initialTab={historyTab} 
+      />
     </div>
   );
 }

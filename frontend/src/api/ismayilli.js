@@ -62,6 +62,21 @@ export const ismayilliApi = {
     return response.data;
   },
 
+  adjustStock: async (id, data) => {
+    const response = await api.post(`/ismayilli/product/products/${id}/adjust-stock`, data);
+    return response.data;
+  },
+
+  getStockMovements: async (id) => {
+    const response = await api.get(`/ismayilli/product/products/${id}/stock-movements`);
+    return response.data;
+  },
+
+  getSalesHistory: async (id) => {
+    const response = await api.get(`/ismayilli/product/products/${id}/sales-history`);
+    return response.data;
+  },
+
   // Sales
   getAllSales: async () => {
     const response = await api.get('/ismayilli/sale');

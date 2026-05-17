@@ -10,6 +10,7 @@ import {
   importProductsFromExcel,
   getProductSales,
   getProductReturns,
+  bulkAssignBarcodes,
 } from "../controllers/productController.js";
 import { authenticateToken } from "../middleware/authMiddleware.js";
 import multer from "multer";
@@ -63,6 +64,7 @@ router.get("/:id/returns", getProductReturns);
 router.get("/:id", getProductById);
 router.post("/", createProduct);
 router.post("/bulk-create", bulkCreateProducts);
+router.post("/bulk-assign-barcodes", bulkAssignBarcodes);
 router.post("/import", excelUpload.single('file'), importProductsFromExcel);
 router.put("/:id", updateProduct);
 router.put("/:id/stock", updateStock);

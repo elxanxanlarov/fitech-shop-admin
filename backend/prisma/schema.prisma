@@ -584,11 +584,26 @@ model IsmayilliMagazaProduct {
   
   // Satışlar ilə əlaqə
   saleItems          IsmayilliSaleItem[]
+  
+  // Stok hərəkətləri
+  stockMovements     IsmayilliStockMovement[]
 
   createdAt          DateTime              @default(now())
   updatedAt          DateTime              @updatedAt
 
   @@map("ismayilli_magaza_product")
+}
+
+model IsmayilliStockMovement {
+  id        String                 @id @default(uuid())
+  productId String
+  product   IsmayilliMagazaProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  type      stockmovementtype
+  quantity  Decimal                @db.Decimal(18, 2)
+  note      String?
+  createdAt DateTime               @default(now())
+
+  @@map("ismayilli_stock_movement")
 }
 
 model IsmayilliSale {

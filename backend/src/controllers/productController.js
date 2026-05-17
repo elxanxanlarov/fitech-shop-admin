@@ -1741,3 +1741,57 @@ export const getProductReturns = async (req, res) => {
     }
 };
 
+export const bulkAssignBarcodes = async (req, res) => {
+    try {
+        // 1. Role validation
+        const staff = await prisma.staff.findUnique({
+            where: { id: req.staffId },
+            include: { role: true }
+        });
+
+        if (!staff) {
+            return res.status(401).json({ success: false, message: "İstifadəçi tapılmadı" });
+        }
+
+        const roleName = staff.role?.name?.toLowerCase();
+        if (roleName !== "superadmin") {
+            return res.status(403).json({ 
+                success: false, 
+                message: "Bu əməliyyat üçün icazəniz yoxdur. Yalnız Super Admin bütün barkodları dəyişə bilər." 
+            });
+        }
+
+        const products = await prisma.product.findMany({ select: { id: true, barcode: true } });
+        
+        const usedBarcodes = new Set();
+        const updates = [];
+
+        for (const prod of products) {
+            let newBarcode;
+            do {
+                const randomPart = Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
+                newBarcode = `2000006${randomPart}`;
+            } while (usedBarcodes.has(newBarcode));
+            usedBarcodes.add(newBarcode);
+            
+            updates.push(
+                prisma.product.update({
+                    where: { id: prod.id },
+                    data: { barcode: newBarcode }
+                })
+            );
+        }
+
+        const chunkSize = 500;
+        for (let i = 0; i < updates.length; i += chunkSize) {
+            const chunk = updates.slice(i, i + chunkSize);
+            await prisma.$transaction(chunk);
+        }
+
+        return res.status(200).json({ success: true, message: `Bütün ${updates.length} məhsulun barkodu təsadüfi (random) olaraq yenidən təyin edildi!` });
+    } catch (error) {
+        console.error("bulkAssignBarcodes error", error);
+        return res.status(500).json({ success: false, message: "Barkodlar təyin edilərkən xəta baş verdi" });
+    }
+};
+
