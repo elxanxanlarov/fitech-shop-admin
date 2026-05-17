@@ -9,11 +9,13 @@ import { ReceptionSidebarData } from './data/sidebar-data/ReceptionSidebarData'
 import { AuthProvider } from './context/AuthContext'
 import { BranchProvider } from './context/BranchContext'
 import SyncCenter from './pages/SyncCenter'
+import GlobalBarcodeScanner from './components/ismayilli/GlobalBarcodeScanner'
 
 export default function App() {
   return (
     <AuthProvider>
       <BranchProvider>
+        <GlobalBarcodeScanner />
         <Routes>
           <Route path="/dashboard/login" element={<Login />} />
 

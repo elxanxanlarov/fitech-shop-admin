@@ -34,7 +34,8 @@ export const getAllStockMovements = async (req, res) => {
                         name: true,
                         surName: true
                     }
-                }
+                },
+                branch: true
             },
             orderBy: {
                 createdAt: 'desc'

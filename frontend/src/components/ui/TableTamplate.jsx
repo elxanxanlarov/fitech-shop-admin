@@ -933,7 +933,7 @@ export default function TableTamplate({
             {paginatedData.map((item) => (
               <tr
                 key={item.id}
-                className={`hover:bg-gray-50 ${onEdit || onView || showBulkActions ? 'cursor-pointer' : ''} ${selectedRows.includes(item.id) ? 'bg-blue-50' : ''}`}
+                className={`hover:bg-gray-50 group ${onEdit || onView || showBulkActions ? 'cursor-pointer' : ''} ${selectedRows.includes(item.id) ? 'bg-blue-50' : ''}`}
                 onClick={(e) => handleRowClick(item, e)}
               >
                 {showBulkActions && (

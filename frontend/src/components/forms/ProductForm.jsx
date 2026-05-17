@@ -3,7 +3,7 @@ import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Input from '../ui/Input';
 import Alert from '../ui/Alert';
-import { MdInventory, MdDescription, MdImage, MdAttachMoney, MdLocalOffer, MdQrCode, MdStorage, MdCloudUpload, MdAdd, MdRemove, MdEdit, MdHistory } from 'react-icons/md';
+import { MdInventory, MdDescription, MdImage, MdAttachMoney, MdLocalOffer, MdQrCode, MdStorage, MdCloudUpload, MdAdd, MdRemove, MdEdit, MdHistory, MdShoppingCart } from 'react-icons/md';
 import { productApi, uploadApi, categoryApi, subCategoryApi, branchApi, authApi } from '../../api';
 import { createInputChangeHandler } from '../../utils/validation';
 import SearchDropdown from '../ui/SearchDropdown';
@@ -72,8 +72,10 @@ export default function ProductForm() {
     const [subCategories, setSubCategories] = useState([]);
     const [loadingCategories, setLoadingCategories] = useState(false);
     const [showStockHistoryModal, setShowStockHistoryModal] = useState(false);
+    const [historyTab, setHistoryTab] = useState('movements');
     const [existingProducts, setExistingProducts] = useState([]);
     const [loadingProducts, setLoadingProducts] = useState(false);
+    const [branchSettings, setBranchSettings] = useState({ showPurchasePrice: true });
 
     // Validation hook
     const { validateForm } = useProductFormValidation(formData, setErrors);
@@ -304,6 +306,28 @@ export default function ProductForm() {
         };
         fetchProducts();
     }, [isEditMode, formData.branchId]);
+
+    // Fetch branch settings
+    useEffect(() => {
+        const fetchBranchSettings = async () => {
+            const bId = formData.branchId || selectedBranchId;
+            if (bId && bId !== 'central') {
+                try {
+                    const response = await branchApi.getById(bId);
+                    if (response.success && response.data) {
+                        setBranchSettings({
+                            showPurchasePrice: response.data.showPurchasePrice !== false
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error fetching branch settings:', error);
+                }
+            } else {
+                setBranchSettings({ showPurchasePrice: true });
+            }
+        };
+        fetchBranchSettings();
+    }, [formData.branchId, selectedBranchId]);
 
     // Fetch subcategories when category changes
     const fetchSubCategories = async (categoryId) => {
@@ -547,13 +571,41 @@ export default function ProductForm() {
 
     return (
         <div className="p-6 max-w-4xl mx-auto">
-            <div className="mb-6">
-                <h1 className="text-2xl font-bold text-gray-900">
-                    {isEditMode ? (t('edit_product') || 'Məhsul Məlumatlarını Redaktə Et') : (t('new_product') || 'Yeni Məhsul')}
-                </h1>
-                <p className="text-gray-600 mt-1">
-                    {isEditMode ? (t('edit_product_description') || 'Məhsul məlumatlarını yeniləyin') : (t('new_product_description') || 'Məhsul məlumatlarını daxil edin')}
-                </p>
+            <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-900">
+                        {isEditMode ? (t('edit_product') || 'Məhsul Məlumatlarını Redaktə Et') : (t('new_product') || 'Yeni Məhsul')}
+                    </h1>
+                    <p className="text-gray-600 mt-1">
+                        {isEditMode ? (t('edit_product_description') || 'Məhsul məlumatlarını yeniləyin') : (t('new_product_description') || 'Məhsul məlumatlarını daxil edin')}
+                    </p>
+                </div>
+                {isEditMode && (
+                    <div className="flex gap-2">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setHistoryTab('movements');
+                                setShowStockHistoryModal(true);
+                            }}
+                            className="px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors flex items-center gap-2 shadow-sm"
+                        >
+                            <MdHistory className="w-5 h-5" />
+                            {t('stock_history') || 'Stok Tarixçəsi'}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setHistoryTab('sales');
+                                setShowStockHistoryModal(true);
+                            }}
+                            className="px-4 py-2 text-sm font-medium text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors flex items-center gap-2 shadow-sm"
+                        >
+                            <MdShoppingCart className="w-5 h-5" />
+                            {t('sales_history') || 'Satış Tarixçəsi'}
+                        </button>
+                    </div>
+                )}
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-8">
@@ -587,6 +639,7 @@ export default function ProductForm() {
                     formData={formData}
                     errors={errors}
                     onInputChange={handleInputChange}
+                    showPurchasePrice={branchSettings.showPurchasePrice}
                 />
 
                 {/* Unit Type Information */}
@@ -618,7 +671,10 @@ export default function ProductForm() {
                     onStockNoteChange={setStockNote}
                     onStockMovementTypeChange={setStockMovementType}
                     onStockMovement={handleStockMovement}
-                    onShowHistoryModal={() => setShowStockHistoryModal(true)}
+                    onShowHistoryModal={(tab) => {
+                        setHistoryTab(tab || 'movements');
+                        setShowStockHistoryModal(true);
+                    }}
                 />
 
                 {/* Form Actions */}
@@ -658,6 +714,7 @@ export default function ProductForm() {
                     onClose={() => setShowStockHistoryModal(false)}
                     productId={id}
                     product={formData}
+                    initialTab={historyTab}
                 />
             )}
         </div>

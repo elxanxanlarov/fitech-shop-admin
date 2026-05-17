@@ -38,19 +38,30 @@ export const getStaffColumns = (t, language = 'az') => [
             let roleName = item.role?.name || value || 'Staff';
             const isBoss = item.isBoss === true;
 
-            if (roleName.toLowerCase() === 'admin' && isBoss) {
+            const rname = roleName.toLowerCase();
+            if (rname === 'ismayilliadmin') {
+                roleName = 'Admin (İsmayıllı)';
+            } else if (rname === 'ismayilliseller') {
+                roleName = 'Satışçı (İsmayıllı)';
+            } else if (rname === 'admin' && isBoss) {
                 roleName = t('head_admin_short') || 'Baş Admin';
             }
+
+            let badgeClass = 'bg-green-100 text-green-800';
+            const rl = roleName.toLowerCase();
+            if (rl.includes('ismayıllı')) {
+                badgeClass = rl.includes('admin') ? 'bg-amber-100 text-amber-800' : 'bg-purple-100 text-purple-800';
+            } else if (rl === 'admin' || rl === 'baş admin' || roleName === (t('head_admin_short') || 'Baş Admin')) {
+                badgeClass = 'bg-red-100 text-red-800';
+            } else if (rl === 'reception') {
+                badgeClass = 'bg-blue-100 text-blue-800';
+            }
+
             return (
                 <div className="flex flex-col gap-1">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${roleName === (t('head_admin_short') || 'Baş Admin') || roleName.toLowerCase() === 'admin' || roleName === 'Admin' ? 'bg-red-100 text-red-800' :
-                        roleName.toLowerCase() === 'reception' || roleName === 'Reception' ? 'bg-blue-100 text-blue-800' :
-                            roleName.toLowerCase() === 'manager' || roleName === 'Manager' ? 'bg-purple-100 text-purple-800' :
-                                'bg-green-100 text-green-800'
-                        }`}>
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${badgeClass}`}>
                         {roleName}
                     </span>
-
                 </div>
             );
         }
@@ -63,6 +74,18 @@ export const getStaffColumns = (t, language = 'az') => [
                 {item.branch?.name || '-'}
             </span>
         )
+    },
+    {
+        key: 'store',
+        label: t('store') || 'Mağaza',
+        render: (value, item) => {
+            const storeName = item.store === 'ISMAYILLI' ? 'İsmayıllı' : 'Fitech';
+            return (
+                <span className="text-sm font-medium text-purple-600">
+                    {storeName}
+                </span>
+            );
+        }
     },
     {
         key: 'status',

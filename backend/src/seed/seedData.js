@@ -12,6 +12,8 @@ export const seedData = async () => {
       { name: "superadmin", isCore: true },
       { name: "admin", isCore: true },
       { name: "reception", isCore: true },
+      { name: "ismayilliadmin", isCore: true },
+      { name: "ismayilliseller", isCore: true },
     ];
 
     for (const roleData of roles) {

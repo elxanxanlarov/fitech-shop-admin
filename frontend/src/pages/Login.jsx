@@ -14,11 +14,18 @@ export default function Login() {
 
     // Əgər artıq login olubsa (token varsa), admin səhifəsinə yönləndir
     useEffect(() => {
-        const token = sessionStorage.getItem('token');
-        if (token) {
-            navigate('/admin/staff');
+        if (!auth.loading && auth.user) {
+            if (auth.user.store === 'ISMAYILLI') {
+                navigate('/admin/ismayilli-products');
+            } else if (auth.user.role?.name?.toLowerCase() === 'superadmin' || auth.user.role?.name?.toLowerCase() === 'admin') {
+                navigate('/admin/staff');
+            } else if (auth.user.role?.name?.toLowerCase() === 'reception') {
+                navigate('/reception/sales');
+            } else {
+                navigate('/');
+            }
         }
-    }, [navigate]);
+    }, [auth.user, auth.loading, navigate]);
 
     const [formData, setFormData] = useState({
         email: '',
@@ -82,6 +89,12 @@ export default function Login() {
                 if (meResponse.success && meResponse.data) {
                     // AuthContext-də login funksiyasını çağır
                     auth.login(meResponse.data);
+
+                    // Store-a görə İsmayıllı yönləndirməsi
+                    if (meResponse.data.store === 'ISMAYILLI') {
+                        navigate('/admin/ismayilli-products');
+                        return;
+                    }
 
                     // Role məlumatını al
                     const roleName = meResponse.data.role?.name?.toLowerCase();

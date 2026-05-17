@@ -168,6 +168,7 @@
   "clear_filter": "Filteri təmizlə",
   "branch": "Filial",
   "select_branch": "Filial seçin",
-  "branch_change_info": "Filial dəyişdirildikdə seçilmiş məhsullar sıfırlanacaq."
+  "branch_change_info": "Filial dəyişdirildikdə seçilmiş məhsullar sıfırlanacaq.",
+  "sales_history": "Satış Tarixçəsi"
 }
 

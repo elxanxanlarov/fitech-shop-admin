@@ -34,10 +34,8 @@ function requesterCanPickAnyBranch(requester) {
 
 export const getAllStaff = async (req, res) => {
     try {
-      const { branchId } = req.query;
+      const { branchId, store } = req.query;
       const where = {};
-
-      // Filiallar artıq avtomatik sığortalanmır və işçilər köçürülmür.
 
       await stripBranchFromPrivilegedStaff();
 
@@ -45,6 +43,12 @@ export const getAllStaff = async (req, res) => {
           where: { id: req.staffId },
           include: { role: true },
       });
+
+      if (requester?.store === 'ISMAYILLI') {
+          where.store = 'ISMAYILLI';
+      } else if (store) {
+          where.store = store;
+      }
 
       const canSeeAll = requesterCanPickAnyBranch(requester);
 
@@ -138,7 +142,7 @@ export const createStaff = async (req, res) => {
     try {
         const { 
             name, surName, phone, email, password, roleId, branchId, isActive, isBoss,
-            allowedStartHour, allowedEndHour 
+            allowedStartHour, allowedEndHour, store 
         } = req.body;
         if (!name || !surName) {
             return res.status(400).json({
@@ -189,6 +193,7 @@ export const createStaff = async (req, res) => {
             isBoss: bossFlag,
             allowedStartHour: allowedStartHour !== undefined ? parseInt(allowedStartHour) : 9,
             allowedEndHour: allowedEndHour !== undefined ? parseInt(allowedEndHour) : 21,
+            store: store || "FITECH",
           }
         });
 
@@ -211,7 +216,8 @@ export const createStaff = async (req, res) => {
                     isActive: newStaff.isActive,
                     isBoss: newStaff.isBoss,
                     allowedStartHour: newStaff.allowedStartHour,
-                    allowedEndHour: newStaff.allowedEndHour
+                    allowedEndHour: newStaff.allowedEndHour,
+                    store: newStaff.store
                 }
             });
         } catch (logError) {
@@ -239,7 +245,7 @@ export const updateStaff = async (req, res) => {
         const { id } = req.params;
         const { 
             name, surName, phone, email, password, roleId, branchId, isActive, isBoss,
-            allowedStartHour, allowedEndHour 
+            allowedStartHour, allowedEndHour, store 
         } = req.body;
         
         const existingStaff = await prisma.staff.findUnique({
@@ -330,6 +336,7 @@ export const updateStaff = async (req, res) => {
             isBoss: effectiveIsBoss,
             allowedStartHour: allowedStartHour !== undefined ? parseInt(allowedStartHour) : existingStaff.allowedStartHour,
             allowedEndHour: allowedEndHour !== undefined ? parseInt(allowedEndHour) : existingStaff.allowedEndHour,
+            store: store !== undefined ? store : existingStaff.store,
           }
         });
 
@@ -346,6 +353,7 @@ export const updateStaff = async (req, res) => {
             if (isBoss !== undefined && isBoss !== existingStaff.isBoss) changes.isBoss = { old: existingStaff.isBoss, new: updated.isBoss };
             if (allowedStartHour !== undefined && parseInt(allowedStartHour) !== existingStaff.allowedStartHour) changes.allowedStartHour = { old: existingStaff.allowedStartHour, new: updated.allowedStartHour };
             if (allowedEndHour !== undefined && parseInt(allowedEndHour) !== existingStaff.allowedEndHour) changes.allowedEndHour = { old: existingStaff.allowedEndHour, new: updated.allowedEndHour };
+            if (store !== undefined && store !== existingStaff.store) changes.store = { old: existingStaff.store, new: updated.store };
             if (password !== undefined) changes.password = { changed: true };
 
             await createActivityLog({

@@ -494,7 +494,7 @@ export const updateTransferStatus = async (req, res) => {
 // Bütün transferləri gətir
 export const getAllTransfers = async (req, res) => {
     try {
-        const { toBranchId, fromBranchId, branchId, status } = req.query;
+        const { toBranchId, fromBranchId, branchId, status, productId } = req.query;
         const where = {};
         if (toBranchId) where.toBranchId = toBranchId;
         if (fromBranchId) where.fromBranchId = fromBranchId;
@@ -505,6 +505,14 @@ export const getAllTransfers = async (req, res) => {
                 { toBranchId: branchId },
                 { fromBranchId: branchId }
             ];
+        }
+
+        if (productId) {
+            where.items = {
+                some: {
+                    productId: productId
+                }
+            };
         }
 
         const transfers = await prisma.stocktransfer.findMany({
@@ -528,9 +536,22 @@ export const getAllTransfers = async (req, res) => {
                 createdAt: 'desc'
             }
         });
+        const formattedTransfers = transfers.map(t => {
+            const result = { ...t };
+            if (productId) {
+                const item = t.items.find(i => i.productId === productId);
+                if (item) {
+                    result.quantity = item.quantity;
+                    result.fullBoxes = item.fullBoxes;
+                    result.openedBoxQuantity = item.openedBoxQuantity;
+                }
+            }
+            return result;
+        });
+
         return res.status(200).json({
             success: true,
-            data: transfers
+            data: formattedTransfers
         });
     } catch (error) {
         console.error("getAllTransfers error", error);

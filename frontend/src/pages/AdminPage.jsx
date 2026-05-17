@@ -38,6 +38,11 @@ import DeletedElements from "../components/panel/DeletedElements.jsx"
 import ProductBranchTransfer from "../components/panel/ProductBranchTransfer.jsx"
 import BranchDeletedProducts from "../components/panel/BranchDeletedProducts.jsx"
 import SalesLedger from "../components/panel/SalesLedger.jsx"
+import IsmayilliProducts from "../components/ismayilli/IsmayilliProducts.jsx"
+import IsmayilliSales from "../components/ismayilli/IsmayilliSales.jsx"
+import IsmayilliStatistics from "../components/ismayilli/IsmayilliStatistics.jsx"
+import IsmayilliStaff from "../components/ismayilli/IsmayilliStaff.jsx"
+import IsmayilliBarcodeGenerator from "../components/ismayilli/IsmayilliBarcodeGenerator.jsx"
 
 
 export default function AdminPanel() {
@@ -91,6 +96,13 @@ export default function AdminPanel() {
             {slug === "profile" && <Profile />}
             {slug === "branch-deleted-products" && <BranchDeletedProducts />}
             {slug === "sales-ledger" && <SalesLedger />}
+            
+            {/* Ismayilli Panels */}
+            {slug === "ismayilli-products" && <IsmayilliProducts />}
+            {slug === "ismayilli-sales" && <IsmayilliSales />}
+            {slug === "ismayilli-statistics" && <IsmayilliStatistics />}
+            {slug === "ismayilli-staff" && <IsmayilliStaff />}
+            {slug === "ismayilli-barcode-generator" && <IsmayilliBarcodeGenerator />}
         </div>
     )
 }

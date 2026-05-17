@@ -1,4 +1,5 @@
 import { FiHome, FiLogOut, FiChevronsLeft, FiChevronsRight } from "react-icons/fi"
+import { MdShoppingCart, MdPointOfSale, MdBarChart, MdPeople, MdQrCode } from "react-icons/md"
 import { Link, NavLink } from "react-router-dom"
 import { useClickOutside } from "../../hooks"
 import { useTranslation } from "react-i18next"
@@ -16,6 +17,43 @@ const Sidebar = ({ sidebarData, onItemClick, collapsed, onToggleCollapse, isMobi
   const { user: currentUser } = useAuth();
   const { logout: authLogout } = useAuth();
   const [transferCount, setTransferCount] = useState(0);
+
+  const isIsmayilli = currentUser?.store === 'ISMAYILLI';
+
+  const activeSidebarData = isIsmayilli
+    ? [
+        {
+          title: 'ismayilli_products',
+          label: 'Məhsullar (İsmayıllı)',
+          path: '/admin/ismayilli-products',
+          icon: <MdShoppingCart />,
+        },
+        {
+          title: 'ismayilli_sales',
+          label: 'Satış (İsmayıllı)',
+          path: '/admin/ismayilli-sales',
+          icon: <MdPointOfSale />,
+        },
+        {
+          title: 'ismayilli_barcode_generator',
+          label: 'Ştrixkod Yaradıcı',
+          path: '/admin/ismayilli-barcode-generator',
+          icon: <MdQrCode />,
+        },
+        {
+          title: 'ismayilli_statistics',
+          label: 'Statistika (İsmayıllı)',
+          path: '/admin/ismayilli-statistics',
+          icon: <MdBarChart />,
+        },
+        {
+          title: 'ismayilli_staff',
+          label: 'İşçilər (İsmayıllı)',
+          path: '/admin/ismayilli-staff',
+          icon: <MdPeople />,
+        }
+      ]
+    : sidebarData;
 
   useEffect(() => {
     const fetchTransferCount = async () => {
@@ -80,7 +118,7 @@ const Sidebar = ({ sidebarData, onItemClick, collapsed, onToggleCollapse, isMobi
       </div>
 
       <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto custom-scrollbar">
-        {sidebarData.filter(item => {
+        {activeSidebarData.filter(item => {
           if (!item.requiredRole) return true;
           const userRole = currentUser?.role?.name?.toUpperCase();
           return userRole === item.requiredRole.toUpperCase();
@@ -92,7 +130,7 @@ const Sidebar = ({ sidebarData, onItemClick, collapsed, onToggleCollapse, isMobi
               key={index}
               to={item.path}
               onClick={onItemClick}
-              title={t(item.title)}
+              title={item.label || t(item.title)}
               className={({ isActive }) =>
                 `group flex items-center ${collapsed ? 'justify-center px-0 h-12 w-12 mx-auto' : 'justify-start px-4 h-12'
                 } rounded-xl cursor-pointer transition-all duration-200 relative ${isActive
@@ -105,7 +143,7 @@ const Sidebar = ({ sidebarData, onItemClick, collapsed, onToggleCollapse, isMobi
                 {item.icon}
               </span>
               <span className={`font-semibold text-sm transition-all duration-200 ${collapsed ? 'hidden' : 'block'}`}>
-                {t(item.title)}
+                {item.label || t(item.title)}
               </span>
               
               {hasBadge && (

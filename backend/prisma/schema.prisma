@@ -47,6 +47,11 @@ enum transferstatus {
   SHIPPED
 }
 
+enum storetype {
+  FITECH
+  ISMAYILLI
+}
+
 // === MODELS ===
 
 model role {
@@ -390,6 +395,7 @@ model staff {
   transfers             stocktransfer[]
   allowedStartHour      Int             @default(9)
   allowedEndHour        Int             @default(21)
+  store                 storetype       @default(FITECH)
   createdAt             DateTime        @default(now())
   updatedAt             DateTime        @updatedAt
 
@@ -457,6 +463,7 @@ model branch {
   address         String?
   phone           String?
   isActive        Boolean         @default(true)
+  showPurchasePrice Boolean        @default(true)
   deleteType      deletetype      @default(NONE)
   stocks          branchstock[]
   transfersFrom   stocktransfer[] @relation("transferfrom")
@@ -538,5 +545,75 @@ model BranchDeletedProduct {
 
   @@unique([branchId, productId])
   @@map("branch_deleted_product")
+}
+
+// ============================================================
+// === İSMAYILLI MAĞAZA MODELLƏRİ ===
+// ============================================================
+
+/// İsmayıllı mağazası üçün kateqoriyalar
+/// Excel-dəki qalın başlıqlar (GEYIM, ƏTİR, XIRDAVAT və s.)
+model IsmayilliShopCategory {
+  id        String                  @id @default(uuid())
+  name      String                  @unique // Kateqoriyanın adı (məs. "GEYIM", "ƏTİR", "XIRDAVAT")
+  isActive  Boolean                 @default(true)
+  products  IsmayilliMagazaProduct[]
+  createdAt DateTime                @default(now())
+  updatedAt DateTime                @updatedAt
+
+  @@map("ismayilli_shop_category")
+}
+
+/// İsmayıllı mağazası üçün məhsullar
+/// Excel-dəki hər sətir bir məhsulu təmsil edir
+model IsmayilliMagazaProduct {
+  id                 String                @id @default(uuid())
+  excelId            Int?                  // Excel-dəki orijinal sıra nömrəsi (No sütunu, məs. 1, 554, 614)
+  name               String                // Məhsulun adı (Mal sütunu)
+  barcode            String?               @unique // Ştrixkod — hər məhsul üçün unikal, boş da ola bilər
+  quantity           Decimal               @default(0) @db.Decimal(18, 2) // Miqdar (Anbar - Miqdar sütunu)
+  totalPurchasePrice Decimal               @default(0) @db.Decimal(18, 2) // Anbar - "Alış" qiymətinə görə ümumi məbləğ
+  totalSalePrice     Decimal               @default(0) @db.Decimal(18, 2) // Anbar - "Satış" qiymətinə görə ümumi məbləğ
+  unitPricePurchase  Decimal               @default(0) @db.Decimal(18, 2) // "Alış" qiymətinə görə ədəd qiyməti
+  unitPriceSale      Decimal               @default(0) @db.Decimal(18, 2) // "Satış" qiymətinə görə ədəd qiyməti
+  deleteType         deletetype            @default(NONE)
+
+  // Kateqoriya ilə əlaqə
+  categoryId         String
+  category           IsmayilliShopCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  // Satışlar ilə əlaqə
+  saleItems          IsmayilliSaleItem[]
+
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  @@map("ismayilli_magaza_product")
+}
+
+model IsmayilliSale {
+  id           String              @id @default(uuid())
+  totalAmount  Decimal             @db.Decimal(18, 2)
+  paidAmount   Decimal             @db.Decimal(18, 2)
+  note         String?
+  items        IsmayilliSaleItem[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@map("ismayilli_sale")
+}
+
+model IsmayilliSaleItem {
+  id            String                 @id @default(uuid())
+  saleId        String
+  sale          IsmayilliSale          @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId     String
+  product       IsmayilliMagazaProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity      Decimal                @db.Decimal(18, 2)
+  pricePerItem  Decimal                @db.Decimal(18, 2)
+  totalPrice    Decimal                @db.Decimal(18, 2)
+  purchasePrice Decimal                @db.Decimal(18, 2)
+
+  @@map("ismayilli_sale_item")
 }
 

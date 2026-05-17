@@ -1,6 +1,6 @@
 import { Package, DollarSign, Tag, Hash, Maximize } from 'lucide-react';
 
-export const getProductColumns = (t, language = 'az', onScanBarcode) => [
+export const getProductColumns = (t, language = 'az', onScanBarcode, onOpenHistory, showPurchasePrice = true) => [
     {
         key: 'name',
         label: t('name'),
@@ -154,7 +154,7 @@ export const getProductColumns = (t, language = 'az', onScanBarcode) => [
             const fullBoxes = item.fullBoxes || 0;
             const openedBoxQuantity = item.openedBoxQuantity || 0;
             const piecesPerBox = item.piecesPerBox;
-
+ 
             // Əgər qutu tipindədirsə, detallı məlumat göstər
             if (unitType !== 'PIECE' && piecesPerBox && piecesPerBox > 0) {
                 const unitTypeLabels = {
@@ -182,7 +182,7 @@ export const getProductColumns = (t, language = 'az', onScanBarcode) => [
                     </div>
                 );
             }
-
+ 
             // Ədəd üçün sadə göstərici
             return (
                 <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
@@ -231,5 +231,8 @@ export const getProductColumns = (t, language = 'az', onScanBarcode) => [
             return new Date(value).toLocaleDateString(language === 'az' ? 'az-AZ' : 'en-US');
         }
     }
-];
+].filter(col => {
+    if (col.key === 'purchasePrice' && !showPurchasePrice) return false;
+    return true;
+});
 

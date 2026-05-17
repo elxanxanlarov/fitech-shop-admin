@@ -185,42 +185,53 @@ export default function ProductBranchTransfer() {
     };
 
     const updateItemQuantity = (index, field, value) => {
-        const newItems = [...formData.items];
-        const item = { ...newItems[index] };
-        const ppb = item.piecesPerBox || 1;
+        setFormData((prev) => {
+            const newItems = [...prev.items];
+            const item = { ...newItems[index] };
+            if (!item) return prev;
+            
+            const ppb = item.piecesPerBox || 1;
 
-        if (field === 'quantity') {
-            const val = Math.max(0, Math.min(parseInt(value, 10) || 0, item.maxStock));
-            item.quantity = val;
-            if (ppb > 1) {
-                item.fullBoxes = Math.floor(val / ppb);
-                item.openedBoxQuantity = val % ppb;
+            if (field === 'quantity') {
+                const val = Math.max(0, Math.min(parseInt(value, 10) || 0, item.maxStock));
+                item.quantity = val;
+                if (ppb > 1) {
+                    item.fullBoxes = Math.floor(val / ppb);
+                    item.openedBoxQuantity = val % ppb;
+                }
+            } else if (field === 'fullBoxes') {
+                const boxes = Math.max(0, parseInt(value, 10) || 0);
+                const pieces = Math.max(0, item.openedBoxQuantity || 0);
+                let newTotal = boxes * ppb + pieces;
+                
+                if (newTotal > item.maxStock) {
+                    newTotal = item.maxStock;
+                }
+                
+                item.quantity = newTotal;
+                if (ppb > 1) {
+                    item.fullBoxes = Math.floor(newTotal / ppb);
+                    item.openedBoxQuantity = newTotal % ppb;
+                }
+            } else if (field === 'openedBoxQuantity') {
+                const maxPieces = ppb - 1;
+                const pieces = Math.max(0, Math.min(parseInt(value, 10) || 0, maxPieces));
+                let newTotal = (item.fullBoxes || 0) * ppb + pieces;
+                
+                if (newTotal > item.maxStock) {
+                    newTotal = item.maxStock;
+                }
+                
+                item.quantity = newTotal;
+                if (ppb > 1) {
+                    item.fullBoxes = Math.floor(newTotal / ppb);
+                    item.openedBoxQuantity = newTotal % ppb;
+                }
             }
-        } else if (field === 'fullBoxes') {
-            const boxes = Math.max(0, parseInt(value, 10) || 0);
-            const pieces = Math.max(0, item.openedBoxQuantity || 0);
-            const newTotal = boxes * ppb + pieces;
-            if (newTotal > item.maxStock) {
-                const maxBoxes = Math.floor((item.maxStock - pieces) / ppb);
-                item.fullBoxes = Math.max(0, maxBoxes);
-            } else {
-                item.fullBoxes = boxes;
-            }
-            item.quantity = item.fullBoxes * ppb + (item.openedBoxQuantity || 0);
-        } else if (field === 'openedBoxQuantity') {
-            const maxPieces = ppb - 1;
-            const pieces = Math.max(0, Math.min(parseInt(value, 10) || 0, maxPieces));
-            const newTotal = (item.fullBoxes || 0) * ppb + pieces;
-            if (newTotal > item.maxStock) {
-                item.openedBoxQuantity = Math.max(0, item.maxStock - (item.fullBoxes || 0) * ppb);
-            } else {
-                item.openedBoxQuantity = pieces;
-            }
-            item.quantity = (item.fullBoxes || 0) * ppb + item.openedBoxQuantity;
-        }
 
-        newItems[index] = item;
-        setFormData({ ...formData, items: newItems });
+            newItems[index] = item;
+            return { ...prev, items: newItems };
+        });
     };
 
     const handleSubmit = async (e) => {
@@ -545,6 +556,8 @@ export default function ProductBranchTransfer() {
                                             const pieces =
                                                 option.piecesPerBox > 1 ? option.stock % option.piecesPerBox : 0;
                                             const hasNoStock = option.stock <= 0;
+                                            const cLabel = containerLabel(option.unitType);
+                                            const uLabel = unitSingular(option.unitType);
 
                                             return (
                                                 <div className="flex justify-between items-center w-full">
@@ -556,10 +569,7 @@ export default function ProductBranchTransfer() {
                                                         </span>
                                                         {option.piecesPerBox > 1 && (
                                                             <span className="text-[10px] text-gray-400">
-                                                                1 {t('BOX') || 'Qutu'} = {option.piecesPerBox}{' '}
-                                                                {option.unitType === 'BOX'
-                                                                    ? t('PIECE') || 'Ədəd'
-                                                                    : t(option.unitType) || option.unitType}
+                                                                1 {cLabel} = {option.piecesPerBox} {uLabel}
                                                             </span>
                                                         )}
                                                     </div>
@@ -571,10 +581,7 @@ export default function ProductBranchTransfer() {
                                                                     : 'bg-teal-50 text-teal-700 border-teal-100'
                                                             }`}
                                                         >
-                                                            {option.stock}{' '}
-                                                            {option.unitType === 'BOX'
-                                                                ? t('PIECE') || 'Ədəd'
-                                                                : t(option.unitType) || option.unitType}
+                                                            {option.stock} {uLabel}
                                                         </span>
                                                         {option.piecesPerBox > 1 && (
                                                             <span
@@ -582,8 +589,8 @@ export default function ProductBranchTransfer() {
                                                                     hasNoStock ? 'text-red-400' : 'text-gray-400'
                                                                 }`}
                                                             >
-                                                                {boxes} {t('BOX') || 'Qutu'}{' '}
-                                                                {pieces > 0 && `${pieces} ${t('PIECE') || 'Ədəd'}`}
+                                                                {boxes} {cLabel}{' '}
+                                                                {pieces > 0 && `${pieces} ${uLabel}`}
                                                             </span>
                                                         )}
                                                     </div>
@@ -629,6 +636,9 @@ export default function ProductBranchTransfer() {
                             <table className="w-full divide-y divide-gray-200">
                                 <thead className="bg-gray-50">
                                     <tr>
+                                        <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase w-10">
+                                            №
+                                        </th>
                                         <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">
                                             {t('product_name')}
                                         </th>
@@ -648,7 +658,7 @@ export default function ProductBranchTransfer() {
                                         item.name.toLowerCase().includes(listSearch.toLowerCase())
                                     ).length === 0 ? (
                                         <tr>
-                                            <td colSpan="4" className="px-6 py-12 text-center text-gray-500">
+                                            <td colSpan="5" className="px-6 py-12 text-center text-gray-500">
                                                 <div className="flex flex-col items-center gap-2">
                                                     <Info className="w-8 h-8 text-gray-300" />
                                                     <p>{formData.items.length === 0 ? t('no_products_added') : t('no_results_found')}</p>
@@ -656,13 +666,17 @@ export default function ProductBranchTransfer() {
                                             </td>
                                         </tr>
                                     ) : (
-                                        formData.items
+                                        [...formData.items]
+                                            .reverse()
                                             .filter(item => item.name.toLowerCase().includes(listSearch.toLowerCase()))
                                             .map((item, index) => {
                                                 // Find real index in original array for updateItemQuantity
-                                                const realIndex = formData.items.findIndex(i => i === item);
+                                                const realIndex = formData.items.findIndex(i => (i.rowId && i.rowId === item.rowId) || (i.productId === item.productId && i.name === item.name));
                                                 return (
                                                     <tr key={item.rowId || item.productId} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-4 py-4 text-xs font-bold text-gray-400">
+                                                            {index + 1}
+                                                        </td>
                                                         <td className="px-6 py-4">
                                                             <div className="font-medium text-gray-900">{item.name}</div>
                                                             {hasContainer(item) && (
@@ -703,32 +717,41 @@ export default function ProductBranchTransfer() {
                                                                 {hasContainer(item) ? (
                                                                     <div className="flex items-center gap-3">
                                                                         <div className="space-y-1">
+                                                                            <div className="text-[10px] text-gray-400 font-bold uppercase ml-1">
+                                                                                {containerLabel(item.unitType)}
+                                                                            </div>
                                                                             <NumericInput
                                                                                 value={item.fullBoxes}
                                                                                 onChange={(val) =>
                                                                                     updateItemQuantity(realIndex, 'fullBoxes', val)
                                                                                 }
                                                                                 min={0}
-                                                                                max={Math.floor(item.maxStock / item.piecesPerBox)}
+                                                                                max={Math.floor((item.maxStock - item.openedBoxQuantity) / item.piecesPerBox)}
                                                                                 size="sm"
                                                                                 className="w-24 text-center"
                                                                             />
                                                                         </div>
                                                                         <div className="text-gray-300 font-bold text-sm mt-4">+</div>
                                                                         <div className="space-y-1">
+                                                                            <div className="text-[10px] text-gray-400 font-bold uppercase ml-1">
+                                                                                {unitSingular(item.unitType)} (Açıq)
+                                                                            </div>
                                                                             <NumericInput
                                                                                 value={item.openedBoxQuantity}
                                                                                 onChange={(val) =>
                                                                                     updateItemQuantity(realIndex, 'openedBoxQuantity', val)
                                                                                 }
                                                                                 min={0}
-                                                                                max={item.piecesPerBox - 1}
+                                                                                max={Math.min(item.piecesPerBox - 1, item.maxStock - (item.fullBoxes * item.piecesPerBox))}
                                                                                 size="sm"
                                                                                 className="w-24 text-center"
                                                                             />
                                                                         </div>
-                                                                        <div className="mt-4 text-[10px] text-teal-600 font-black whitespace-nowrap bg-teal-50 px-2 py-1 rounded">
-                                                                            {item.quantity}
+                                                                        <div className="mt-4 flex flex-col items-center">
+                                                                            <div className="text-[9px] text-teal-400 font-black uppercase mb-0.5">{t('total') || 'Cəm'}</div>
+                                                                            <div className="text-[10px] text-teal-600 font-black whitespace-nowrap bg-teal-50 px-2 py-1 rounded border border-teal-100">
+                                                                                {item.quantity}
+                                                                            </div>
                                                                         </div>
                                                                     </div>
                                                                 ) : (

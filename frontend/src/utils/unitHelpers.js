@@ -30,7 +30,7 @@ export function unitSingular(unitType) {
 export function containerLabel(unitType) {
     switch (unitType) {
         case 'BOX':       return 'Qutu';
-        case 'METER':     return 'Rulon';
+        case 'METER':     return 'Paket';
         case 'LITER':     return 'Şüşə';
         case 'KILOGRAM':  return 'Çuval';
         default:          return 'Paket';
@@ -95,7 +95,7 @@ export function formatStockShort(count, unitType, piecesPerBox) {
     };
     const SHORT_CONTAINER = {
         BOX:      'qu.',
-        METER:    'rul.',
+        METER:    'pak.',
         LITER:    'şüş.',
         KILOGRAM: 'çuv.',
     };

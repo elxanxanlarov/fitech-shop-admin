@@ -6,7 +6,8 @@ import { MdAttachMoney, MdLocalOffer } from 'react-icons/md';
 export default function ProductPricing({
     formData,
     errors,
-    onInputChange
+    onInputChange,
+    showPurchasePrice = true
 }) {
     const { t } = useTranslation('product');
 
@@ -19,17 +20,19 @@ export default function ProductPricing({
                     {t('price_info') || 'Qiymət Məlumatları'}
                 </h3>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <Input
-                        label={t('purchase_price')}
-                        type="text"
-                        value={formData.purchasePrice}
-                        onChange={(e) => onInputChange('purchasePrice', e.target.value)}
-                        error={errors.purchasePrice}
-                        placeholder="0.00"
-                        icon={<MdAttachMoney />}
-                        required
-                    />
+                <div className={`grid grid-cols-1 ${showPurchasePrice ? 'md:grid-cols-2' : ''} gap-6`}>
+                    {showPurchasePrice && (
+                        <Input
+                            label={t('purchase_price')}
+                            type="text"
+                            value={formData.purchasePrice}
+                            onChange={(e) => onInputChange('purchasePrice', e.target.value)}
+                            error={errors.purchasePrice}
+                            placeholder="0.00"
+                            icon={<MdAttachMoney />}
+                            required
+                        />
+                    )}
 
                     <Input
                         label={t('sale_price')}

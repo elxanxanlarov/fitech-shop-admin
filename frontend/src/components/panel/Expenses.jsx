@@ -5,7 +5,7 @@ import TableTemplate from '../ui/TableTamplate';
 import Alert from '../ui/Alert';
 import { Edit, Trash2, Eye, Plus, ShoppingBag, TrendingDown } from 'lucide-react';
 import { expenseApi } from '../../api';
-import { useLocalStorage, useBranch } from '../../hooks';
+import { useBranch } from '../../hooks';
 
 export default function Expenses() {
     const { t } = useTranslation('expense');
@@ -22,8 +22,8 @@ export default function Expenses() {
         return { start: localToday, end: localToday };
     }, []);
 
-    const [dateRange, setDateRange] = useLocalStorage('expense_dateRange', defaultDateRange);
-    const [datePreset, setDatePreset] = useLocalStorage('expense_datePreset', 'today');
+    const [dateRange, setDateRange] = useState(defaultDateRange);
+    const [datePreset, setDatePreset] = useState('today');
     const isAdmin = useMemo(() => location.pathname.includes('/admin'), [location.pathname]);
 
     const columns = useMemo(() => [

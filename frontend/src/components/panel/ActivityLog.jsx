@@ -15,7 +15,7 @@ import {
   User,
   FileText
 } from 'lucide-react';
-import { useLocalStorage, useBranch } from '../../hooks';
+import { useBranch } from '../../hooks';
 
 export default function ActivityLog() {
   const { t } = useTranslation('activityLog');
@@ -27,7 +27,7 @@ export default function ActivityLog() {
   const [staffList, setStaffList] = useState([]);
 
   // Filters
-  const [filters, setFilters] = useLocalStorage('activityLog_filters', {
+  const [filters, setFilters] = useState({
     staffId: '',
     entityType: '',
     action: '',

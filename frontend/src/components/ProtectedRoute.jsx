@@ -26,14 +26,20 @@ const ProtectedRoute = ({ children, requiredRole }) => {
   // Xüsusi rol tələbi varsa yoxla
   if (requiredRole && roleName !== requiredRole.toUpperCase()) {
     // Əgər tələb olunan rolu yoxdursa, geri (və ya başqa yerə) at
-    return <Navigate to={roleName === 'RECEPTION' ? "/reception/sales" : "/admin/statistics"} replace />;
+    let redirectPath = "/admin/statistics";
+    if (roleName === 'RECEPTION') {
+      redirectPath = "/reception/sales";
+    } else if (user.store === 'ISMAYILLI') {
+      redirectPath = "/admin/ismayilli-products";
+    }
+    return <Navigate to={redirectPath} replace />;
   }
 
   const isAdminPath = location.pathname.startsWith('/admin');
   const isReceptionPath = location.pathname.startsWith('/reception');
 
   // Rola görə giriş icazəsi yoxlaması (Middleware)
-  if (isAdminPath && !(roleName === 'ADMIN' || roleName === 'SUPERADMIN')) {
+  if (isAdminPath && !(roleName === 'ADMIN' || roleName === 'SUPERADMIN' || roleName === 'ISMAYILLIADMIN' || roleName === 'ISMAYILLISELLER')) {
     // Əgər admin yolundadırsa amma admin deyilsə, reception-a at
     return <Navigate to="/reception/sales" replace />;
   }

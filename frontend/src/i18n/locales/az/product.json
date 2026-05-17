@@ -249,5 +249,8 @@
   "fill_required_fields": "Zəhmət olmasa tələb olunan sahələri doldurun (Ad, Alış və Satış qiyməti)",
   "saving": "Yadda saxlanılır...",
   "scan": "Skan et",
-  "barcode_updated_success": "Barkod uğurla yeniləndi"
+  "barcode_updated_success": "Barkod uğurla yeniləndi",
+  "stock_history": "Stok Tarixçəsi",
+  "sales_history": "Satış Tarixçəsi",
+  "stock_transfers": "Stok Transferləri"
 }

@@ -1,41 +1,76 @@
-import React, { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, Package, ShoppingCart, Undo } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import { TrendingUp, TrendingDown, Package, ShoppingCart, Undo, Send, Info, Activity } from 'lucide-react';
 import ModalLayout from '../ui/ModalLayout';
-import { stockApi, productApi } from '../../api';
+import { stockApi, productApi, branchApi, stockTransferApi } from '../../api';
+import { useBranch } from '../../context/BranchContext';
+import { useAuth } from '../../context/AuthContext';
+import Alert from '../ui/Alert';
 
-export default function ProductStockHistoryModal({ isOpen, onClose, productId, product }) {
+export default function ProductStockHistoryModal({ isOpen, onClose, productId, product, initialTab = 'details' }) {
+    const { t } = useTranslation(['product', 'sale']);
     const [loading, setLoading] = useState(false);
     const [stockMovements, setStockMovements] = useState([]);
     const [sales, setSales] = useState([]);
     const [returns, setReturns] = useState([]);
-    const [activeTab, setActiveTab] = useState('all'); // 'all', 'movements', 'sales', 'returns'
+    const [transfers, setTransfers] = useState([]);
+    const [branches, setBranches] = useState([]);
+    const [activeTab, setActiveTab] = useState(initialTab || 'details'); // 'details', 'movements', 'sales', 'returns', 'transfers', 'all'
+    const { selectedBranchId } = useBranch();
+    const { user } = useAuth();
+
+    // Müəyyən edirik ki, hansı filialın məlumatlarını göstərməliyik
+    // Əgər istifadəçinin xüsusi təyin olunmuş filialı varsa (branchId), onu istifadə edirik, 
+    // yoxdursa (superadmin), seçilmiş filialı istifadə edirik.
+    const effectiveBranchId = user?.branchId || selectedBranchId;
+
+    // Transfer Form State
+    const [transferTargetBranchId, setTransferTargetBranchId] = useState('');
+    const [transferQuantity, setTransferQuantity] = useState('');
+    const [transferBoxes, setTransferBoxes] = useState('');
+    const [transferPieces, setTransferPieces] = useState('');
+    const [transferNote, setTransferNote] = useState('');
+    const [processingTransfer, setProcessingTransfer] = useState(false);
 
     useEffect(() => {
         if (isOpen && productId) {
             fetchHistory();
+            if (initialTab) setActiveTab(initialTab);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isOpen, productId]);
+    }, [isOpen, productId, initialTab]);
 
     const fetchHistory = async () => {
         setLoading(true);
         try {
-            // Stok hərəkətləri (staff məlumatı ilə)
+            // Stok hərəkətləri
             const stockResponse = await stockApi.getAll(productId);
             if (stockResponse.success) {
                 setStockMovements(stockResponse.date || stockResponse.data || []);
             }
 
-            // Satışlar - məhsul üçün satış məlumatlarını al
+            // Satışlar
             const salesResponse = await productApi.getSales(productId);
             if (salesResponse.success) {
                 setSales(salesResponse.date || salesResponse.data || []);
             }
 
-            // Qaytarmalar - məhsul üçün qaytarma məlumatlarını al
+            // Qaytarmalar
             const returnsResponse = await productApi.getReturns(productId);
             if (returnsResponse.success) {
                 setReturns(returnsResponse.date || returnsResponse.data || []);
+            }
+
+            // Transferlər
+            const transfersResponse = await stockTransferApi.getAll({ productId });
+            if (transfersResponse.success) {
+                setTransfers(transfersResponse.data || transfersResponse.date || []);
+            }
+
+            // Filiallar
+            const branchesResponse = await branchApi.getAll();
+            if (branchesResponse.success) {
+                setBranches(branchesResponse.data || branchesResponse.date || []);
             }
         } catch (error) {
             console.error('Error fetching stock history:', error);
@@ -47,60 +82,45 @@ export default function ProductStockHistoryModal({ isOpen, onClose, productId, p
     const formatDate = (dateString) => {
         if (!dateString) return '-';
         const date = new Date(dateString);
+
+        const azMonths = [
+            'Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'İyun',
+            'İyul', 'Avqust', 'Sentyabr', 'Oktyabr', 'Noyabr', 'Dekabr'
+        ];
+
+        const day = date.getDate();
+        const month = azMonths[date.getMonth()];
+        const year = date.getFullYear();
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+
         const now = new Date();
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const yesterday = new Date(today);
         yesterday.setDate(yesterday.getDate() - 1);
         const itemDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-        
-        if (itemDate.getTime() === today.getTime()) {
-            return 'Bu gün ' + date.toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' });
-        } else if (itemDate.getTime() === yesterday.getTime()) {
-            return 'Dünən ' + date.toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' });
-        } else {
-            return date.toLocaleDateString('az-AZ', {
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric'
-            }) + ' ' + date.toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' });
-        }
-    };
 
-    const formatHistoryMessage = (item) => {
-        const unitLabel = product?.unitType === 'PIECE' || !product?.piecesPerBox ? 'ədəd' :
-                         product?.unitType === 'METER' ? 'metr' :
-                         product?.unitType === 'LITER' ? 'litr' :
-                         product?.unitType === 'KILOGRAM' ? 'kq' : 'ədəd';
-        
-        if (item.historyType === 'movement') {
-            const quantity = Math.abs(item.quantity);
-            if (item.type === 'IN') {
-                return `${quantity} ${unitLabel} məhsul əlavə olundu`;
-            } else if (item.type === 'OUT') {
-                return `${quantity} ${unitLabel} məhsul çıxarıldı`;
-            } else {
-                return `${quantity} ${unitLabel} məhsul düzəliş edildi`;
-            }
-        } else if (item.historyType === 'sale') {
-            return `${item.quantity} ${unitLabel} məhsul satıldı`;
-        } else if (item.historyType === 'return') {
-            return `${item.quantity} ${unitLabel} məhsul qaytarıldı`;
+        if (itemDate.getTime() === today.getTime()) {
+            return `Bu gün ${hours}:${minutes}`;
+        } else if (itemDate.getTime() === yesterday.getTime()) {
+            return `Dünən ${hours}:${minutes}`;
+        } else {
+            return `${day} ${month} ${year}, ${hours}:${minutes}`;
         }
-        return '';
     };
 
     const formatQuantity = (quantity, unitType, piecesPerBox) => {
         if (unitType === 'PIECE' || !piecesPerBox) {
             return `${quantity} ədəd`;
         }
-        
+
         const boxes = Math.floor(quantity / piecesPerBox);
         const pieces = quantity % piecesPerBox;
-        const unitLabel = unitType === 'BOX' ? 'ədəd' : 
-                         unitType === 'METER' ? 'metr' : 
-                         unitType === 'LITER' ? 'litr' : 
-                         unitType === 'KILOGRAM' ? 'kq' : 'ədəd';
-        
+        const unitLabel = unitType === 'BOX' ? 'ədəd' :
+            unitType === 'METER' ? 'metr' :
+                unitType === 'LITER' ? 'litr' :
+                    unitType === 'KILOGRAM' ? 'kq' : 'ədəd';
+
         if (boxes > 0 && pieces > 0) {
             return `${boxes} ${unitType === 'BOX' ? 'qutu' : 'paket'} + ${pieces} açıq (${quantity} ${unitLabel})`;
         } else if (boxes > 0) {
@@ -111,19 +131,42 @@ export default function ProductStockHistoryModal({ isOpen, onClose, productId, p
         return `${quantity} ${unitLabel}`;
     };
 
-    const allHistory = [
-        ...stockMovements.map(m => ({ ...m, historyType: 'movement', date: m.createdAt })),
-        ...sales.map(s => ({ 
-            ...s, 
-            historyType: 'sale', 
-            date: s.sale?.createdAt || s.createdAt,
-            sale: s.sale ? { 
-                ...s.sale, 
-                staff: s.sale.staff
-            } : s.sale
-        })),
-        ...returns.map(r => ({ ...r, historyType: 'return', date: r.return?.createdAt || r.createdAt }))
-    ].sort((a, b) => new Date(b.date) - new Date(a.date));
+    // Filtered data based on branch
+    const filteredMovements = useMemo(() => {
+        if (!effectiveBranchId || effectiveBranchId === 'central') return stockMovements;
+        return stockMovements.filter(m => m.branchId === effectiveBranchId);
+    }, [stockMovements, effectiveBranchId]);
+
+    const filteredSales = useMemo(() => {
+        if (!effectiveBranchId || effectiveBranchId === 'central') return sales;
+        return sales.filter(s => s.sale?.branchId === effectiveBranchId);
+    }, [sales, effectiveBranchId]);
+
+    const filteredReturns = useMemo(() => {
+        if (!effectiveBranchId || effectiveBranchId === 'central') return returns;
+        return returns.filter(r => r.return?.branchId === effectiveBranchId);
+    }, [returns, effectiveBranchId]);
+
+    const filteredTransfers = useMemo(() => {
+        if (!effectiveBranchId || effectiveBranchId === 'central') return transfers;
+        // Transfer aid olsun: ya bu filialdan gedib, ya da bu filiala gəlib
+        return transfers.filter(t => t.fromBranchId === effectiveBranchId || t.toBranchId === effectiveBranchId);
+    }, [transfers, effectiveBranchId]);
+
+    const allHistory = useMemo(() => {
+        const history = [
+            ...filteredMovements.map(m => ({ ...m, historyType: 'movement', date: m.createdAt })),
+            ...filteredSales.map(s => ({
+                ...s,
+                historyType: 'sale',
+                date: s.sale?.createdAt || s.createdAt,
+                sale: s.sale ? { ...s.sale, staff: s.sale.staff } : s.sale
+            })),
+            ...filteredReturns.map(r => ({ ...r, historyType: 'return', date: r.return?.createdAt || r.createdAt })),
+            ...filteredTransfers.map(t => ({ ...t, historyType: 'transfer', date: t.createdAt }))
+        ];
+        return history.sort((a, b) => new Date(b.date) - new Date(a.date));
+    }, [filteredMovements, filteredSales, filteredReturns, filteredTransfers]);
 
     const calculateTotalStock = () => {
         if (!product) return 0;
@@ -143,12 +186,12 @@ export default function ProductStockHistoryModal({ isOpen, onClose, productId, p
         const fullBoxes = product.fullBoxes || 0;
         const opened = product.openedBoxQuantity || 0;
         const total = (fullBoxes * product.piecesPerBox) + opened;
-        const unitLabel = product.unitType === 'BOX' ? 'ədəd' : 
-                         product.unitType === 'METER' ? 'metr' : 
-                         product.unitType === 'LITER' ? 'litr' : 
-                         product.unitType === 'KILOGRAM' ? 'kq' : 'ədəd';
+        const unitLabel = product.unitType === 'BOX' ? 'ədəd' :
+            product.unitType === 'METER' ? 'metr' :
+                product.unitType === 'LITER' ? 'litr' :
+                    product.unitType === 'KILOGRAM' ? 'kq' : 'ədəd';
         const boxLabel = product.unitType === 'BOX' ? 'qutu' : 'paket';
-        
+
         if (fullBoxes > 0 && opened > 0) {
             return `${fullBoxes} tam ${boxLabel} + ${opened} açıq (${total} ${unitLabel})`;
         } else if (fullBoxes > 0) {
@@ -159,368 +202,522 @@ export default function ProductStockHistoryModal({ isOpen, onClose, productId, p
         return `0 ${unitLabel}`;
     };
 
+    const handleTransfer = async (e) => {
+        e.preventDefault();
+        
+        if (!transferTargetBranchId) {
+            Alert.error('Xəta!', 'Zəhmət olmasa hədəf filialı seçin');
+            return;
+        }
+
+        const sourceBranchId = (selectedBranchId && selectedBranchId !== 'central') ? selectedBranchId : null;
+        
+        if (sourceBranchId === transferTargetBranchId) {
+            Alert.error('Xəta!', 'Mənbə və hədəf filial eyni ola bilməz');
+            return;
+        }
+
+        let finalQuantity = 0;
+        if (product.unitType === 'PIECE' || !product.piecesPerBox) {
+            if (!transferQuantity || parseInt(transferQuantity) <= 0) {
+                Alert.error('Xəta!', 'Miqdar daxil edilməlidir');
+                return;
+            }
+            finalQuantity = parseInt(transferQuantity);
+        } else {
+            const boxes = parseInt(transferBoxes) || 0;
+            const pieces = parseInt(transferPieces) || 0;
+            if (boxes === 0 && pieces === 0) {
+                Alert.error('Xəta!', 'Miqdar daxil edilməlidir');
+                return;
+            }
+            finalQuantity = (boxes * (product.piecesPerBox || 1)) + pieces;
+        }
+
+        // Cari stoku yoxla
+        const currentStock = calculateTotalStock();
+        if (finalQuantity > currentStock) {
+            Alert.error('Xəta!', `Kifayət qədər stok yoxdur. Cari stok: ${currentStock}`);
+            return;
+        }
+
+        setProcessingTransfer(true);
+        try {
+            const payload = {
+                productId,
+                fromBranchId: sourceBranchId,
+                toBranchId: transferTargetBranchId,
+                quantity: finalQuantity,
+                note: transferNote,
+                status: 'PENDING'
+            };
+
+            const response = await stockTransferApi.create(payload);
+            if (response.success) {
+                Alert.success('Uğurlu!', 'Stok transferi uğurla yaradıldı');
+                setTransferTargetBranchId('');
+                setTransferQuantity('');
+                setTransferBoxes('');
+                setTransferPieces('');
+                setTransferNote('');
+                fetchHistory(); // Tarixçəni yenilə
+                setActiveTab('transfers'); // Transferlər tabına keç
+            }
+        } catch (error) {
+            console.error('Error creating transfer:', error);
+            Alert.error('Xəta!', error.response?.data?.message || 'Transfer zamanı xəta baş verdi');
+        } finally {
+            setProcessingTransfer(false);
+        }
+    };
+
     if (!isOpen) return null;
 
     return (
         <ModalLayout
             isOpen={isOpen}
             onClose={onClose}
-            title={`${product?.name || 'Məhsul'} - Stok Tarixçəsi`}
-            className="w-[80vw] h-[80vh]"
+            title={`${product?.name || t('product:product')} - ${t('product:stock_history')}`}
+            className="w-[80vw] h-[85vh]"
         >
-            <div className="space-y-4 max-h-[calc(80vh-180px)] overflow-y-auto">
+            <div className="space-y-4 max-h-[calc(85vh-180px)] overflow-y-auto pr-2 custom-scrollbar">
                 {/* Current Stock Display */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 shadow-sm">
                     <div className="flex items-center justify-between">
-                        <div>
-                            <div className="text-sm text-gray-600 mb-1">Cari Stok</div>
-                            <div className="text-2xl font-bold text-blue-900">{formatStockDisplay()}</div>
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                                <Package className="w-6 h-6 text-blue-600" />
+                            </div>
+                            <div>
+                                <div className="text-xs font-semibold text-blue-500 uppercase tracking-wider mb-0.5">Cari Stok ({!effectiveBranchId || effectiveBranchId === 'central' ? 'Ümumi' : 'Bu Filial'})</div>
+                                <div className="text-2xl font-bold text-blue-900">{formatStockDisplay()}</div>
+                            </div>
                         </div>
                         <div className="text-right">
-                            <div className="text-sm text-gray-600 mb-1">Ümumi Miqdar</div>
-                            <div className="text-xl font-semibold text-gray-900">{calculateTotalStock()} {product?.unitType === 'PIECE' || !product?.piecesPerBox ? 'ədəd' : 
-                                product?.unitType === 'METER' ? 'metr' : 
-                                product?.unitType === 'LITER' ? 'litr' : 
-                                product?.unitType === 'KILOGRAM' ? 'kq' : 'ədəd'}</div>
+                            <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Ümumi Miqdar</div>
+                            <div className="text-xl font-bold text-gray-800">{calculateTotalStock()} {product?.unitType === 'PIECE' || !product?.piecesPerBox ? 'ədəd' :
+                                product?.unitType === 'METER' ? 'metr' :
+                                    product?.unitType === 'LITER' ? 'litr' :
+                                        product?.unitType === 'KILOGRAM' ? 'kq' : 'ədəd'}</div>
                         </div>
                     </div>
                 </div>
 
                 {/* Tabs */}
-                <div className="flex border-b border-gray-200">
-                    <button
-                        onClick={() => setActiveTab('all')}
-                        className={`px-4 py-2 text-sm font-medium transition-colors ${
-                            activeTab === 'all'
-                                ? 'border-b-2 border-blue-600 text-blue-600'
-                                : 'text-gray-600 hover:text-gray-900'
-                        }`}
-                    >
-                        Hamısı
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('movements')}
-                        className={`px-4 py-2 text-sm font-medium transition-colors ${
-                            activeTab === 'movements'
-                                ? 'border-b-2 border-blue-600 text-blue-600'
-                                : 'text-gray-600 hover:text-gray-900'
-                        }`}
-                    >
-                        Stok Hərəkətləri
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('sales')}
-                        className={`px-4 py-2 text-sm font-medium transition-colors ${
-                            activeTab === 'sales'
-                                ? 'border-b-2 border-blue-600 text-blue-600'
-                                : 'text-gray-600 hover:text-gray-900'
-                        }`}
-                    >
-                        Satışlar
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('returns')}
-                        className={`px-4 py-2 text-sm font-medium transition-colors ${
-                            activeTab === 'returns'
-                                ? 'border-b-2 border-blue-600 text-blue-600'
-                                : 'text-gray-600 hover:text-gray-900'
-                        }`}
-                    >
-                        Qaytarmalar
-                    </button>
+                <div className="flex border-b border-gray-200 overflow-x-auto no-scrollbar gap-1 pt-2">
+                    {[
+                        { id: 'details', label: t('product:basic_info'), icon: Info },
+                        { id: 'all', label: t('sale:all'), icon: Activity },
+                        { id: 'movements', label: t('product:stock_movements_history'), icon: Package },
+                        { id: 'sales', label: t('sale:sales_history'), icon: ShoppingCart },
+                        { id: 'returns', label: t('sale:returns_history'), icon: Undo },
+                        { id: 'transfers', label: t('product:stock_transfers'), icon: Send },
+                    ].map((tab) => {
+                        const Icon = tab.icon || Package;
+                        return (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id)}
+                                className={`px-5 py-3 text-sm font-medium transition-all flex items-center gap-2 border-b-2 whitespace-nowrap ${activeTab === tab.id
+                                        ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+                                        : 'border-transparent text-gray-500 hover:text-gray-900 hover:bg-gray-50'
+                                    }`}
+                            >
+                                <Icon className={`w-4 h-4 ${activeTab === tab.id ? 'text-blue-600' : 'text-gray-400'}`} />
+                                {tab.label}
+                            </button>
+                        );
+                    })}
                 </div>
 
                 {/* Content */}
                 {loading ? (
-                    <div className="flex items-center justify-center py-12">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <div className="flex flex-col items-center justify-center py-20 gap-3">
+                        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
+                        <p className="text-gray-500 font-medium">{t('product:loading')}</p>
                     </div>
                 ) : (
-                    <div className="space-y-4">
-                        {/* All History - Table Format */}
+                    <div className="pb-6">
+                        {/* Details Tab */}
+                        {activeTab === 'details' && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-white rounded-2xl border border-gray-100 shadow-sm">
+                                <div className="space-y-5">
+                                    <div>
+                                        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5">{t('product:name')}</h3>
+                                        <p className="text-xl font-bold text-gray-900 leading-tight">{product?.name || '-'}</p>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5">{t('product:barcode')}</h3>
+                                            <p className="text-sm font-mono bg-gray-50 px-3 py-1.5 border border-gray-200 rounded-lg w-fit text-gray-700">{product?.barcode || '-'}</p>
+                                        </div>
+                                        <div>
+                                            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5">{t('product:category')}</h3>
+                                            <p className="text-sm font-semibold text-gray-700 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg w-fit">{product?.categoryName || product?.category?.name || '-'}</p>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5">{t('product:description')}</h3>
+                                        <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-xl border border-gray-100 min-h-[60px] italic">{product?.description || t('product:no_products_description')}</p>
+                                    </div>
+                                </div>
+                                <div className="space-y-6 flex flex-col justify-between">
+                                    <div className="grid grid-cols-2 gap-6">
+                                        <div className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100">
+                                            <h3 className="text-xs font-bold text-emerald-600 uppercase tracking-widest mb-1">{t('product:purchase_price')}</h3>
+                                            <p className="text-2xl font-black text-emerald-700">{parseFloat(product?.purchasePrice || 0).toFixed(2)} <span className="text-sm font-bold">₼</span></p>
+                                        </div>
+                                        <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100">
+                                            <h3 className="text-xs font-bold text-blue-600 uppercase tracking-widest mb-1">{t('product:sale_price')}</h3>
+                                            <p className="text-2xl font-black text-blue-700">{parseFloat(product?.salePrice || 0).toFixed(2)} <span className="text-sm font-bold">₼</span></p>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-3">
+                                        <button
+                                            onClick={() => setActiveTab('movements')}
+                                            className="flex-1 flex items-center justify-center gap-2 px-4 py-4 bg-gray-900 text-white rounded-xl hover:bg-black transition-all shadow-lg shadow-gray-200 font-bold text-sm"
+                                        >
+                                            <Package className="w-5 h-5" />
+                                            {t('product:stock_movements_history')}
+                                        </button>
+                                        <button
+                                            onClick={() => setActiveTab('sales')}
+                                            className="flex-1 flex items-center justify-center gap-2 px-4 py-4 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 font-bold text-sm"
+                                        >
+                                            <ShoppingCart className="w-5 h-5" />
+                                            {t('sale:sales_history')}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* All History Table */}
                         {activeTab === 'all' && (
-                            <div className="overflow-x-auto">
+                            <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
                                 {allHistory.length === 0 ? (
-                                    <div className="text-center py-8 text-gray-500">
-                                        Tarixçə yoxdur
+                                    <div className="text-center py-20 text-gray-400">
+                                        <Activity className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                                        <p className="font-medium">Tarixçə tapılmadı</p>
                                     </div>
                                 ) : (
-                                    <table className="w-full border-collapse border border-gray-300">
-                                        <thead>
-                                            <tr className="bg-gray-50">
-                                                <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Tarix</th>
-                                                <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Növ</th>
-                                                <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Miqdar</th>
-                                                <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Qeyd</th>
-                                                <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Kim etdi</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {allHistory.map((item, index) => (
-                                                <tr key={index} className="hover:bg-gray-50">
-                                                    <td className="border border-gray-300 px-4 py-2 text-sm">
-                                                        {formatDate(item.date || item.createdAt)}
-                                                    </td>
-                                                    <td className="border border-gray-300 px-4 py-2">
-                                                        {item.historyType === 'movement' ? (
-                                                            <span className={`px-2 py-1 text-xs rounded-full ${
-                                                                item.type === 'IN' ? 'bg-green-100 text-green-800' :
-                                                                item.type === 'OUT' ? 'bg-red-100 text-red-800' :
-                                                                'bg-blue-100 text-blue-800'
-                                                            }`}>
-                                                                {item.type === 'IN' ? 'Stok Girişi' :
-                                                                 item.type === 'OUT' ? 'Stok Çıxışı' :
-                                                                 'Düzəliş'}
-                                                            </span>
-                                                        ) : item.historyType === 'sale' ? (
-                                                            <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
-                                                                Satış
-                                                            </span>
-                                                        ) : (
-                                                            <span className="px-2 py-1 text-xs rounded-full bg-orange-100 text-orange-800">
-                                                                Qaytarma
-                                                            </span>
-                                                        )}
-                                                    </td>
-                                                    <td className="border border-gray-300 px-4 py-2 text-sm">
-                                                        {item.historyType === 'movement' ? (
-                                                            <div>
-                                                                <div className="font-medium">
-                                                                    {formatQuantity(
-                                                                        Math.abs(item.quantity || 0),
-                                                                        product?.unitType || 'PIECE',
-                                                                        product?.piecesPerBox
-                                                                    )}
-                                                                </div>
-                                                                <div className="text-xs text-gray-500 mt-1">
-                                                                    Əvvəlki: {item.previousStock} → Yeni: {item.newStock}
-                                                                </div>
-                                                            </div>
-                                                        ) : (
-                                                            formatQuantity(
-                                                                item.quantity || 0,
-                                                                product?.unitType || 'PIECE',
-                                                                product?.piecesPerBox
-                                                            )
-                                                        )}
-                                                        {item.historyType === 'sale' && (
-                                                            <div className="text-xs text-gray-500 mt-1">
-                                                                Məbləğ: {parseFloat(item.totalPrice || 0).toFixed(2)} ₼
-                                                            </div>
-                                                        )}
-                                                        {item.historyType === 'return' && (
-                                                            <div className="text-xs text-gray-500 mt-1">
-                                                                Məbləğ: {parseFloat(item.totalPrice || item.returnedAmount || 0).toFixed(2)} ₼
-                                                            </div>
-                                                        )}
-                                                    </td>
-                                                    <td className="border border-gray-300 px-4 py-2 text-sm text-gray-600">
-                                                        {item.historyType === 'movement' && item.note ? item.note : '-'}
-                                                        {item.historyType === 'sale' && item.sale?.id && (
-                                                            <span className="text-xs text-gray-500 block mt-1">
-                                                                Satış #{item.sale.id?.substring(0, 8) || item.saleId?.substring(0, 8) || ''}
-                                                            </span>
-                                                        )}
-                                                        {item.historyType === 'return' && item.return?.id && (
-                                                            <span className="text-xs text-gray-500 block mt-1">
-                                                                Qaytarma #{item.return.id?.substring(0, 8) || item.returnId?.substring(0, 8) || ''}
-                                                            </span>
-                                                        )}
-                                                    </td>
-                                                    <td className="border border-gray-300 px-4 py-2 text-sm text-gray-600">
-                                                        {item.historyType === 'movement' && item.staff ? (
-                                                            `${item.staff.name || ''} ${item.staff.surName || ''}`.trim() || '-'
-                                                        ) : item.historyType === 'sale' && item.sale?.staff ? (
-                                                            `${item.sale.staff.name || ''} ${item.sale.staff.surName || ''}`.trim() || '-'
-                                                        ) : (
-                                                            '-'
-                                                        )}
-                                                    </td>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full">
+                                            <thead>
+                                                <tr className="bg-gray-50 border-b border-gray-200">
+                                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Tarix</th>
+                                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Filial</th>
+                                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Növ</th>
+                                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Miqdar</th>
+                                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Kim etdi / Qeyd</th>
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-100">
+                                                {allHistory.map((item, index) => (
+                                                    <tr key={index} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-6 py-4 text-sm font-medium text-gray-900 whitespace-nowrap">
+                                                            {formatDate(item.date)}
+                                                        </td>
+                                                        <td className="px-6 py-4 text-sm text-gray-600">
+                                                            {item.branch?.name || item.sale?.branch?.name || item.return?.branch?.name || 
+                                                             (item.historyType === 'transfer' ? `${item.fromBranch?.name || 'M.Anbar'} ➔ ${item.toBranch?.name || 'M.Anbar'}` : 'Mərkəzi Anbar')}
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            {item.historyType === 'movement' ? (
+                                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${item.type === 'IN' ? 'bg-green-100 text-green-700' :
+                                                                        item.type === 'OUT' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                                                                    }`}>
+                                                                    {item.type === 'IN' ? 'Giriş' : item.type === 'OUT' ? 'Çıxış' : 'Düzəliş'}
+                                                                </span>
+                                                            ) : (
+                                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                                                                    item.historyType === 'sale' ? 'bg-blue-100 text-blue-700' : 
+                                                                    item.historyType === 'return' ? 'bg-orange-100 text-orange-700' : 'bg-purple-100 text-purple-700'
+                                                                }`}>
+                                                                    {item.historyType === 'sale' ? 'Satış' : item.historyType === 'return' ? 'Qaytarma' : 'Transfer'}
+                                                                </span>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-6 py-4 text-sm font-bold text-gray-900">
+                                                            {formatQuantity(Math.abs(item.quantity || 0), product?.unitType || 'PIECE', product?.piecesPerBox)}
+                                                        </td>
+                                                        <td className="px-6 py-4 text-sm text-gray-500">
+                                                            <div className="font-semibold text-gray-700">
+                                                                {item.staff?.name || item.sale?.staff?.name || '-'}
+                                                            </div>
+                                                            <div className="text-xs mt-0.5 max-w-[200px] truncate">
+                                                                {item.note || item.description || (item.historyType === 'sale' ? `Satış #${item.sale?.id?.substring(0, 8)}` : '')}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 )}
                             </div>
                         )}
 
-                        {/* Stock Movements */}
+                        {/* Movements Tab */}
                         {activeTab === 'movements' && (
-                            <div className="overflow-x-auto">
-                                {stockMovements.length === 0 ? (
-                                    <div className="text-center py-8 text-gray-500">
-                                        Stok hərəkəti yoxdur
+                            <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+                                {filteredMovements.length === 0 ? (
+                                    <div className="text-center py-20 text-gray-400">
+                                        <Package className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                                        <p className="font-medium">Hərəkət tapılmadı</p>
                                     </div>
                                 ) : (
-                                    <table className="w-full border-collapse border border-gray-300">
-                                        <thead>
-                                            <tr className="bg-gray-50">
-                                                <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Tarix</th>
-                                                <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Növ</th>
-                                                <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Miqdar</th>
-                                                <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Əvvəlki Stok</th>
-                                                <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Yeni Stok</th>
-                                                <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Qeyd</th>
-                                                <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Kim etdi</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {stockMovements.map((movement) => (
-                                                <tr key={movement.id} className="hover:bg-gray-50">
-                                                    <td className="border border-gray-300 px-4 py-2 text-sm">
-                                                        {formatDate(movement.createdAt)}
-                                                    </td>
-                                                    <td className="border border-gray-300 px-4 py-2">
-                                                        <span className={`px-2 py-1 text-xs rounded-full ${
-                                                            movement.type === 'IN' ? 'bg-green-100 text-green-800' :
-                                                            movement.type === 'OUT' ? 'bg-red-100 text-red-800' :
-                                                            'bg-blue-100 text-blue-800'
-                                                        }`}>
-                                                            {movement.type === 'IN' ? 'Stok Girişi' :
-                                                             movement.type === 'OUT' ? 'Stok Çıxışı' :
-                                                             'Düzəliş'}
-                                                        </span>
-                                                    </td>
-                                                    <td className="border border-gray-300 px-4 py-2 text-sm">
-                                                        {formatQuantity(
-                                                            Math.abs(movement.quantity),
-                                                            product?.unitType || 'PIECE',
-                                                            product?.piecesPerBox
-                                                        )}
-                                                    </td>
-                                                    <td className="border border-gray-300 px-4 py-2 text-sm text-gray-600">
-                                                        {movement.previousStock}
-                                                    </td>
-                                                    <td className="border border-gray-300 px-4 py-2 text-sm font-medium">
-                                                        {movement.newStock}
-                                                    </td>
-                                                    <td className="border border-gray-300 px-4 py-2 text-sm text-gray-600">
-                                                        {movement.note || '-'}
-                                                    </td>
-                                                    <td className="border border-gray-300 px-4 py-2 text-sm text-gray-600">
-                                                        {movement.staff ? (
-                                                            `${movement.staff.name || ''} ${movement.staff.surName || ''}`.trim() || '-'
-                                                        ) : (
-                                                            '-'
-                                                        )}
-                                                    </td>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full">
+                                            <thead>
+                                                <tr className="bg-gray-50 border-b border-gray-200">
+                                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Tarix</th>
+                                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Növ</th>
+                                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Miqdar</th>
+                                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Stok Dəyişimi</th>
+                                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Qeyd / İcraçı</th>
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-100">
+                                                {filteredMovements.map((movement) => (
+                                                    <tr key={movement.id} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{formatDate(movement.createdAt)}</td>
+                                                        <td className="px-6 py-4">
+                                                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${movement.type === 'IN' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                                {movement.type === 'IN' ? 'Stok Girişi' : 'Stok Çıxışı'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-sm font-bold text-gray-900">{formatQuantity(Math.abs(movement.quantity), product?.unitType, product?.piecesPerBox)}</td>
+                                                        <td className="px-6 py-4 text-sm text-gray-500">
+                                                            <span className="font-medium text-gray-400">{movement.previousStock}</span>
+                                                            <span className="mx-2 text-gray-300">➔</span>
+                                                            <span className="font-bold text-blue-600">{movement.newStock}</span>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-sm text-gray-500">
+                                                            <div className="font-semibold text-gray-700">{movement.staff?.name || '-'}</div>
+                                                            <div className="text-xs mt-0.5">{movement.note || '-'}</div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 )}
                             </div>
                         )}
 
-                        {/* Sales */}
+                        {/* Sales Tab */}
                         {activeTab === 'sales' && (
-                            <div className="overflow-x-auto">
-                                {sales.length === 0 ? (
-                                    <div className="text-center py-8 text-gray-500">
-                                        Satış yoxdur
+                            <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+                                {filteredSales.length === 0 ? (
+                                    <div className="text-center py-20 text-gray-400">
+                                        <ShoppingCart className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                                        <p className="font-medium">Satış tapılmadı</p>
                                     </div>
                                 ) : (
-                                    <table className="w-full border-collapse border border-gray-300">
-                                        <thead>
-                                            <tr className="bg-gray-50">
-                                                <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Tarix</th>
-                                                <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Satış ID</th>
-                                                <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Miqdar</th>
-                                                <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Məbləğ</th>
-                                                <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Müştəri</th>
-                                                <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Kim etdi</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {sales.map((sale) => (
-                                                <tr key={sale.id} className="hover:bg-gray-50">
-                                                    <td className="border border-gray-300 px-4 py-2 text-sm">
-                                                        {formatDate(sale.sale?.createdAt || sale.createdAt)}
-                                                    </td>
-                                                    <td className="border border-gray-300 px-4 py-2 text-sm font-mono text-gray-600">
-                                                        #{(sale.sale?.id || sale.saleId || sale.id || '').substring(0, 8)}
-                                                    </td>
-                                                    <td className="border border-gray-300 px-4 py-2 text-sm">
-                                                        {formatQuantity(
-                                                            sale.quantity,
-                                                            product?.unitType || 'PIECE',
-                                                            product?.piecesPerBox
-                                                        )}
-                                                    </td>
-                                                    <td className="border border-gray-300 px-4 py-2 text-sm font-medium">
-                                                        {parseFloat(sale.totalPrice || 0).toFixed(2)} ₼
-                                                    </td>
-                                                    <td className="border border-gray-300 px-4 py-2 text-sm text-gray-600">
-                                                        {sale.sale?.customerName || sale.sale?.customerSurname 
-                                                            ? `${sale.sale.customerName || ''} ${sale.sale.customerSurname || ''}`.trim() || 'Məlumat qeyd olunmayıb'
-                                                            : 'Məlumat qeyd olunmayıb'}
-                                                    </td>
-                                                    <td className="border border-gray-300 px-4 py-2 text-sm text-gray-600">
-                                                        {sale.sale?.staff ? (
-                                                            `${sale.sale.staff.name || ''} ${sale.sale.staff.surName || ''}`.trim() || '-'
-                                                        ) : (
-                                                            '-'
-                                                        )}
-                                                    </td>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full">
+                                            <thead>
+                                                <tr className="bg-gray-50 border-b border-gray-200">
+                                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Tarix</th>
+                                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Satış #</th>
+                                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Miqdar</th>
+                                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Məbləğ</th>
+                                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Müştəri / Satıcı</th>
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-100">
+                                                {filteredSales.map((sale) => (
+                                                    <tr key={sale.id} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{formatDate(sale.sale?.createdAt)}</td>
+                                                        <td className="px-6 py-4 text-sm font-mono text-blue-600">#{sale.sale?.id?.substring(0, 8)}</td>
+                                                        <td className="px-6 py-4 text-sm font-bold text-gray-900">{formatQuantity(sale.quantity, product?.unitType, product?.piecesPerBox)}</td>
+                                                        <td className="px-6 py-4 text-sm font-bold text-emerald-600">{parseFloat(sale.totalPrice || 0).toFixed(2)} ₼</td>
+                                                        <td className="px-6 py-4 text-sm text-gray-500">
+                                                            <div className="font-semibold text-gray-700">{sale.sale?.customerName || 'Müştəri Adsız'}</div>
+                                                            <div className="text-xs mt-0.5">{sale.sale?.staff?.name || '-'}</div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 )}
                             </div>
                         )}
 
-                        {/* Returns */}
+                        {/* Returns Tab */}
                         {activeTab === 'returns' && (
-                            <div className="overflow-x-auto">
-                                {returns.length === 0 ? (
-                                    <div className="text-center py-8 text-gray-500">
-                                        Qaytarma yoxdur
+                            <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+                                {filteredReturns.length === 0 ? (
+                                    <div className="text-center py-20 text-gray-400">
+                                        <Undo className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                                        <p className="font-medium">Qaytarma tapılmadı</p>
                                     </div>
                                 ) : (
-                                    <table className="w-full border-collapse border border-gray-300">
-                                        <thead>
-                                            <tr className="bg-gray-50">
-                                                <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Tarix</th>
-                                                <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Qaytarma ID</th>
-                                                <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Miqdar</th>
-                                                <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Məbləğ</th>
-                                                <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Səbəb</th>
-                                                <th className="border border-gray-300 px-4 py-3 text-left text-sm font-semibold text-gray-700">Müştəri</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {returns.map((returnItem) => (
-                                                <tr key={returnItem.id} className="hover:bg-gray-50">
-                                                    <td className="border border-gray-300 px-4 py-2 text-sm">
-                                                        {formatDate(returnItem.return?.createdAt || returnItem.createdAt)}
-                                                    </td>
-                                                    <td className="border border-gray-300 px-4 py-2 text-sm font-mono text-gray-600">
-                                                        #{(returnItem.return?.id || returnItem.returnId || returnItem.id || '').substring(0, 8)}
-                                                    </td>
-                                                    <td className="border border-gray-300 px-4 py-2 text-sm">
-                                                        {formatQuantity(
-                                                            returnItem.quantity,
-                                                            product?.unitType || 'PIECE',
-                                                            product?.piecesPerBox
-                                                        )}
-                                                    </td>
-                                                    <td className="border border-gray-300 px-4 py-2 text-sm font-medium">
-                                                        {parseFloat(returnItem.totalPrice || returnItem.returnedAmount || 0).toFixed(2)} ₼
-                                                    </td>
-                                                    <td className="border border-gray-300 px-4 py-2 text-sm text-gray-600">
-                                                        {returnItem.return?.reason || '-'}
-                                                    </td>
-                                                    <td className="border border-gray-300 px-4 py-2 text-sm text-gray-600">
-                                                        {returnItem.return?.customerName || returnItem.return?.customerSurname 
-                                                            ? `${returnItem.return.customerName || ''} ${returnItem.return.customerSurname || ''}`.trim() || 'Məlumat qeyd olunmayıb'
-                                                            : 'Məlumat qeyd olunmayıb'}
-                                                    </td>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full">
+                                            <thead>
+                                                <tr className="bg-gray-50 border-b border-gray-200">
+                                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Tarix</th>
+                                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Miqdar</th>
+                                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Məbləğ</th>
+                                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Səbəb</th>
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-100">
+                                                {filteredReturns.map((item) => (
+                                                    <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{formatDate(item.return?.createdAt)}</td>
+                                                        <td className="px-6 py-4 text-sm font-bold text-gray-900">{formatQuantity(item.quantity, product?.unitType, product?.piecesPerBox)}</td>
+                                                        <td className="px-6 py-4 text-sm font-bold text-orange-600">{parseFloat(item.totalPrice || item.returnedAmount || 0).toFixed(2)} ₼</td>
+                                                        <td className="px-6 py-4 text-sm text-gray-600 italic">{item.return?.reason || '-'}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 )}
+                            </div>
+                        )}
+
+                        {/* Transfers Tab */}
+                        {activeTab === 'transfers' && (
+                            <div className="space-y-6">
+                                {/* Transfer Form */}
+                                <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+                                    <div className="flex items-center gap-3 mb-6">
+                                        <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
+                                            <Send className="w-5 h-5 text-blue-600" />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-lg font-bold text-gray-900 leading-none">Stok Transferi</h3>
+                                            <p className="text-xs text-gray-400 mt-1 uppercase font-bold tracking-wider">Filiallar arası məhsul göndərilməsi</p>
+                                        </div>
+                                    </div>
+                                    <form onSubmit={handleTransfer} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Hədəf Filial</label>
+                                            <select
+                                                value={transferTargetBranchId}
+                                                onChange={(e) => setTransferTargetBranchId(e.target.value)}
+                                                className="w-full h-12 px-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 bg-gray-50 font-medium text-sm transition-all outline-none"
+                                            >
+                                                <option value="">Seçin...</option>
+                                                <option value="central">Mərkəzi Anbar</option>
+                                                {branches.filter(b => b.id !== effectiveBranchId).map(branch => (
+                                                    <option key={branch.id} value={branch.id}>{branch.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        {product?.unitType === 'PIECE' || !product?.piecesPerBox ? (
+                                            <div className="space-y-1.5">
+                                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Miqdar (ədəd)</label>
+                                                <input
+                                                    type="number"
+                                                    value={transferQuantity}
+                                                    onChange={(e) => setTransferQuantity(e.target.value)}
+                                                    placeholder="0"
+                                                    className="w-full h-12 px-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 bg-gray-50 font-bold text-sm transition-all outline-none"
+                                                />
+                                            </div>
+                                        ) : (
+                                            <div className="contents">
+                                                <div className="space-y-1.5">
+                                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">
+                                                        {product.unitType === 'BOX' ? 'Qutu' : 'Paket'}
+                                                    </label>
+                                                    <input
+                                                        type="number"
+                                                        value={transferBoxes}
+                                                        onChange={(e) => setTransferBoxes(e.target.value)}
+                                                        placeholder="0"
+                                                        className="w-full h-12 px-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 bg-gray-50 font-bold text-sm transition-all outline-none"
+                                                    />
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Açıq Miqdar</label>
+                                                    <input
+                                                        type="number"
+                                                        value={transferPieces}
+                                                        onChange={(e) => setTransferPieces(e.target.value)}
+                                                        placeholder="0"
+                                                        className="w-full h-12 px-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 bg-gray-50 font-bold text-sm transition-all outline-none"
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Qeyd</label>
+                                            <input
+                                                type="text"
+                                                value={transferNote}
+                                                onChange={(e) => setTransferNote(e.target.value)}
+                                                placeholder="..."
+                                                className="w-full h-12 px-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 bg-gray-50 font-medium text-sm transition-all outline-none"
+                                            />
+                                        </div>
+
+                                        <button
+                                            type="submit"
+                                            disabled={processingTransfer}
+                                            className="h-12 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-all font-bold text-sm shadow-lg shadow-blue-100 flex items-center justify-center gap-2 px-6"
+                                        >
+                                            {processingTransfer ? 'Gözləyin...' : (
+                                                <>
+                                                    <Send className="w-4 h-4" />
+                                                    Transferi Et
+                                                </>
+                                            )}
+                                        </button>
+                                    </form>
+                                </div>
+
+                                {/* Transfer History Table */}
+                                <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+                                    {filteredTransfers.length === 0 ? (
+                                        <div className="text-center py-16 text-gray-400">
+                                            <Send className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                                            <p className="font-medium">Transfer tarixçəsi yoxdur</p>
+                                        </div>
+                                    ) : (
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full">
+                                                <thead>
+                                                    <tr className="bg-gray-50 border-b border-gray-200">
+                                                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Tarix</th>
+                                                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">İstiqamət</th>
+                                                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Miqdar</th>
+                                                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-100">
+                                                    {filteredTransfers.map((transfer) => (
+                                                        <tr key={transfer.id} className="hover:bg-gray-50 transition-colors">
+                                                            <td className="px-6 py-4 text-sm font-medium text-gray-900 whitespace-nowrap">{formatDate(transfer.createdAt)}</td>
+                                                            <td className="px-6 py-4 text-sm text-gray-600">
+                                                                <span className="font-bold text-gray-400">{transfer.fromBranch?.name || 'M.Anbar'}</span>
+                                                                <span className="mx-2 text-blue-400">➔</span>
+                                                                <span className="font-bold text-gray-800">{transfer.toBranch?.name || 'M.Anbar'}</span>
+                                                            </td>
+                                                            <td className="px-6 py-4 text-sm font-black text-gray-900">{formatQuantity(transfer.quantity, product?.unitType, product?.piecesPerBox)}</td>
+                                                            <td className="px-6 py-4">
+                                                                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                                                                    transfer.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
+                                                                    transfer.status === 'CANCELLED' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
+                                                                }`}>
+                                                                    {transfer.status === 'COMPLETED' ? 'Tamamlanıb' : transfer.status === 'CANCELLED' ? 'Ləğv edilib' : 'Gözləmədə'}
+                                                                </span>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         )}
                     </div>
@@ -529,4 +726,3 @@ export default function ProductStockHistoryModal({ isOpen, onClose, productId, p
         </ModalLayout>
     );
 }
-

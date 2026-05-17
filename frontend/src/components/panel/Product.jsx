@@ -9,7 +9,9 @@ import { productApi, categoryApi, subCategoryApi } from '../../api';
 import ExcelImportModal from '../modals/ExcelImportModal';
 import ExcelTableModal from '../modals/ExcelTableModal';
 import BarcodeScannerModal from '../modals/BarcodeScannerModal';
+import ProductStockHistoryModal from '../modals/ProductStockHistoryModal';
 import { useBranch } from '../../hooks';
+import { History, ShoppingCart } from 'lucide-react';
 
 export default function Product() {
     const { t, i18n } = useTranslation('product');
@@ -24,9 +26,11 @@ export default function Product() {
     const [isExcelTableModalOpen, setIsExcelTableModalOpen] = useState(false);
     const [isScannerOpen, setIsScannerOpen] = useState(false);
     const [scanningProduct, setScanningProduct] = useState(null);
+    const [historyModal, setHistoryModal] = useState({ isOpen: false, productId: null, product: null, tab: 'details' });
     const [filters, setFilters] = useState({});
     const [searchQuery, setSearchQuery] = useState(''); // Actual search query used for API
     const [searchValue, setSearchValue] = useState(searchQuery || ''); // Input value - localStorage-dan ilk dəyər alır
+    const [branchSettings, setBranchSettings] = useState({ showPurchasePrice: true });
     const { selectedBranchId, selectedBranchName } = useBranch();
 
     // Filial dəyişdikdə filterləri sıfırla
@@ -38,6 +42,24 @@ export default function Product() {
             setSearchQuery('');
             setSearchValue('');
         }
+
+        const fetchBranchSettings = async () => {
+            if (selectedBranchId && selectedBranchId !== 'central') {
+                try {
+                    const response = await branchApi.getById(selectedBranchId);
+                    if (response.success && response.data) {
+                        setBranchSettings({
+                            showPurchasePrice: response.data.showPurchasePrice !== false
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error fetching branch settings:', error);
+                }
+            } else {
+                setBranchSettings({ showPurchasePrice: true });
+            }
+        };
+        fetchBranchSettings();
     }, [selectedBranchId]);
 
     const handleScanBarcode = (product) => {
@@ -69,7 +91,16 @@ export default function Product() {
         }
     };
 
-    const columns = useMemo(() => getProductColumns(t, i18n.language, handleScanBarcode), [t, i18n.language]);
+    const handleOpenHistory = (product, tab = 'details') => {
+        setHistoryModal({
+            isOpen: true,
+            productId: product.id,
+            product: product,
+            tab: tab
+        });
+    };
+
+    const columns = useMemo(() => getProductColumns(t, i18n.language, handleScanBarcode, handleOpenHistory, branchSettings.showPurchasePrice), [t, i18n.language, branchSettings.showPurchasePrice]);
 
     // Fetch categories for filter - filial seçiminə uyğun filter et
     useEffect(() => {
@@ -267,14 +298,7 @@ export default function Product() {
     };
 
     const handleView = (product) => {
-        const discountInfo = product.hasDiscount
-            ? `\n${t('discount_price')}: ${parseFloat(product.discountPrice || 0).toFixed(2)} ₼\n${t('discount_percent')}: ${product.discountPercent || 0}%`
-            : '';
-
-        Alert.info(
-            `${t('name')}: ${product.name}`,
-            `${t('description')}: ${product.description || '-'}\n${t('barcode')}: ${product.barcode || '-'}\n${t('purchase_price')}: ${parseFloat(product.purchasePrice || 0).toFixed(2)} ₼\n${t('sale_price')}: ${parseFloat(product.salePrice || 0).toFixed(2)} ₼${discountInfo}\n${t('stock')}: ${product.stock || 0}\n${t('status')}: ${product.isActive ? t('active') : t('inactive')}`
-        );
+        handleOpenHistory(product, 'details');
     };
 
     const handleBulkDelete = async (selectedIds) => {
@@ -497,6 +521,15 @@ export default function Product() {
                     setScanningProduct(null);
                 }}
                 onScanSuccess={handleScanSuccess}
+            />
+
+            {/* Product History & Details Modal */}
+            <ProductStockHistoryModal
+                isOpen={historyModal.isOpen}
+                onClose={() => setHistoryModal(prev => ({ ...prev, isOpen: false }))}
+                productId={historyModal.productId}
+                product={historyModal.product}
+                initialTab={historyModal.tab}
             />
         </div>
     );

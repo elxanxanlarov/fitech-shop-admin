@@ -245,6 +245,16 @@ export const getAllProducts = async (req, res) => {
             }
         });
 
+        // Fetch branch setting if branchId is provided
+        let branchSettings = { showPurchasePrice: true };
+        if (branchId && branchId !== 'central') {
+            const b = await prisma.branch.findUnique({
+                where: { id: branchId },
+                select: { showPurchasePrice: true }
+            });
+            if (b) branchSettings = b;
+        }
+
         // Format the response to include category name in the product title
         const formattedProducts = products.map(product => {
             let stock = product.stock;
@@ -265,7 +275,7 @@ export const getAllProducts = async (req, res) => {
                 }
             }
 
-            return {
+            const result = {
                 ...product,
                 stock,
                 fullBoxes,
@@ -275,6 +285,16 @@ export const getAllProducts = async (req, res) => {
                 subCategoryName: product.subCategory?.name || '',
                 branchStocks: undefined // Don't leak raw branchStocks array
             };
+
+            // Hide purchase price if branch settings disallow it
+            if (branchSettings.showPurchasePrice === false) {
+                result.purchasePrice = null;
+                result.boxPrice = null;
+                result.discountPrice = null;
+                result.totalPurchasePrice = null;
+            }
+
+            return result;
         });
 
         return res.status(200).json({
@@ -329,6 +349,17 @@ export const getProductById = async (req, res) => {
                 product.stock = 0;
                 product.fullBoxes = 0;
                 product.openedBoxQuantity = 0;
+            }
+
+            // Check branch settings for price visibility
+            const b = await prisma.branch.findUnique({
+                where: { id: branchId },
+                select: { showPurchasePrice: true }
+            });
+            if (b && b.showPurchasePrice === false) {
+                product.purchasePrice = null;
+                product.boxPrice = null;
+                product.discountPrice = null;
             }
         }
 
@@ -1588,6 +1619,7 @@ export const getProductSales = async (req, res) => {
             include: {
                 sale: {
                     include: {
+                        branch: true,
                         receipts: {
                             take: 1
                         }
@@ -1675,7 +1707,11 @@ export const getProductReturns = async (req, res) => {
                 productId: productId
             },
             include: {
-                return: true,
+                return: {
+                    include: {
+                        branch: true
+                    }
+                },
                 product: {
                     select: {
                         id: true,

@@ -21,5 +21,6 @@ export { dailySummaryApi } from './dailySummary.js';
 export { branchApi } from './branch.js';
 export { stockTransferApi } from './stockTransfer.js';
 export { convertApi } from './convert.js';
+export { ismayilliApi } from './ismayilli.js';
 export { default as api } from './axios.js';
 

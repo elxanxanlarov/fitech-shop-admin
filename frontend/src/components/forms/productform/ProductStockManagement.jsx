@@ -64,42 +64,127 @@ export default function ProductStockManagement({
             </div>
 
             {/* Stock Movement Form */}
-            <div className="bg-gray-50 rounded-lg p-4 mb-4">
-                <div className="space-y-4">
+            <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100">
+                <div className="space-y-6">
                     {/* Movement Type Selection */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-4">
                             {t('movement_type') || 'Hərəkət Növü'} <span className="text-red-500">*</span>
                         </label>
-                        <div className="flex gap-4">
-                            <label className="flex items-center cursor-pointer">
+                        <div className="flex gap-6">
+                            <label className={`flex-1 flex items-center justify-center gap-3 p-4 rounded-xl border-2 transition-all cursor-pointer ${
+                                stockMovementType === 'IN' 
+                                    ? 'bg-green-50 border-green-500 text-green-700 shadow-sm' 
+                                    : 'bg-white border-gray-100 text-gray-500 hover:border-gray-200'
+                            }`}>
                                 <input
                                     type="radio"
                                     name="stockMovementType"
                                     value="IN"
                                     checked={stockMovementType === 'IN'}
                                     onChange={(e) => onStockMovementTypeChange(e.target.value)}
-                                    className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300"
+                                    className="h-5 w-5 text-green-600 focus:ring-green-500 border-gray-300"
                                 />
-                                <span className="ml-2 text-sm text-gray-700">{t('stock_in') || 'Stok Girişi'}</span>
+                                <span className="text-sm font-bold">{t('stock_in') || 'Stok Girişi'}</span>
                             </label>
-                            <label className="flex items-center cursor-pointer">
+                            <label className={`flex-1 flex items-center justify-center gap-3 p-4 rounded-xl border-2 transition-all cursor-pointer ${
+                                stockMovementType === 'OUT' 
+                                    ? 'bg-red-50 border-red-500 text-red-700 shadow-sm' 
+                                    : 'bg-white border-gray-100 text-gray-500 hover:border-gray-200'
+                            }`}>
                                 <input
                                     type="radio"
                                     name="stockMovementType"
                                     value="OUT"
                                     checked={stockMovementType === 'OUT'}
                                     onChange={(e) => onStockMovementTypeChange(e.target.value)}
-                                    className="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300"
+                                    className="h-5 w-5 text-red-600 focus:ring-red-500 border-gray-300"
                                 />
-                                <span className="ml-2 text-sm text-gray-700">{t('stock_out') || 'Stok Çıxışı'}</span>
+                                <span className="text-sm font-bold">{t('stock_out') || 'Stok Çıxışı'}</span>
                             </label>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Quantity Input - Based on Unit Type */}
+                    <div>
+                        {(formData.unitType === 'PIECE' || !formData.unitType) ? (
+                            <Input
+                                type="text"
+                                name="stockQuantity"
+                                label={`${t('quantity') || 'Miqdar'} (ədəd)`}
+                                value={stockQuantity}
+                                onChange={(e) => {
+                                    const value = e.target.value;
+                                    // Only allow positive integers
+                                    if (value === '' || (/^\d+$/.test(value) && parseInt(value) > 0)) {
+                                        onStockQuantityChange(value);
+                                    }
+                                }}
+                                placeholder="0"
+                                size="md"
+                                variant="filled"
+                            />
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <Input
+                                    type="text"
+                                    name="stockBoxes"
+                                    label={formData.unitType === 'BOX' ? (t('full_boxes_box') || 'Tam Qutular') :
+                                           formData.unitType === 'METER' ? (t('full_boxes_meter') || 'Tam Paketlər') :
+                                           formData.unitType === 'LITER' ? (t('full_boxes_liter') || 'Tam Paketlər') :
+                                           formData.unitType === 'KILOGRAM' ? (t('full_boxes_kilogram') || 'Tam Paketlər') :
+                                           'Tam Qutular/Paketlər'}
+                                    value={stockBoxes}
+                                    onChange={(e) => {
+                                        const value = e.target.value;
+                                        // Only allow non-negative integers
+                                        if (value === '' || (/^\d+$/.test(value))) {
+                                            onStockBoxesChange(value);
+                                        }
+                                    }}
+                                    placeholder="0"
+                                    size="md"
+                                    variant="filled"
+                                />
+                                <Input
+                                    type="text"
+                                    name="stockPieces"
+                                    label={
+                                        formData.unitType === 'BOX' ? (t('opened_product_quantity_box') || 'Qutu Daxilində Olmayan') :
+                                        formData.unitType === 'METER' ? (t('opened_product_quantity_meter') || 'Paket Daxilində Olmayan') :
+                                        formData.unitType === 'LITER' ? (t('opened_product_quantity_liter') || 'Paket Daxilində Olmayan') :
+                                        formData.unitType === 'KILOGRAM' ? (t('opened_product_quantity_kilogram') || 'Paket Daxilində Olmayan') :
+                                        'Qutu/Paket Daxilində Olmayan'
+                                    }
+                                    value={stockPieces}
+                                    onChange={(e) => {
+                                        const value = e.target.value;
+                                        // Only allow non-negative integers
+                                        if (value === '' || /^\d+$/.test(value)) {
+                                            onStockPiecesChange(value);
+                                        }
+                                    }}
+                                    placeholder="0"
+                                    size="md"
+                                    variant="filled"
+                                />
+                                <Input
+                                    type="text"
+                                    name="calculatedQuantity"
+                                    label={t('calculated_quantity') || 'Hesablanmış Miqdar'}
+                                    value={calculatedQuantity()}
+                                    disabled
+                                    size="md"
+                                    variant="filled"
+                                />
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Note and Action Button */}
+                    <div className="space-y-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">
                                 {t('note') || 'Qeyd'} ({t('optional') || 'İstəyə bağlı'})
                             </label>
                             <input
@@ -107,114 +192,42 @@ export default function ProductStockManagement({
                                 value={stockNote}
                                 onChange={(e) => onStockNoteChange(e.target.value)}
                                 placeholder={t('note_placeholder') || 'Qeyd daxil edin...'}
-                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                className="w-full px-4 py-3 text-sm bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm"
                             />
                         </div>
-                        <div className="flex items-end">
-                            <button
-                                type="button"
-                                onClick={onStockMovement}
-                                disabled={processingStock || !stockMovementType || ((formData.unitType === 'PIECE' || !formData.unitType) ? !stockQuantity : (!stockBoxes && !stockPieces))}
-                                className={`w-full px-4 py-2 text-sm font-medium text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 ${
-                                    stockMovementType === 'IN' 
-                                        ? 'bg-green-600 hover:bg-green-700' 
-                                        : 'bg-red-600 hover:bg-red-700'
-                                }`}
-                            >
-                                {processingStock ? (
-                                    <>
-                                        <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24">
-                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                        </svg>
-                                        {t('processing') || 'İşlənir...'}
-                                    </>
-                                ) : (
-                                    <>
-                                        {stockMovementType === 'IN' ? (
-                                            <MdAdd className="w-4 h-4" />
-                                        ) : (
-                                            <MdRemove className="w-4 h-4" />
-                                        )}
-                                        {stockMovementType === 'IN' 
-                                            ? (t('add_stock') || 'Stok Əlavə Et')
-                                            : (t('reduce_stock') || 'Stok Azalt')
-                                        }
-                                    </>
-                                )}
-                            </button>
-                        </div>
+                        <button
+                            type="button"
+                            onClick={onStockMovement}
+                            disabled={processingStock || !stockMovementType || ((formData.unitType === 'PIECE' || !formData.unitType) ? !stockQuantity : (!stockBoxes && !stockPieces))}
+                            className={`w-full px-6 py-4 text-sm font-black text-white rounded-2xl disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-3 shadow-lg active:scale-[0.98] ${
+                                stockMovementType === 'IN' 
+                                    ? 'bg-green-600 hover:bg-green-700 shadow-green-200' 
+                                    : 'bg-red-600 hover:bg-red-700 shadow-red-200'
+                            }`}
+                        >
+                            {processingStock ? (
+                                <>
+                                    <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    {t('processing') || 'İşlənir...'}
+                                </>
+                            ) : (
+                                <>
+                                    {stockMovementType === 'IN' ? (
+                                        <MdAdd className="w-5 h-5" />
+                                    ) : (
+                                        <MdRemove className="w-5 h-5" />
+                                    )}
+                                    {stockMovementType === 'IN' 
+                                        ? (t('add_stock') || 'Stok Əlavə Et')
+                                        : (t('reduce_stock') || 'Stok Azalt')
+                                    }
+                                </>
+                            )}
+                        </button>
                     </div>
-                    
-                    {/* Quantity Input - Based on Unit Type */}
-                    {(formData.unitType === 'PIECE' || !formData.unitType) ? (
-                        <Input
-                            type="text"
-                            name="stockQuantity"
-                            label={`${t('quantity') || 'Miqdar'} (ədəd)`}
-                            value={stockQuantity}
-                            onChange={(e) => {
-                                const value = e.target.value;
-                                // Only allow positive integers
-                                if (value === '' || (/^\d+$/.test(value) && parseInt(value) > 0)) {
-                                    onStockQuantityChange(value);
-                                }
-                            }}
-                            placeholder="0"
-                            size="sm"
-                        />
-                    ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <Input
-                                type="text"
-                                name="stockBoxes"
-                                label={formData.unitType === 'BOX' ? (t('full_boxes_box') || 'Tam Qutular') :
-                                       formData.unitType === 'METER' ? (t('full_boxes_meter') || 'Tam Paketlər') :
-                                       formData.unitType === 'LITER' ? (t('full_boxes_liter') || 'Tam Paketlər') :
-                                       formData.unitType === 'KILOGRAM' ? (t('full_boxes_kilogram') || 'Tam Paketlər') :
-                                       'Tam Qutular/Paketlər'}
-                                value={stockBoxes}
-                                onChange={(e) => {
-                                    const value = e.target.value;
-                                    // Only allow non-negative integers
-                                    if (value === '' || (/^\d+$/.test(value))) {
-                                        onStockBoxesChange(value);
-                                    }
-                                }}
-                                placeholder="0"
-                                size="sm"
-                            />
-                            <Input
-                                type="text"
-                                name="stockPieces"
-                                label={
-                                    formData.unitType === 'BOX' ? (t('opened_product_quantity_box') || 'Qutu Daxilində Olmayan') :
-                                    formData.unitType === 'METER' ? (t('opened_product_quantity_meter') || 'Paket Daxilində Olmayan') :
-                                    formData.unitType === 'LITER' ? (t('opened_product_quantity_liter') || 'Paket Daxilində Olmayan') :
-                                    formData.unitType === 'KILOGRAM' ? (t('opened_product_quantity_kilogram') || 'Paket Daxilində Olmayan') :
-                                    'Qutu/Paket Daxilində Olmayan'
-                                }
-                                value={stockPieces}
-                                onChange={(e) => {
-                                    const value = e.target.value;
-                                    // Only allow non-negative integers
-                                    if (value === '' || /^\d+$/.test(value)) {
-                                        onStockPiecesChange(value);
-                                    }
-                                }}
-                                placeholder="0"
-                                size="sm"
-                            />
-                            <Input
-                                type="text"
-                                name="calculatedQuantity"
-                                label={t('calculated_quantity') || 'Hesablanmış Miqdar'}
-                                value={calculatedQuantity()}
-                                disabled
-                                size="sm"
-                            />
-                        </div>
-                    )}
                 </div>
             </div>
 

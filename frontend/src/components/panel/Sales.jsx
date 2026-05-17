@@ -6,8 +6,8 @@ import Alert from '../ui/Alert';
 import SearchDropdown from '../ui/SearchDropdown';
 import { Edit, Trash2, Eye, Plus, CreditCard, ShoppingCart, DollarSign, Wallet, TrendingUp, Banknote, ReceiptText, AlertCircle, RefreshCw } from 'lucide-react';
 import { getSaleColumns } from '../../data/table-columns/SaleColumns';
-import { saleApi, receiptApi, productApi, authApi, statisticsApi } from '../../api';
-import { useLocalStorage, useBranch } from '../../hooks';
+import { saleApi, receiptApi, productApi, authApi, statisticsApi, branchApi } from '../../api';
+import { useBranch } from '../../hooks';
 
 export default function Sales() {
     const { t, i18n } = useTranslation('sale');
@@ -17,10 +17,10 @@ export default function Sales() {
     const [saleData, setSaleData] = useState([]);
     const [filteredData, setFilteredData] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [paymentFilter, setPaymentFilter] = useLocalStorage('sales_paymentFilter', 'all'); // 'all', 'cash', 'card', 'credit'
+    const [paymentFilter, setPaymentFilter] = useState('all'); // 'all', 'cash', 'card', 'credit'
     const [currentUser, setCurrentUser] = useState(null);
     const [products, setProducts] = useState([]);
-    const [selectedProductId, setSelectedProductId] = useLocalStorage('sales_selectedProductId', '');
+    const [selectedProductId, setSelectedProductId] = useState('');
     const [loadingProducts, setLoadingProducts] = useState(false);
     const [cashboxBalance, setCashboxBalance] = useState(0);
     const { selectedBranchId } = useBranch();
@@ -34,11 +34,34 @@ export default function Sales() {
         return `${year}-${month}-${day}`;
     };
 
-    const [startDate, setStartDate] = useLocalStorage('sales_startDate', getTodayDate());
-    const [endDate, setEndDate] = useLocalStorage('sales_endDate', getTodayDate());
-    const [datePreset, setDatePreset] = useLocalStorage('sales_datePreset', 'today'); // 'today', 'week', 'month', 'all', 'custom'
+    const [startDate, setStartDate] = useState(getTodayDate());
+    const [endDate, setEndDate] = useState(getTodayDate());
+    const [datePreset, setDatePreset] = useState('today'); // 'today', 'week', 'month', 'all', 'custom'
 
-    const columns = useMemo(() => getSaleColumns(t, i18n.language), [t, i18n.language]);
+    const [branchSettings, setBranchSettings] = useState({ showPurchasePrice: true });
+
+    const columns = useMemo(() => getSaleColumns(t, i18n.language, branchSettings.showPurchasePrice), [t, i18n.language, branchSettings.showPurchasePrice]);
+
+    // Fetch branch settings
+    useEffect(() => {
+        const fetchBranchSettings = async () => {
+            if (selectedBranchId && selectedBranchId !== 'central') {
+                try {
+                    const response = await branchApi.getById(selectedBranchId);
+                    if (response.success && response.data) {
+                        setBranchSettings({
+                            showPurchasePrice: response.data.showPurchasePrice !== false
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error fetching branch settings:', error);
+                }
+            } else {
+                setBranchSettings({ showPurchasePrice: true });
+            }
+        };
+        fetchBranchSettings();
+    }, [selectedBranchId]);
 
     // Fetch current user to check role
     useEffect(() => {
@@ -543,15 +566,17 @@ export default function Sales() {
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-3 p-4 bg-orange-50 border border-orange-200 rounded-xl">
-                            <div className="w-11 h-11 rounded-xl bg-orange-100 flex items-center justify-center shrink-0">
-                                <TrendingUp className="w-5 h-5 text-orange-600" />
+                        {branchSettings.showPurchasePrice && (
+                            <div className="flex items-center gap-3 p-4 bg-orange-50 border border-orange-200 rounded-xl">
+                                <div className="w-11 h-11 rounded-xl bg-orange-100 flex items-center justify-center shrink-0">
+                                    <TrendingUp className="w-5 h-5 text-orange-600" />
+                                </div>
+                                <div>
+                                    <p className="text-xs font-medium text-orange-500 uppercase tracking-wide">Ümumi Qazanc</p>
+                                    <p className="text-xl font-bold text-orange-700">{summaryStats.totalProfit.toFixed(2)} <span className="text-sm font-semibold">AZN</span></p>
+                                </div>
                             </div>
-                            <div>
-                                <p className="text-xs font-medium text-orange-500 uppercase tracking-wide">Ümumi Qazanc</p>
-                                <p className="text-xl font-bold text-orange-700">{summaryStats.totalProfit.toFixed(2)} <span className="text-sm font-semibold">AZN</span></p>
-                            </div>
-                        </div>
+                        )}
 
                         <div className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
                             <div className="w-11 h-11 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">

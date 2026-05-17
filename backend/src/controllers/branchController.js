@@ -102,7 +102,7 @@ export const getBranchById = async (req, res) => {
 // Yeni filial yarat
 export const createBranch = async (req, res) => {
     try {
-        const { name, address, phone } = req.body;
+        const { name, address, phone, showPurchasePrice } = req.body;
 
         if (!name) {
             return res.status(400).json({
@@ -126,7 +126,8 @@ export const createBranch = async (req, res) => {
             data: {
                 name,
                 address,
-                phone
+                phone,
+                showPurchasePrice: showPurchasePrice !== undefined ? showPurchasePrice : true
             }
         });
 
@@ -158,7 +159,7 @@ export const createBranch = async (req, res) => {
 export const updateBranch = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, address, phone, isActive } = req.body;
+        const { name, address, phone, isActive, showPurchasePrice } = req.body;
 
         const branch = await prisma.branch.findUnique({
             where: { id }
@@ -177,7 +178,8 @@ export const updateBranch = async (req, res) => {
                 name: name || branch.name,
                 address: address !== undefined ? address : branch.address,
                 phone: phone !== undefined ? phone : branch.phone,
-                isActive: isActive !== undefined ? isActive : branch.isActive
+                isActive: isActive !== undefined ? isActive : branch.isActive,
+                showPurchasePrice: showPurchasePrice !== undefined ? showPurchasePrice : branch.showPurchasePrice
             }
         });
 

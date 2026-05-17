@@ -11,6 +11,29 @@ export default function DailySummaryHistory({ onSelect, onClose }) {
   const [totals, setTotals] = useState(null);
   const [loading, setLoading] = useState(false);
   const { selectedBranchId } = useBranch();
+  const [branchSettings, setBranchSettings] = useState({ showPurchasePrice: true });
+
+  // Fetch branch settings
+  useEffect(() => {
+    const fetchBranchSettings = async () => {
+      if (selectedBranchId && selectedBranchId !== 'central') {
+        try {
+          const { branchApi } = await import('../../api');
+          const response = await branchApi.getById(selectedBranchId);
+          if (response.success && response.data) {
+            setBranchSettings({
+              showPurchasePrice: response.data.showPurchasePrice !== false
+            });
+          }
+        } catch (error) {
+          console.error('Error fetching branch settings:', error);
+        }
+      } else {
+        setBranchSettings({ showPurchasePrice: true });
+      }
+    };
+    fetchBranchSettings();
+  }, [selectedBranchId]);
 
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0];
@@ -159,7 +182,9 @@ export default function DailySummaryHistory({ onSelect, onClose }) {
                       <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">{t('date') || 'Tarix'}</th>
                       <th className="px-6 py-4 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest">Satış</th>
                       <th className="px-6 py-4 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest">Gəlir</th>
-                      <th className="px-6 py-4 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest">Mənfəət</th>
+                      {branchSettings.showPurchasePrice && (
+                        <th className="px-6 py-4 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest">Mənfəət</th>
+                      )}
                       <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Tərtib edən</th>
                       <th className="px-6 py-4 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest">Əməliyyat</th>
                     </tr>
@@ -177,10 +202,12 @@ export default function DailySummaryHistory({ onSelect, onClose }) {
                         <td className="px-6 py-4 text-right font-bold text-gray-900">
                           {formatCurrency(row.totalRevenue)} <span className="text-[10px] text-gray-400">AZN</span>
                         </td>
-                        <td className="px-6 py-4 text-right">
-                          <span className="text-sm font-black text-emerald-600">{formatCurrency(row.totalProfit)}</span>
-                          <span className="text-[10px] text-emerald-400 ml-1 font-bold">AZN</span>
-                        </td>
+                        {branchSettings.showPurchasePrice && (
+                          <td className="px-6 py-4 text-right">
+                            <span className="text-sm font-black text-emerald-600">{formatCurrency(row.totalProfit)}</span>
+                            <span className="text-[10px] text-emerald-400 ml-1 font-bold">AZN</span>
+                          </td>
+                        )}
                         <td className="px-6 py-4 text-sm font-medium text-gray-500">
                           {row.staff ? `${row.staff.name} ${row.staff.surName || ''}` : '-'}
                         </td>
@@ -218,10 +245,12 @@ export default function DailySummaryHistory({ onSelect, onClose }) {
                         <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest">Gəlir</p>
                         <p className="text-lg font-black">{formatCurrency(totals.totalRevenue)} <span className="text-xs font-normal opacity-60">AZN</span></p>
                       </div>
-                      <div className="text-center">
-                        <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest">Mənfəət</p>
-                        <p className="text-lg font-black">{formatCurrency(totals.totalProfit)} <span className="text-xs font-normal opacity-60">AZN</span></p>
-                      </div>
+                      {branchSettings.showPurchasePrice && (
+                        <div className="text-center">
+                          <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest">Mənfəət</p>
+                          <p className="text-lg font-black">{formatCurrency(totals.totalProfit)} <span className="text-xs font-normal opacity-60">AZN</span></p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

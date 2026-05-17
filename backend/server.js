@@ -25,6 +25,9 @@ import dailySummaryRoutes from "./src/routes/dailySummaryRoutes.js";
 import branchRoutes from "./src/routes/branchRoutes.js";
 import stockTransferRoutes from "./src/routes/stockTransferRoutes.js";
 import convertRoutes from "./src/routes/convertRoutes.js";
+import ismayilliProductRoutes from "./src/routes/ismayilliProductRoutes.js";
+import ismayilliSaleRoutes from "./src/routes/ismayilliSaleRoutes.js";
+import ismayilliStatisticsRoutes from "./src/routes/ismayilliStatisticsRoutes.js";
 import { seedData } from "./src/seed/seedData.js";
 import { checkCreditPaymentDue } from "./src/controllers/notificationController.js";
 import { generateDailySummaryForDate } from "./src/controllers/dailySummaryController.js";
@@ -86,6 +89,11 @@ app.use("/api/daily-summary", dailySummaryRoutes);
 app.use("/api/branch", branchRoutes);
 app.use("/api/stock-transfer", stockTransferRoutes);
 app.use("/api/convert", convertRoutes);
+
+// Ismayilli Shop Routes
+app.use("/api/ismayilli/product", ismayilliProductRoutes);
+app.use("/api/ismayilli/sale", ismayilliSaleRoutes);
+app.use("/api/ismayilli/statistics", ismayilliStatisticsRoutes);
 
 app.get("/api/health", (req, res) => {
   res.json({

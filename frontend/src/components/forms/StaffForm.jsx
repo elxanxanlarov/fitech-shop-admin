@@ -19,9 +19,6 @@ export default function StaffForm() {
     const { t: tAlert } = useTranslation('alert');
     const { selectedBranchId } = useBranch();
 
-    // Check if coming from admin or reception
-    const isAdmin = location.pathname.includes('/admin');
-    const staffPagePath = isAdmin ? '/admin/staff' : '/reception/staff';
     const isEditMode = !!id;
 
     const [formData, setFormData] = useState({
@@ -36,7 +33,8 @@ export default function StaffForm() {
         isActive: true,
         isBoss: false,
         allowedStartHour: 9,
-        allowedEndHour: 21
+        allowedEndHour: 21,
+        store: 'FITECH'
     });
 
     const [roles, setRoles] = useState([]);
@@ -45,6 +43,11 @@ export default function StaffForm() {
     const [errors, setErrors] = useState({});
     const [isLoading, setIsLoading] = useState(false);
 
+    const isAdmin = location.pathname.includes('/admin');
+    const staffPagePath = currentUser?.store === 'ISMAYILLI'
+        ? '/admin/ismayilli-staff'
+        : (isAdmin ? '/admin/staff' : '/reception/staff');
+
     // Fetch current user
     useEffect(() => {
         const fetchCurrentUser = async () => {
@@ -52,6 +55,12 @@ export default function StaffForm() {
                 const response = await authApi.me();
                 if (response.success && response.data) {
                     setCurrentUser(response.data);
+                    if (!isEditMode && response.data.store) {
+                        setFormData(prev => ({
+                            ...prev,
+                            store: response.data.store
+                        }));
+                    }
                 }
             } catch (error) {
                 console.error('Error fetching current user:', error);
@@ -59,7 +68,7 @@ export default function StaffForm() {
         };
 
         fetchCurrentUser();
-    }, []);
+    }, [isEditMode]);
 
     const canPickAnyBranch = useMemo(() => {
         const r = currentUser?.role?.name?.toLowerCase() || '';
@@ -106,9 +115,12 @@ export default function StaffForm() {
             try {
                 const response = await roleApi.getAll();
                 if (response.success && response.date) {
-                    // Filter out Superadmin role if current user is not Superadmin
                     let filteredRoles = response.date;
-                    if (currentUser && currentUser.role?.name?.toLowerCase() !== 'superadmin') {
+                    if (currentUser && currentUser.store === 'ISMAYILLI') {
+                        filteredRoles = response.date.filter(role =>
+                            ['ismayilliadmin', 'ismayilliseller'].includes(role.name.toLowerCase())
+                        );
+                    } else if (currentUser && currentUser.role?.name?.toLowerCase() !== 'superadmin') {
                         filteredRoles = response.date.filter(role =>
                             role.name.toLowerCase() !== 'superadmin'
                         );
@@ -150,7 +162,8 @@ export default function StaffForm() {
                             isActive: staff.isActive !== undefined ? staff.isActive : true,
                             isBoss: staff.isBoss || false,
                             allowedStartHour: staff.allowedStartHour !== undefined ? staff.allowedStartHour : 9,
-                            allowedEndHour: staff.allowedEndHour !== undefined ? staff.allowedEndHour : 21
+                            allowedEndHour: staff.allowedEndHour !== undefined ? staff.allowedEndHour : 21,
+                            store: staff.store || 'FITECH'
                         });
                     }
                 } catch (error) {
@@ -221,7 +234,7 @@ export default function StaffForm() {
         const isAdminRole = roleName === 'admin';
         const isBoss = formData.isBoss;
 
-        const branchRequired = formData.roleId && !isSuperAdminRole && (!isAdminRole || (isAdminRole && !isBoss));
+        const branchRequired = formData.store !== 'ISMAYILLI' && formData.roleId && !isSuperAdminRole && (!isAdminRole || (isAdminRole && !isBoss));
 
         if (branchRequired && !formData.branchId) {
             newErrors.branchId = t('branch_required') || 'Filial seçilməlidir';
@@ -278,7 +291,8 @@ export default function StaffForm() {
                 isActive: formData.isActive,
                 isBoss: formData.isBoss,
                 allowedStartHour: parseInt(formData.allowedStartHour),
-                allowedEndHour: parseInt(formData.allowedEndHour)
+                allowedEndHour: parseInt(formData.allowedEndHour),
+                store: formData.store
             };
 
             // Add password only if provided (create mode or update with password change)
@@ -313,10 +327,16 @@ export default function StaffForm() {
             {/* Header */}
             <div className="mb-6">
                 <h1 className="text-2xl font-bold text-gray-900">
-                    {isEditMode ? (t('edit_staff') || 'İşçi Məlumatlarını Redaktə Et') : (t('new_staff') || 'Yeni İşçi')}
+                    {currentUser?.store === 'ISMAYILLI'
+                        ? (isEditMode ? 'İşçi Redaktə Et (İsmayıllı)' : 'Yeni İşçi (İsmayıllı)')
+                        : (isEditMode ? (t('edit_staff') || 'İşçi Məlumatlarını Redaktə Et') : (t('new_staff') || 'Yeni İşçi'))
+                    }
                 </h1>
                 <p className="text-gray-600 mt-1">
-                    {isEditMode ? (t('edit_staff_description') || 'İşçi məlumatlarını yeniləyin') : (t('new_staff_description') || 'İşçi məlumatlarını daxil edin')}
+                    {currentUser?.store === 'ISMAYILLI'
+                        ? (isEditMode ? 'İsmayıllı mağazasının işçi məlumatlarını yeniləyin' : 'İsmayıllı mağazası üçün yeni işçi məlumatlarını daxil edin')
+                        : (isEditMode ? (t('edit_staff_description') || 'İşçi məlumatlarını yeniləyin') : (t('new_staff_description') || 'İsmayıllı mağazası üçün yeni işçi məlumatlarını daxil edin'))
+                    }
                 </p>
             </div>
 
@@ -442,7 +462,15 @@ export default function StaffForm() {
                             >
                                 <option value="">{t('select_role') || 'Rol seçin'}</option>
                                 {roles.map(role => {
-                                    if (role.name.toLowerCase() === 'admin') {
+                                    const rname = role.name.toLowerCase();
+                                    let displayName = role.name;
+                                    if (rname === 'ismayilliadmin') {
+                                        displayName = 'Admin (İsmayıllı)';
+                                    } else if (rname === 'ismayilliseller') {
+                                        displayName = 'Satışçı (İsmayıllı)';
+                                    }
+
+                                    if (rname === 'admin' && currentUser?.store !== 'ISMAYILLI') {
                                         const isSuperAdminUser = currentUser?.role?.name?.toLowerCase() === 'superadmin';
                                         return (
                                             <React.Fragment key={role.id}>
@@ -459,7 +487,7 @@ export default function StaffForm() {
                                     }
                                     return (
                                         <option key={role.id} value={role.id.toString()}>
-                                            {role.name}
+                                            {displayName}
                                         </option>
                                     );
                                 })}
@@ -493,6 +521,10 @@ export default function StaffForm() {
 
                         {/* Branch Selection - Only for non-boss/non-superadmin roles */}
                         {(() => {
+                            if (currentUser?.store === 'ISMAYILLI') {
+                                return null;
+                            }
+
                             const selectedRole = roles.find(r => r.id.toString() === formData.roleId.toString());
                             const roleName = selectedRole?.name?.toLowerCase() || '';
                             const isSuperAdminRole = roleName === 'superadmin';
@@ -534,6 +566,23 @@ export default function StaffForm() {
                             }
                             return null;
                         })()}
+
+                        {/* Store Selection */}
+                        {currentUser?.store !== 'ISMAYILLI' && (
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    {t('store') || 'Mağaza'} <span className="text-red-500">*</span>
+                                </label>
+                                <select
+                                    value={formData.store}
+                                    onChange={(e) => handleInputChange('store', e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                    <option value="FITECH">Fitech</option>
+                                    <option value="ISMAYILLI">İsmayıllı</option>
+                                </select>
+                            </div>
+                        )}
                     </div>
                 </div>
 

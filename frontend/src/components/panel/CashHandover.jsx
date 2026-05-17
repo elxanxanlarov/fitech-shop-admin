@@ -5,7 +5,7 @@ import TableTemplate from '../ui/TableTamplate';
 import Alert from '../ui/Alert';
 import { Edit, Trash2, Eye, Plus, Wallet, Hash, PiggyBank, ArrowDownCircle, ArrowUpCircle, ReceiptText } from 'lucide-react';
 import { cashHandoverApi } from '../../api';
-import { useLocalStorage, useBranch } from '../../hooks';
+import { useBranch } from '../../hooks';
 
 export default function CashHandover() {
     const { t } = useTranslation('cashHandover');
@@ -27,8 +27,8 @@ export default function CashHandover() {
         return { start: localStart, end: localToday };
     }, []);
 
-    const [dateRange, setDateRange] = useLocalStorage('cashHandover_dateRange', defaultDateRange);
-    const [datePreset, setDatePreset] = useLocalStorage('cashHandover_datePreset', 'thisMonth');
+    const [dateRange, setDateRange] = useState(defaultDateRange);
+    const [datePreset, setDatePreset] = useState('thisMonth');
     const isAdmin = useMemo(() => location.pathname.includes('/admin'), [location.pathname]);
 
     const columns = useMemo(() => [

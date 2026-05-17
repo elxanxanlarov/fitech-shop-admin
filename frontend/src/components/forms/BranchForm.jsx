@@ -17,7 +17,8 @@ export default function BranchForm() {
         name: '',
         address: '',
         phone: '',
-        isActive: true
+        isActive: true,
+        showPurchasePrice: true
     });
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
@@ -33,7 +34,8 @@ export default function BranchForm() {
                             name: response.data.name || '',
                             address: response.data.address || '',
                             phone: response.data.phone || '',
-                            isActive: response.data.isActive
+                            isActive: response.data.isActive,
+                            showPurchasePrice: response.data.showPurchasePrice !== false
                         });
                     }
                 } catch (error) {
@@ -153,18 +155,33 @@ export default function BranchForm() {
                             />
                         </div>
 
-                        {/* Status */}
-                        <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                            <input
-                                type="checkbox"
-                                id="isActive"
-                                checked={formData.isActive}
-                                onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                                className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                            />
-                            <label htmlFor="isActive" className="text-sm font-medium text-gray-700 cursor-pointer">
-                                {t('branch_is_active') || 'Filial aktivdir'}
-                            </label>
+                        {/* Status & Options */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                                <input
+                                    type="checkbox"
+                                    id="isActive"
+                                    checked={formData.isActive}
+                                    onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                                    className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                />
+                                <label htmlFor="isActive" className="text-sm font-medium text-gray-700 cursor-pointer">
+                                    {t('branch_is_active') || 'Filial aktivdir'}
+                                </label>
+                            </div>
+
+                            <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                                <input
+                                    type="checkbox"
+                                    id="showPurchasePrice"
+                                    checked={formData.showPurchasePrice}
+                                    onChange={(e) => setFormData({ ...formData, showPurchasePrice: e.target.checked })}
+                                    className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                />
+                                <label htmlFor="showPurchasePrice" className="text-sm font-medium text-gray-700 cursor-pointer">
+                                    {t('show_purchase_price') || 'Alış qiyməti görünsün'}
+                                </label>
+                            </div>
                         </div>
                     </div>
 

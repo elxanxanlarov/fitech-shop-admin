@@ -20,8 +20,7 @@ export default function ProductStockSection({
     onStockPiecesChange,
     onStockNoteChange,
     onStockMovementTypeChange,
-    onStockMovement,
-    onShowHistoryModal
+    onStockMovement
 }) {
     // Calculate current stock for display
     const calculateCurrentStock = () => {
@@ -63,7 +62,6 @@ export default function ProductStockSection({
                     onStockNoteChange={onStockNoteChange}
                     onStockMovementTypeChange={onStockMovementTypeChange}
                     onStockMovement={onStockMovement}
-                    onShowHistoryModal={onShowHistoryModal}
                 />
             )}
         </div>

@@ -1,6 +1,6 @@
 import { User, Phone, ShoppingCart, DollarSign, Calendar, CreditCard, Wallet } from 'lucide-react';
 
-export const getSaleColumns = (t, language = 'az') => [
+export const getSaleColumns = (t, language = 'az', showPurchasePrice = true) => [
     {
         key: 'customer',
         label: t('customer') || 'Müştəri',
@@ -212,5 +212,8 @@ export const getSaleColumns = (t, language = 'az') => [
             );
         }
     }
-];
+].filter(col => {
+    if (col.key === 'profitAmount' && !showPurchasePrice) return false;
+    return true;
+});
 
