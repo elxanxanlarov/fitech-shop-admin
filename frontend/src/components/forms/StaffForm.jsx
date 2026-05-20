@@ -468,6 +468,8 @@ export default function StaffForm() {
                                         displayName = 'Admin (İsmayıllı)';
                                     } else if (rname === 'ismayilliseller') {
                                         displayName = 'Satışçı (İsmayıllı)';
+                                    } else if (rname === 'seller') {
+                                        displayName = 'Satıcı';
                                     }
 
                                     if (rname === 'admin' && currentUser?.store !== 'ISMAYILLI') {

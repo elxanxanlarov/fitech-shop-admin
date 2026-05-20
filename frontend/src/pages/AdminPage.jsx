@@ -1,6 +1,7 @@
 import { useParams, Navigate } from "react-router-dom"
 import { useAuth } from "../context/AuthContext"
 import { isFilialAdmin, FILIAL_ADMIN_BLOCKED_SETTINGS_SLUGS } from "../utils/accessHelpers"
+import { useBranch } from "../context/BranchContext"
 import Staff from "../components/panel/Staff.jsx"
 import StaffForm from "../components/forms/StaffForm.jsx"
 import Products from "../components/panel/Product.jsx"
@@ -44,13 +45,33 @@ import IsmayilliSales from "../components/ismayilli/IsmayilliSales.jsx"
 import IsmayilliStatistics from "../components/ismayilli/IsmayilliStatistics.jsx"
 import IsmayilliStaff from "../components/ismayilli/IsmayilliStaff.jsx"
 import IsmayilliBarcodeGenerator from "../components/ismayilli/IsmayilliBarcodeGenerator.jsx"
+import IsmayilliCheck from "../components/ismayilli/IsmayilliCheck.jsx"
 
 
 export default function AdminPanel() {
     const { slug } = useParams()
     const { user } = useAuth()
+    const { selectedStore } = useBranch()
+
+    if (selectedStore === 'ISMAYILLI') {
+        if (slug === 'products') return <Navigate to="/admin/ismayilli-products" replace />
+        if (slug === 'sales') return <Navigate to="/admin/ismayilli-sales" replace />
+        if (slug === 'statistics') return <Navigate to="/admin/ismayilli-statistics" replace />
+        if (slug === 'staff') return <Navigate to="/admin/ismayilli-staff" replace />
+        if (slug === 'check') return <Navigate to="/admin/ismayilli-check" replace />
+    } else {
+        if (slug === 'ismayilli-products') return <Navigate to="/admin/products" replace />
+        if (slug === 'ismayilli-sales') return <Navigate to="/admin/sales" replace />
+        if (slug === 'ismayilli-statistics') return <Navigate to="/admin/statistics" replace />
+        if (slug === 'ismayilli-staff') return <Navigate to="/admin/staff" replace />
+        if (slug === 'ismayilli-check') return <Navigate to="/admin/check" replace />
+    }
 
     if (slug && isFilialAdmin(user) && FILIAL_ADMIN_BLOCKED_SETTINGS_SLUGS.has(slug)) {
+        return <Navigate to="/admin/settings" replace />
+    }
+
+    if (slug && selectedStore === 'ISMAYILLI' && ['roles-management', 'branch-management', 'branch-detail', 'branch-form', 'role-form'].includes(slug)) {
         return <Navigate to="/admin/settings" replace />
     }
 
@@ -105,6 +126,7 @@ export default function AdminPanel() {
             {slug === "ismayilli-statistics" && <IsmayilliStatistics />}
             {slug === "ismayilli-staff" && <IsmayilliStaff />}
             {slug === "ismayilli-barcode-generator" && <IsmayilliBarcodeGenerator />}
+            {slug === "ismayilli-check" && <IsmayilliCheck />}
         </div>
     )
 }

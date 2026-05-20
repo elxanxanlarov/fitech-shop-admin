@@ -1,6 +1,6 @@
 import { Package, DollarSign, Tag, Hash, Maximize } from 'lucide-react';
 
-export const getProductColumns = (t, language = 'az', onScanBarcode, onOpenHistory, showPurchasePrice = true) => [
+export const getProductColumns = (t, language = 'az', onScanBarcode, onOpenHistory, showPurchasePrice = true, onViewBarcode) => [
     {
         key: 'name',
         label: t('name'),
@@ -62,7 +62,19 @@ export const getProductColumns = (t, language = 'az', onScanBarcode, onOpenHisto
             <div className="flex items-center space-x-2">
                 <Hash className="w-4 h-4 text-gray-400" />
                 {value ? (
-                    <span className="text-sm text-gray-900 font-mono">{value}</span>
+                    <div className="flex items-center gap-2">
+                       <span className="text-sm text-gray-900 font-mono">{value}</span>
+                       <button
+                           onClick={(e) => {
+                               e.stopPropagation();
+                               if (onViewBarcode) onViewBarcode(item);
+                           }}
+                           className="flex items-center justify-center px-2 py-1 bg-green-500 text-white rounded text-xs font-bold hover:bg-green-600 transition-all shadow-sm"
+                           title="Barkoda bax və çap et"
+                       >
+                           Bax
+                       </button>
+                    </div>
                 ) : (
                     <button
                         onClick={(e) => {

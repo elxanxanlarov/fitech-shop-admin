@@ -60,6 +60,8 @@ export default function TableTamplate({
   searchPlaceholder = '',
   headerRightContent = null,
   activeFilters = {}, // Xaricdən gələn aktiv filterlər (localStorage-dan)
+  enableSearchHistory = false,
+  searchHistoryKey = 'table-search-history',
   /** Verilərsə, sətir üzrə əməliyyatlar (redaktə/sil/checkbox) yalnız true qaytaranda aktiv olur; false olanda mətn göstərilmir */
   rowActionsAllowed = null
 }) {
@@ -88,6 +90,37 @@ export default function TableTamplate({
   });
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
 
+  const [searchHistory, setSearchHistory] = useState(() => {
+    if (!enableSearchHistory || typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem(searchHistoryKey);
+      return stored ? JSON.parse(stored) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const [showSearchHistory, setShowSearchHistory] = useState(false);
+
+  const saveToSearchHistory = (term) => {
+    if (!enableSearchHistory || !term.trim()) return;
+    const cleanTerm = term.trim();
+    setSearchHistory(prev => {
+      const filtered = prev.filter(item => item !== cleanTerm);
+      const newHistory = [cleanTerm, ...filtered].slice(0, 10);
+      localStorage.setItem(searchHistoryKey, JSON.stringify(newHistory));
+      return newHistory;
+    });
+  };
+
+  const removeFromSearchHistory = (e, term) => {
+    e.stopPropagation();
+    setSearchHistory(prev => {
+      const newHistory = prev.filter(item => item !== term);
+      localStorage.setItem(searchHistoryKey, JSON.stringify(newHistory));
+      return newHistory;
+    });
+  };
+
   // Initialize tempFilters when dropdown opens
   useEffect(() => {
     if (showFilterDropdown) {
@@ -99,6 +132,11 @@ export default function TableTamplate({
   const [columnWidths, setColumnWidths] = useState({});
   const [isResizing, setIsResizing] = useState(false);
   const resizeRef = useRef({ columnKey: null, startX: 0, startWidth: 0 });
+
+  // Reset page to 1 when filters or search change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, searchQuery, filters, dateRange]);
 
   // Use custom hook for click outside functionality
   const filterDropdownRef = useClickOutside(showFilterDropdown, () => setShowFilterDropdown(false));
@@ -473,9 +511,9 @@ export default function TableTamplate({
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-visible">
+    <div className="bg-white rounded-none sm:rounded-lg shadow-sm border-y sm:border-x border-gray-200 overflow-visible">
       {/* Header */}
-      <div className="px-6 py-4 border-b border-gray-200 bg-white">
+      <div className="px-4 sm:px-6 py-4 border-b border-gray-200 bg-white">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <h2 className="text-xl font-semibold text-gray-900">{title}</h2>
 
@@ -525,21 +563,109 @@ export default function TableTamplate({
                           }
                         }}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter' && onSearchSubmit) {
-                            // Pass currentSearchValue when Enter is pressed
-                            onSearchSubmit(currentSearchValue);
+                          if (e.key === 'Enter') {
+                            saveToSearchHistory(currentSearchValue);
+                            if (onSearchSubmit) {
+                              onSearchSubmit(currentSearchValue);
+                            }
                           }
                         }}
-                        className={`w-full ${hasValue ? 'pl-10 pr-10' : 'pl-10 pr-4'} py-2.5 border border-gray-300 rounded-lg bg-white transition-colors`}
+                        onFocus={() => setShowSearchHistory(true)}
+                        onBlur={() => setTimeout(() => setShowSearchHistory(false), 200)}
+                        className={`w-full ${hasValue ? 'pl-10 pr-10' : 'pl-10 pr-4'} py-2.5 border border-gray-300 rounded-lg bg-white transition-colors relative z-10`}
                       />
                       {hasValue && (
                         <button
                           onClick={handleClear}
-                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors z-20"
                           type="button"
                         >
                           <X className="w-4 h-4" />
                         </button>
+                      )}
+                      {/* Search Suggestions & History Dropdown */}
+                      {enableSearchHistory && showSearchHistory && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1 max-h-80 overflow-y-auto w-full">
+                          {hasValue ? (
+                            (() => {
+                              const term = currentSearchValue.toLowerCase().trim();
+                              const suggestions = data.filter(item =>
+                                searchFields.some(field => item[field]?.toString().toLowerCase().includes(term))
+                              ).slice(0, 10);
+
+                              if (suggestions.length === 0) {
+                                return (
+                                  <div className="px-4 py-3 text-sm text-gray-500 text-center">
+                                    Nəticə tapılmadı
+                                  </div>
+                                );
+                              }
+
+                              return suggestions.map((item, index) => {
+                                const price = item.salePrice || item.unitPriceSale || item.price;
+                                const formattedPrice = price ? `${Number(price).toFixed(2)} AZN` : '';
+
+                                return (
+                                  <div
+                                    key={index}
+                                    className="flex items-center justify-between px-4 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-0"
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
+                                      const clickVal = item.name || item.barcode || currentSearchValue;
+                                      saveToSearchHistory(clickVal);
+                                      if (onSearchChange) onSearchChange(clickVal);
+                                      else setSearchTerm(clickVal);
+                                      if (onSearchSubmit) onSearchSubmit(clickVal);
+                                      setShowSearchHistory(false);
+                                    }}
+                                  >
+                                    <div className="flex flex-col overflow-hidden">
+                                      <span className="text-sm font-medium text-gray-800 truncate">{item.name || item.barcode || 'Adsız'}</span>
+                                      {item.barcode && item.name && <span className="text-xs text-gray-400">{item.barcode}</span>}
+                                    </div>
+                                    {formattedPrice && (
+                                      <span className="text-sm font-bold text-blue-600 whitespace-nowrap ml-4 bg-blue-50 px-2 py-1 rounded">
+                                        {formattedPrice}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              });
+                            })()
+                          ) : (
+                            searchHistory.length > 0 ? (
+                              searchHistory.map((item, index) => (
+                                <div
+                                  key={index}
+                                  className="flex items-center justify-between px-4 py-2 hover:bg-gray-50 cursor-pointer"
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    if (onSearchChange) onSearchChange(item);
+                                    else setSearchTerm(item);
+                                    if (onSearchSubmit) onSearchSubmit(item);
+                                    setShowSearchHistory(false);
+                                  }}
+                                >
+                                  <div className="flex items-center gap-2 text-sm text-gray-700 overflow-hidden">
+                                    <Search className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                                    <span className="truncate">{item}</span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onMouseDown={(e) => removeFromSearchHistory(e, item)}
+                                    className="text-gray-400 hover:text-red-500 p-1 flex-shrink-0"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="px-4 py-3 text-sm text-gray-400 text-center">
+                                Axtarış tarixçəsi boşdur
+                              </div>
+                            )
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -552,6 +678,7 @@ export default function TableTamplate({
                 return (
                   <button
                     onClick={() => {
+                      saveToSearchHistory(currentSearchValue);
                       // Pass currentSearchValue as parameter to onSearchSubmit
                       onSearchSubmit(currentSearchValue);
                     }}
@@ -654,7 +781,9 @@ export default function TableTamplate({
                   </button>
 
                   {showFilterDropdown && (
-                    <div className="absolute right-0 lg:right-0 mt-2 w-[50vw] min-w-[400px] max-w-[600px] bg-white border border-gray-200 rounded-lg shadow-xl z-50 overflow-visible">
+                    <>
+                      <div className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-[90] sm:hidden" onClick={() => setShowFilterDropdown(false)} />
+                      <div className="fixed inset-x-4 top-24 sm:inset-auto sm:absolute sm:right-0 sm:mt-2 sm:w-[400px] md:w-[500px] lg:w-[600px] bg-white border border-gray-200 rounded-xl shadow-2xl z-[100] overflow-visible origin-top-right transform transition-all">
                       <div className="p-6 pb-4 border-b border-gray-200">
                         <h3 className="text-lg font-semibold text-gray-900">{t('filters')}</h3>
                         <p className="text-xs text-gray-500 mt-1">{t('filter_description') || 'Məhsulları filtrləyin'}</p>
@@ -846,6 +975,7 @@ export default function TableTamplate({
                         </div>
                       </div>
                     </div>
+                    </>
                   )}
                 </div>
               )}
@@ -1091,29 +1221,6 @@ export default function TableTamplate({
                 >
                   {t('previous')}
                 </button>
-
-                <div className="flex items-center gap-1">
-                  {/* Page number input */}
-                  <span className="text-sm text-gray-700">Səhifə:</span>
-                  <input
-                    type="number"
-                    min="1"
-                    max={totalPages}
-                    value={effectivePage}
-                    onChange={(e) => {
-                      const pageNum = parseInt(e.target.value);
-                      if (pageNum >= 1 && pageNum <= totalPages) {
-                        if (serverSidePagination && onPageChange) {
-                          onPageChange(pageNum);
-                        } else {
-                          setCurrentPage(pageNum);
-                        }
-                      }
-                    }}
-                    className="w-16 px-2 py-1 border border-gray-300 rounded-md text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <span className="text-sm text-gray-700">/ {totalPages}</span>
-                </div>
 
                 <div className="flex items-center gap-1">
                   {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {

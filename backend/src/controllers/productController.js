@@ -6,6 +6,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { calculateProductStock, decreaseProductStock, increaseProductStock } from "../utils/productStockHelper.js";
+import { getStoreFilter } from "../utils/storeHelper.js";
 
 // In productController.js
 export const getAllProducts = async (req, res) => {
@@ -219,6 +220,10 @@ export const getAllProducts = async (req, res) => {
             andConditions.push({ OR: searchConditions });
         }
 
+        // Store filtering
+        const storeFilter = getStoreFilter(req);
+        andConditions.push(storeFilter);
+
         const where = andConditions.length > 0 ? { AND: andConditions } : {};
 
         const products = await prisma.product.findMany({
@@ -399,9 +404,10 @@ export const createProduct = async (req, res) => {
             openedBoxQuantity,
             boxPrice,
             fullBoxes,
-            branchId
+            branchId,
+            store
         } = req.body;
-        if (!name || !purchasePrice || !salePrice) {
+        if (!name || purchasePrice === undefined || salePrice === undefined) {
             return res.status(400).json({
                 success: false,
                 message: "Ad, alış qiyməti və satış qiyməti tələb olunur",
@@ -483,6 +489,25 @@ export const createProduct = async (req, res) => {
         console.log('=== END DEBUG ===');
 
 
+        // Generate a unique 13-digit EAN-13-compatible barcode if not provided
+        let finalBarcode = barcode?.trim() || null;
+        if (!finalBarcode) {
+            let isUnique = false;
+            let generatedBarcode;
+            while (!isUnique) {
+                const randomPart = Math.floor(100000 + Math.random() * 900000); // 6 digits
+                generatedBarcode = `2000006${randomPart}`;
+                
+                const existing = await prisma.product.findUnique({
+                    where: { barcode: generatedBarcode }
+                });
+                if (!existing) {
+                    isUnique = true;
+                }
+            }
+            finalBarcode = generatedBarcode;
+        }
+
         const newProduct = await prisma.product.create({
             data: {
                 name: name.trim(),
@@ -494,7 +519,7 @@ export const createProduct = async (req, res) => {
                 hasDiscount: finalHasDiscount,
                 discountPrice: finalDiscountPrice,
                 discountPercent: finalDiscountPercent,
-                barcode: barcode?.trim() || null,
+                barcode: finalBarcode,
                 unitType: finalUnitType,
                 piecesPerBox: finalPiecesPerBox,
                 openedBoxQuantity: branchId && branchId !== 'central' ? 0 : finalOpenedBoxQuantity,
@@ -505,6 +530,7 @@ export const createProduct = async (req, res) => {
                 isOfficial: typeof isOfficial === "boolean" ? isOfficial : false,
                 categoryId: categoryId || null,
                 subCategoryId: subCategoryId || null,
+                store: store || 'FITECH'
             }
         });
 
@@ -573,7 +599,9 @@ export const createProduct = async (req, res) => {
 
 export const bulkCreateProducts = async (req, res) => {
     try {
-        const { products, branchId } = req.body;
+        const { products, branchId, store } = req.body;
+        const storeFilter = getStoreFilter(req);
+        const storeValue = store || storeFilter.store || 'FITECH';
 
         if (!products || !Array.isArray(products) || products.length === 0) {
             return res.status(400).json({
@@ -597,7 +625,7 @@ export const bulkCreateProducts = async (req, res) => {
                     unitType
                 } = prod;
 
-                if (!name || !purchasePrice || !salePrice) {
+                if (!name || purchasePrice === undefined || salePrice === undefined) {
                     errors.push({ name: name || 'Adsız', error: "Ad, alış və satış qiyməti mütləqdir" });
                     continue;
                 }
@@ -628,7 +656,8 @@ export const bulkCreateProducts = async (req, res) => {
                         unitType: finalUnitType,
                         isActive: true,
                         isOfficial: false,
-                        deleteType: 'NONE'
+                        deleteType: 'NONE',
+                        store: storeValue
                     }
                 });
 

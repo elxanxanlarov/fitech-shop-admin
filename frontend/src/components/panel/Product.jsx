@@ -5,9 +5,10 @@ import TableTemplate from '../ui/TableTamplate';
 import Alert from '../ui/Alert';
 import { Edit, Trash2, Eye, Plus, FileSpreadsheet, Upload } from 'lucide-react';
 import { getProductColumns } from '../../data/table-columns/ProductColumns';
-import { productApi, categoryApi, subCategoryApi } from '../../api';
+import { productApi, categoryApi, subCategoryApi, ismayilliApi } from '../../api';
 import ExcelImportModal from '../modals/ExcelImportModal';
 import ExcelTableModal from '../modals/ExcelTableModal';
+import BarcodePrintModal from '../modals/BarcodePrintModal';
 import BarcodeScannerModal from '../modals/BarcodeScannerModal';
 import ProductStockHistoryModal from '../modals/ProductStockHistoryModal';
 import { useBranch } from '../../hooks';
@@ -33,7 +34,7 @@ export default function Product() {
     const [searchQuery, setSearchQuery] = useState(''); // Actual search query used for API
     const [searchValue, setSearchValue] = useState(searchQuery || ''); // Input value - localStorage-dan ilk dəyər alır
     const [branchSettings, setBranchSettings] = useState({ showPurchasePrice: true });
-    const { selectedBranchId, selectedBranchName } = useBranch();
+    const { selectedBranchId, selectedBranchName, selectedStore } = useBranch();
 
     // Filial dəyişdikdə filterləri sıfırla
     const prevBranchRef = useState(selectedBranchId);
@@ -102,7 +103,15 @@ export default function Product() {
         });
     };
 
-    const columns = useMemo(() => getProductColumns(t, i18n.language, handleScanBarcode, handleOpenHistory, branchSettings.showPurchasePrice), [t, i18n.language, branchSettings.showPurchasePrice]);
+    const [isBarcodePrintModalOpen, setIsBarcodePrintModalOpen] = useState(false);
+    const [selectedProductForBarcode, setSelectedProductForBarcode] = useState(null);
+
+    const handleViewBarcode = useCallback((product) => {
+        setSelectedProductForBarcode(product);
+        setIsBarcodePrintModalOpen(true);
+    }, []);
+
+    const columns = useMemo(() => getProductColumns(t, i18n.language, handleScanBarcode, handleOpenHistory, branchSettings.showPurchasePrice, handleViewBarcode), [t, i18n.language, branchSettings.showPurchasePrice, handleViewBarcode]);
 
     // Fetch categories for filter - filial seçiminə uyğun filter et
     useEffect(() => {
@@ -208,7 +217,7 @@ export default function Product() {
 
         const queryString = params.toString();
         return queryString ? `?${queryString}` : '';
-    }, [selectedBranchId, selectedBranchName]);
+    }, [selectedBranchId, selectedBranchName, selectedStore]);
 
     // Fetch product data
     const fetchProducts = useCallback(async () => {
@@ -342,11 +351,18 @@ export default function Product() {
         navigate(addProductPath);
     };
 
-    const handleExcelImport = async (file, branchId = null) => {
+    const handleExcelImport = async (file, branchId = null, isIsmayilli = false) => {
         try {
             Alert.loading(t('uploading') || 'Yüklənir...');
 
-            const result = await productApi.importFromExcel(file, branchId);
+            let result;
+            if (isIsmayilli) {
+                const formData = new FormData();
+                formData.append('file', file);
+                result = await ismayilliApi.importExcel(formData);
+            } else {
+                result = await productApi.importFromExcel(file, branchId);
+            }
 
             Alert.close();
 
@@ -431,8 +447,8 @@ export default function Product() {
     const isHeadAdmin = user?.role?.name?.toLowerCase() === 'superadmin';
 
     return (
-        <div className="p-6">
-            <div className="mb-6 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+        <div className="p-0 sm:p-6">
+            <div className="px-4 pt-4 sm:p-0 mb-6 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">{t('product_management')}</h1>
                     <p className="text-gray-600">{t('manage_products')}</p>
@@ -447,13 +463,6 @@ export default function Product() {
                             <RefreshCcw className="w-4 h-4" /> Kütləvi Barkod Təyin Et
                         </button>
                     )}
-                    <button
-                        onClick={() => setIsExcelTableModalOpen(true)}
-                        className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-all shadow-md hover:shadow-lg"
-                    >
-                        <FileSpreadsheet className="w-4 h-4" />
-                        Excel ilə Əlavə Et
-                    </button>
                     <button
                         onClick={() => setIsExcelModalOpen(true)}
                         className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all shadow-md hover:shadow-lg"
@@ -477,6 +486,8 @@ export default function Product() {
                 title={t('products')}
                 searchFields={['name', 'barcode', 'description', 'invoiceName']}
                 searchPlaceholder={t('search_by_name_barcode') || 'Ad, barkod və ya təsvirə görə axtar...'}
+                enableSearchHistory={true}
+                searchHistoryKey="products-search-history"
                 filterOptions={useMemo(() => {
                     const categoryObjects = categories.map(cat => ({ id: cat.name, name: cat.name }));
                     const subCategoryObjects = subCategories.map(sub => ({ id: sub.name, name: sub.name }));
@@ -537,6 +548,7 @@ export default function Product() {
                 isOpen={isExcelModalOpen}
                 onClose={() => setIsExcelModalOpen(false)}
                 onImport={handleExcelImport}
+                isHeaderIsmayilli={selectedStore === 'ISMAYILLI'}
             />
 
             {/* Excel Table Bulk Add Modal */}
@@ -563,6 +575,13 @@ export default function Product() {
                 productId={historyModal.productId}
                 product={historyModal.product}
                 initialTab={historyModal.tab}
+            />
+
+            {/* Barcode Print Modal */}
+            <BarcodePrintModal 
+                isOpen={isBarcodePrintModalOpen}
+                onClose={() => setIsBarcodePrintModalOpen(false)}
+                product={selectedProductForBarcode}
             />
         </div>
     );

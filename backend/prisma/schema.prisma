@@ -60,6 +60,7 @@ model role {
   isCore     Boolean    @default(false)
   deleteType deletetype @default(NONE)
   staff      staff[]
+  store      storetype  @default(FITECH)
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
 
@@ -76,6 +77,7 @@ model category {
   branch        branch?       @relation(fields: [branchId], references: [id], onUpdate: Cascade, onDelete: SetNull)
   subCategories subcategory[]
   products      product[]
+  store         storetype     @default(FITECH)
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
@@ -93,6 +95,7 @@ model subcategory {
   branch      branch?    @relation(fields: [branchId], references: [id], onUpdate: Cascade, onDelete: SetNull)
   deleteType  deletetype @default(NONE)
   products    product[]
+  store       storetype  @default(FITECH)
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
@@ -132,6 +135,7 @@ model product {
   branchStocks      branchstock[]
   transferItems         stocktransferitem[]
   branchDeletedProducts BranchDeletedProduct[] @relation("ProductDeletedInBranches")
+  store                 storetype           @default(FITECH)
   createdAt             DateTime            @default(now())
   updatedAt             DateTime            @updatedAt
 
@@ -163,6 +167,7 @@ model sale {
   deleteType            deletetype      @default(NONE)
   branchId              String?
   branch                branch?         @relation(fields: [branchId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+  store                 storetype       @default(FITECH)
   createdAt             DateTime        @default(now())
   updatedAt             DateTime        @updatedAt
   items                 saleitem[]
@@ -186,6 +191,7 @@ model saleitem {
   purchasePrice Decimal          @db.Decimal(10, 2)
   profit        Decimal          @db.Decimal(10, 2)
   returnItems   salereturnitem[]
+  store         storetype        @default(FITECH)
 
   @@map("saleitem")
 }
@@ -205,6 +211,7 @@ model salereturn {
   updatedAt       DateTime         @updatedAt
   branchId        String?
   branch          branch?          @relation(fields: [branchId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+  store           storetype        @default(FITECH)
   items           salereturnitem[]
 
   @@map("salereturn")
@@ -223,6 +230,7 @@ model salereturnitem {
   totalPrice    Decimal    @db.Decimal(10, 2)
   purchasePrice Decimal    @db.Decimal(10, 2)
   loss          Decimal    @db.Decimal(10, 2)
+  store         storetype  @default(FITECH)
 
   @@map("salereturnitem")
 }
@@ -238,6 +246,7 @@ model activitylog {
   action      activityaction
   description String?
   changes     Json?
+  store       storetype      @default(FITECH)
   createdAt   DateTime       @default(now())
 
   @@map("activitylog")
@@ -256,6 +265,7 @@ model receipt {
   profitAmount    Decimal? @db.Decimal(10, 2)
   paymentType     String?
   note            String?
+  store           storetype @default(FITECH)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -275,6 +285,7 @@ model expense {
   branchId    String?
   branch      branch?    @relation(fields: [branchId], references: [id], onUpdate: Cascade, onDelete: SetNull)
   deleteType  deletetype @default(NONE)
+  store       storetype  @default(FITECH)
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
@@ -293,6 +304,7 @@ model cashhandover {
   branchId       String?
   branch         branch?    @relation(fields: [branchId], references: [id], onUpdate: Cascade, onDelete: SetNull)
   deleteType     deletetype @default(NONE)
+  store          storetype  @default(FITECH)
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 
@@ -316,6 +328,7 @@ model stockmovement {
   staff                     staff?            @relation(fields: [staffId], references: [id], onUpdate: Cascade, onDelete: SetNull)
   branchId                  String?
   branch                    branch?           @relation(fields: [branchId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+  store                     storetype         @default(FITECH)
   createdAt                 DateTime          @default(now())
   updatedAt                 DateTime          @updatedAt
 
@@ -329,6 +342,7 @@ model creditterm {
   description  String?
   isActive     Boolean  @default(true)
   sales        sale[]
+  store        storetype @default(FITECH)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -347,6 +361,7 @@ model creditpayment {
   staff       staff?   @relation(fields: [staffId], references: [id], onUpdate: Cascade, onDelete: SetNull)
   branchId    String?
   branch      branch?  @relation(fields: [branchId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+  store       storetype @default(FITECH)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -362,6 +377,7 @@ model notification {
   sale      sale?     @relation(fields: [saleId], references: [id], onUpdate: Cascade, onDelete: Cascade)
   branchId  String?
   branch    branch?   @relation(fields: [branchId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+  store     storetype @default(FITECH)
   isRead    Boolean   @default(false)
   readAt    DateTime?
   dueDate   DateTime?
@@ -414,6 +430,7 @@ model finaldelivery {
   branch     branch?             @relation(fields: [branchId], references: [id], onUpdate: Cascade, onDelete: SetNull)
   items      finaldeliveryitem[]
   deleteType deletetype          @default(NONE)
+  store      storetype           @default(FITECH)
   createdAt  DateTime            @default(now())
   updatedAt  DateTime            @updatedAt
 
@@ -430,6 +447,7 @@ model finaldeliveryitem {
   stock             Int
   fullBoxes         Int           @default(0)
   openedBoxQuantity Int           @default(0)
+  store             storetype     @default(FITECH)
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
@@ -451,6 +469,7 @@ model dailysummary {
   branchId        String?
   branch          branch?    @relation(fields: [branchId], references: [id], onUpdate: Cascade, onDelete: SetNull)
   deleteType      deletetype @default(NONE)
+  store           storetype  @default(FITECH)
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
@@ -464,7 +483,10 @@ model branch {
   phone           String?
   isActive        Boolean         @default(true)
   showPurchasePrice Boolean        @default(true)
+  isShowIsmayilli Boolean         @default(false)
+  isShowDiscountPrice Boolean     @default(true)
   deleteType      deletetype      @default(NONE)
+  store           storetype       @default(FITECH)
   stocks          branchstock[]
   transfersFrom   stocktransfer[] @relation("transferfrom")
   transfersTo     stocktransfer[] @relation("transferto")
@@ -497,6 +519,7 @@ model branchstock {
   stock             Int      @default(0)
   fullBoxes         Int      @default(0)
   openedBoxQuantity Int      @default(0)
+  store             storetype @default(FITECH)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -515,6 +538,7 @@ model stocktransfer {
   status       transferstatus      @default(PENDING)
   note         String?
   items        stocktransferitem[]
+  store        storetype           @default(FITECH)
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt
 
@@ -530,6 +554,7 @@ model stocktransferitem {
   quantity          Int
   fullBoxes         Int?
   openedBoxQuantity Int?
+  store             storetype     @default(FITECH)
   createdAt         DateTime      @default(now())
 
   @@map("stocktransferitem")
@@ -541,93 +566,80 @@ model BranchDeletedProduct {
   branch    branch   @relation("BranchDeletedProducts", fields: [branchId], references: [id], onUpdate: Cascade, onDelete: Cascade)
   productId String
   product   product  @relation("ProductDeletedInBranches", fields: [productId], references: [id], onUpdate: Cascade, onDelete: Cascade)
+  store     storetype @default(FITECH)
   deletedAt DateTime @default(now())
 
   @@unique([branchId, productId])
   @@map("branch_deleted_product")
 }
 
-// ============================================================
-// === İSMAYILLI MAĞAZA MODELLƏRİ ===
-// ============================================================
-
-/// İsmayıllı mağazası üçün kateqoriyalar
-/// Excel-dəki qalın başlıqlar (GEYIM, ƏTİR, XIRDAVAT və s.)
-model IsmayilliShopCategory {
-  id        String                  @id @default(uuid())
-  name      String                  @unique // Kateqoriyanın adı (məs. "GEYIM", "ƏTİR", "XIRDAVAT")
-  isActive  Boolean                 @default(true)
-  products  IsmayilliMagazaProduct[]
-  createdAt DateTime                @default(now())
-  updatedAt DateTime                @updatedAt
+model ismayilliShopCategory {
+  id        String                   @id @default(uuid())
+  name      String                   @unique
+  isActive  Boolean                  @default(true)
+  products  ismayilliMagazaProduct[]
+  createdAt DateTime                 @default(now())
+  updatedAt DateTime                 @updatedAt
 
   @@map("ismayilli_shop_category")
 }
 
-/// İsmayıllı mağazası üçün məhsullar
-/// Excel-dəki hər sətir bir məhsulu təmsil edir
-model IsmayilliMagazaProduct {
-  id                 String                @id @default(uuid())
-  excelId            Int?                  // Excel-dəki orijinal sıra nömrəsi (No sütunu, məs. 1, 554, 614)
-  name               String                // Məhsulun adı (Mal sütunu)
-  barcode            String?               @unique // Ştrixkod — hər məhsul üçün unikal, boş da ola bilər
-  quantity           Decimal               @default(0) @db.Decimal(18, 2) // Miqdar (Anbar - Miqdar sütunu)
-  totalPurchasePrice Decimal               @default(0) @db.Decimal(18, 2) // Anbar - "Alış" qiymətinə görə ümumi məbləğ
-  totalSalePrice     Decimal               @default(0) @db.Decimal(18, 2) // Anbar - "Satış" qiymətinə görə ümumi məbləğ
-  unitPricePurchase  Decimal               @default(0) @db.Decimal(18, 2) // "Alış" qiymətinə görə ədəd qiyməti
-  unitPriceSale      Decimal               @default(0) @db.Decimal(18, 2) // "Satış" qiymətinə görə ədəd qiyməti
-  deleteType         deletetype            @default(NONE)
-
-  // Kateqoriya ilə əlaqə
+model ismayilliMagazaProduct {
+  id                 String                    @id @default(uuid())
+  name               String
+  barcode            String?                   @unique
+  quantity           Float                     @default(0)
+  unitPricePurchase  Float                     @default(0)
+  unitPriceSale      Float                     @default(0)
+  totalPurchasePrice Float                     @default(0)
+  totalSalePrice     Float                     @default(0)
+  excelId            Int?
   categoryId         String
-  category           IsmayilliShopCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  
-  // Satışlar ilə əlaqə
-  saleItems          IsmayilliSaleItem[]
-  
-  // Stok hərəkətləri
-  stockMovements     IsmayilliStockMovement[]
-
-  createdAt          DateTime              @default(now())
-  updatedAt          DateTime              @updatedAt
+  category           ismayilliShopCategory     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  deleteType         String                    @default("NONE") // NONE, SOFT
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+  movements          ismayilliStockMovement[]
+  saleItems          ismayilliSaleItem[]
 
   @@map("ismayilli_magaza_product")
 }
 
-model IsmayilliStockMovement {
-  id        String                 @id @default(uuid())
-  productId String
-  product   IsmayilliMagazaProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
-  type      stockmovementtype
-  quantity  Decimal                @db.Decimal(18, 2)
-  note      String?
-  createdAt DateTime               @default(now())
+model ismayilliStockMovement {
+  id         String                 @id @default(uuid())
+  productId  String
+  product    ismayilliMagazaProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  type       String                 // ADD, REMOVE, ADJUST
+  quantity   Float
+  note       String?
+  createdAt  DateTime               @default(now())
 
   @@map("ismayilli_stock_movement")
 }
 
-model IsmayilliSale {
-  id           String              @id @default(uuid())
-  totalAmount  Decimal             @db.Decimal(18, 2)
-  paidAmount   Decimal             @db.Decimal(18, 2)
-  note         String?
-  items        IsmayilliSaleItem[]
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
+model ismayilliSale {
+  id          String              @id @default(uuid())
+  checkNumber Int                 @unique
+  totalAmount Float
+  paidAmount  Float               @default(0)
+  note        String?
+  createdAt   DateTime            @default(now())
+  items       ismayilliSaleItem[]
 
   @@map("ismayilli_sale")
 }
 
-model IsmayilliSaleItem {
+model ismayilliSaleItem {
   id            String                 @id @default(uuid())
   saleId        String
-  sale          IsmayilliSale          @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  sale          ismayilliSale          @relation(fields: [saleId], references: [id], onDelete: Cascade)
   productId     String
-  product       IsmayilliMagazaProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
-  quantity      Decimal                @db.Decimal(18, 2)
-  pricePerItem  Decimal                @db.Decimal(18, 2)
-  totalPrice    Decimal                @db.Decimal(18, 2)
-  purchasePrice Decimal                @db.Decimal(18, 2)
+  product       ismayilliMagazaProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity      Float
+  pricePerItem  Float
+  totalPrice    Float
+  purchasePrice Float
+  createdAt     DateTime               @default(now())
 
   @@map("ismayilli_sale_item")
 }

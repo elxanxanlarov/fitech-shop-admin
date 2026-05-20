@@ -7,9 +7,11 @@ import BranchSelector from "../ui/BranchSelector"
 import { useState } from "react"
 import { FiMenu } from "react-icons/fi"
 import { useAuth } from "../../context/AuthContext"
+import { useBranch } from "../../context/BranchContext"
 
 export default function DashboardLayout({ children, sidebarData, title, profilePath }) {
   const { user } = useAuth()
+  const { selectedStore } = useBranch()
   const [isOpen, setIsOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
   const handleToggleCollapse = () => {
@@ -22,7 +24,7 @@ export default function DashboardLayout({ children, sidebarData, title, profileP
     setIsOpen(false)
   }
   
-  const isIsmayilli = user?.store === 'ISMAYILLI';
+  const isIsmayilli = user?.store === 'ISMAYILLI' || selectedStore === 'ISMAYILLI';
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -70,7 +72,7 @@ export default function DashboardLayout({ children, sidebarData, title, profileP
           </div>
         </header>
 
-        <main className="flex-1 p-3 sm:p-6 lg:p-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <main className="flex-1 p-0 sm:p-6 lg:p-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
           <div className="max-w-[1600px] mx-auto">
             {children}
           </div>

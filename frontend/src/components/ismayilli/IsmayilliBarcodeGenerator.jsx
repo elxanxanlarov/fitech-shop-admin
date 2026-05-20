@@ -4,6 +4,7 @@ import { ismayilliApi } from '../../api';
 import Alert from '../ui/Alert';
 import JsBarcode from 'jsbarcode';
 import { Barcode, Search, Sparkles, Printer, Save, RefreshCw, Layers, CheckCircle2 } from 'lucide-react';
+import IsmayilliBarcodeLabelModal from './IsmayilliBarcodeLabelModal';
 
 export default function IsmayilliBarcodeGenerator() {
   const location = useLocation();
@@ -19,6 +20,7 @@ export default function IsmayilliBarcodeGenerator() {
   // Barcode State
   const [barcodeValue, setBarcodeValue] = useState('');
   const [saving, setSaving] = useState(false);
+  const [showLabelModal, setShowLabelModal] = useState(false);
 
   useEffect(() => {
     fetchProducts();
@@ -154,109 +156,11 @@ export default function IsmayilliBarcodeGenerator() {
     }
   };
 
-  const handlePrintLabel = () => {
-    if (!selectedProduct || !barcodeValue) return;
-
-    const printWindow = window.open('', '_blank');
-    const svgHtml = document.getElementById('barcode-svg-container').innerHTML;
-    
-    const invasion = `
-      <html>
-        <head>
-          <title>Ştrixkod Çapı - ${selectedProduct.name}</title>
-          <style>
-            @page {
-              size: 30mm 20mm;
-              margin: 0;
-            }
-            body {
-              margin: 0;
-              padding: 0;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-              height: 20mm;
-              width: 30mm;
-              background-color: white;
-              overflow: hidden;
-            }
-            .label-card {
-              width: 28mm;
-              height: 18mm;
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-              justify-content: space-between;
-              box-sizing: border-box;
-              padding: 1px 2px;
-              text-align: center;
-            }
-            .store-header {
-              font-size: 4.5px;
-              font-weight: 800;
-              letter-spacing: 0.5px;
-              text-transform: uppercase;
-              color: #1e293b;
-              border-bottom: 0.5px solid #cbd5e1;
-              width: 100%;
-              padding-bottom: 0.5px;
-            }
-            .product-name {
-              font-size: 5.5px;
-              font-weight: 700;
-              color: #0f172a;
-              line-height: 1.1;
-              max-height: 12px;
-              overflow: hidden;
-              display: -webkit-box;
-              -webkit-line-clamp: 2;
-              -webkit-box-orient: vertical;
-              margin: 0.5px 0;
-            }
-            .barcode-wrapper {
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              width: 100%;
-              height: 8mm;
-            }
-            .barcode-wrapper svg {
-              width: 100%;
-              height: 100%;
-              max-height: 24px;
-            }
-            .price-tag {
-              font-size: 6.5px;
-              font-weight: 900;
-              color: #000;
-              border-top: 0.5px dashed #cbd5e1;
-              width: 100%;
-              padding-top: 0.5px;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="label-card">
-            <div class="store-header">İsmayıllı</div>
-            <div class="product-name">${selectedProduct.name}</div>
-            <div class="barcode-wrapper">
-              ${svgHtml}
-            </div>
-            <div class="price-tag">${parseFloat(selectedProduct.unitPriceSale).toFixed(2)} AZN</div>
-          </div>
-          <script>
-            window.onload = function() {
-              window.print();
-              setTimeout(function() { window.close(); }, 500);
-            };
-          </script>
-        </body>
-      </html>
-    `;
-    printWindow.document.write(invasion);
-    printWindow.document.close();
+  const handleOpenPrintModal = () => {
+    if (!selectedProduct || !barcodeValue?.trim()) return;
+    setShowLabelModal(true);
   };
+
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
@@ -382,7 +286,8 @@ export default function IsmayilliBarcodeGenerator() {
                   <Save className="w-4 h-4" /> Barkodu Yadda Saxla
                 </button>
                 <button
-                  onClick={handlePrintLabel}
+                  type="button"
+                  onClick={handleOpenPrintModal}
                   disabled={!barcodeValue}
                   className="flex-1 flex items-center justify-center gap-2 py-3 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white rounded-xl font-bold transition-all shadow-md shadow-slate-900/10"
                 >
@@ -429,6 +334,13 @@ export default function IsmayilliBarcodeGenerator() {
           </div>
         </div>
       </div>
+
+      <IsmayilliBarcodeLabelModal
+        isOpen={showLabelModal}
+        product={selectedProduct}
+        barcodeValue={barcodeValue}
+        onClose={() => setShowLabelModal(false)}
+      />
     </div>
   );
 }

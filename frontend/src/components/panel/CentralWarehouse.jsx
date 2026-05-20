@@ -11,11 +11,13 @@ import SearchDropdown from '../ui/SearchDropdown';
 import NumericInput from '../ui/NumericInput';
 import { productApi, branchApi, stockTransferApi } from '../../api';
 import { hasContainer, containerLabel, unitSingular, formatStockShort } from '../../utils/unitHelpers';
+import { useBranch } from '../../context/BranchContext';
 
 export default function CentralWarehouse() {
     const { t } = useTranslation('branch');
     const { t: tAlert } = useTranslation('alert');
     const navigate = useNavigate();
+    const { selectedStore } = useBranch();
 
     const [products, setProducts] = useState([]);
     const [branches, setBranches] = useState([]);
@@ -65,7 +67,7 @@ export default function CentralWarehouse() {
         }
     }, [tAlert]);
 
-    useEffect(() => { fetchData(); }, [fetchData]);
+    useEffect(() => { fetchData(); }, [fetchData, selectedStore]);
 
     // ── Filtered products ──────────────────────────────────────────
     const filteredProducts = products.filter(p => {

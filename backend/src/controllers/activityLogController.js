@@ -1,11 +1,13 @@
 import prisma from '../lib/prisma.js';
+import { getStoreFilter } from "../utils/storeHelper.js";
 
 // Bütün activity log-ları gətir
 export const getAllActivityLogs = async (req, res) => {
     try {
         const { staffId, entityType, action, startDate, endDate, branchId, includeUnassigned, limit = 100, page = 1 } = req.query;
         
-        const where = {};
+        const storeFilter = getStoreFilter(req);
+        const where = { ...storeFilter };
         
         if (staffId) {
             where.staffId = staffId;
@@ -241,7 +243,7 @@ export const getActivityLogsByStaff = async (req, res) => {
 // Activity log yarat (helper funksiya kimi istifadə olunur)
 export const createActivityLog = async (data) => {
     try {
-        const { staffId, entityType, entityId, action, description, changes, branchId: logBranchId } = data;
+        const { staffId, entityType, entityId, action, description, changes, branchId: logBranchId, store } = data;
         
         const log = await prisma.activitylog.create({
             data: {
@@ -251,7 +253,8 @@ export const createActivityLog = async (data) => {
                 entityId,
                 action,
                 description: description || null,
-                changes: changes || null
+                changes: changes || null,
+                store: store || 'FITECH',
             },
             include: {
                 staff: {

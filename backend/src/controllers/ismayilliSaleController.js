@@ -102,8 +102,14 @@ export const createSale = async (req, res) => {
 
       const paid = paidAmount !== undefined ? parseFloat(paidAmount) : totalAmount;
 
+      const maxCheck = await tx.ismayilliSale.aggregate({
+        _max: { checkNumber: true }
+      });
+      const checkNumber = (maxCheck._max.checkNumber ?? 0) + 1;
+
       const newSale = await tx.ismayilliSale.create({
         data: {
+          checkNumber,
           totalAmount,
           paidAmount: paid,
           note: note ? note.trim() : null,
@@ -262,7 +268,7 @@ export const deleteAllSales = async (req, res) => {
       await tx.ismayilliSale.deleteMany({});
     });
 
-    return res.status(200).json({ success: true, message: "Bütün satış tarixçəsi uğurla silindi və stoklar bərpa olundu" });
+    return res.status(200).json({ success: true, message: "Bütün satışax tarixçəsi uğurla silindi və stoklar bərpa olundu" });
   } catch (error) {
     console.error("deleteAllSales error", error);
     return res.status(500).json({ success: false, message: "Bütün satışlar silinərkən xəta baş verdi" });

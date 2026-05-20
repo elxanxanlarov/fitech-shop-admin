@@ -8,6 +8,7 @@ import { useNavigate } from "react-router-dom"
 import Alert from "../ui/Alert"
 import { useState, useEffect } from "react"
 import { useAuth } from "../../context/AuthContext"
+import { useBranch } from "../../context/BranchContext"
 
 const Sidebar = ({ sidebarData, onItemClick, collapsed, onToggleCollapse, isMobileOpen, onMobileClose, profilePath }) => {
   const sidebarRef = useClickOutside(isMobileOpen, onMobileClose);
@@ -16,9 +17,10 @@ const Sidebar = ({ sidebarData, onItemClick, collapsed, onToggleCollapse, isMobi
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
   const { logout: authLogout } = useAuth();
+  const { selectedStore } = useBranch();
   const [transferCount, setTransferCount] = useState(0);
 
-  const isIsmayilli = currentUser?.store === 'ISMAYILLI';
+  const isIsmayilli = currentUser?.store === 'ISMAYILLI' || selectedStore === 'ISMAYILLI';
 
   const activeSidebarData = isIsmayilli
     ? [

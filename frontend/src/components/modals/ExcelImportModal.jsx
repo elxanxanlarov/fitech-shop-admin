@@ -5,7 +5,7 @@ import Alert from '../ui/Alert';
 import { useAuth, useBranch } from '../../hooks';
 import { branchApi } from '../../api';
 
-export default function ExcelImportModal({ isOpen, onClose, onImport }) {
+export default function ExcelImportModal({ isOpen, onClose, onImport, isHeaderIsmayilli }) {
     const { t } = useTranslation('product');
     const { t: tAlert } = useTranslation('alert');
     const { user } = useAuth();
@@ -64,6 +64,12 @@ export default function ExcelImportModal({ isOpen, onClose, onImport }) {
         }
     };
 
+    const activeBranch = branches.find(b => b.id === targetBranchId);
+    const isIsmayilli = isHeaderIsmayilli || (activeBranch && (
+        activeBranch.name.toLowerCase().includes('ismayilli') || 
+        activeBranch.name.toLowerCase().includes('ismayıllı')
+    ));
+
     const handleUpload = async () => {
         if (!selectedFile) {
             Alert.error(tAlert('error') || 'Xəta!', t('no_file_selected') || 'Zəhmət olmasa fayl seçin');
@@ -72,7 +78,7 @@ export default function ExcelImportModal({ isOpen, onClose, onImport }) {
 
         setUploading(true);
         try {
-            await onImport(selectedFile, targetBranchId);
+            await onImport(selectedFile, targetBranchId, isIsmayilli);
             setSelectedFile(null);
             // Reset file input
             const fileInput = document.getElementById('excel-file-input');
@@ -113,29 +119,38 @@ export default function ExcelImportModal({ isOpen, onClose, onImport }) {
                 {/* Content */}
                 <div className="p-6 space-y-6">
                     {/* Format Information */}
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                        <div className="flex items-start gap-3">
-                            <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                            <div className="flex-1">
-                                <h3 className="font-semibold text-blue-900 mb-2">
-                                    {t('excel_format_requirements') || 'Excel Formatı Tələbləri'}
-                                </h3>
-                                <div className="text-sm text-blue-800 space-y-2">
-                                    <p className="font-medium">{t('required_columns') || 'Tələb olunan sütunlar:'}</p>
-                                    <ul className="list-disc list-inside space-y-1 ml-2">
-                                        <li><strong>Strixkod</strong> - Barkod nömrəsi</li>
-                                        <li><strong>Ad</strong> - Məhsulun adı (mütləq)</li>
-                                        <li><strong>Miqdar</strong> - Stok miqdarı (mütləq)</li>
-                                        <li><strong>Ölçü vahidi</strong> - Ədəd, kq, litr və s.</li>
-                                        <li><strong>Qiymət (AZN)</strong> - Alış qiyməti (mütləq)</li>
-                                        <li><strong>Endirimli qiymət</strong> - Bu sütun keçiləcək</li>
-                                        <li><strong>Cəmi məbləğ</strong> - Bu sütun keçiləcək (cəmi məbləğ)</li>
-                                        <li><strong>Satış Qiyməti</strong> - Satış qiyməti (mütləq)</li>
-                                    </ul>
+                    {isIsmayilli ? (
+                        <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 text-xs text-amber-800 space-y-1">
+                            <p className="font-bold">⚠️ Vacib qeyd:</p>
+                            <p>• Excel faylındakı sütun başlıqları avtomatik tanınır.</p>
+                            <p>• Kateqoriya adları (məsələn, <b>Geyim, Ətir, Xırdavat</b>) qalın başlıqlı sətirlərdən və ya Kateqoriya sütunundan oxunaraq avtomatik yaradılacaqdır.</p>
+                            <p>• Eyni ştrihkoda malik məhsullar təkrar yükləndikdə qiymət və stok miqdarı yenilənəcəkdir.</p>
+                        </div>
+                    ) : (
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <div className="flex items-start gap-3">
+                                <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                                <div className="flex-1">
+                                    <h3 className="font-semibold text-blue-900 mb-2">
+                                        {t('excel_format_requirements') || 'Excel Formatı Tələbləri'}
+                                    </h3>
+                                    <div className="text-sm text-blue-800 space-y-2">
+                                        <p className="font-medium">{t('required_columns') || 'Tələb olunan sütunlar:'}</p>
+                                        <ul className="list-disc list-inside space-y-1 ml-2">
+                                            <li><strong>Strixkod</strong> - Barkod nömrəsi</li>
+                                            <li><strong>Ad</strong> - Məhsulun adı (mütləq)</li>
+                                            <li><strong>Miqdar</strong> - Stok miqdarı (mütləq)</li>
+                                            <li><strong>Ölçü vahidi</strong> - Ədəd, kq, litr və s.</li>
+                                            <li><strong>Qiymət (AZN)</strong> - Alış qiyməti (mütləq)</li>
+                                            <li><strong>Endirimli qiymət</strong> - Bu sütun keçiləcək</li>
+                                            <li><strong>Cəmi məbləğ</strong> - Bu sütun keçiləcək (cəmi məbləğ)</li>
+                                            <li><strong>Satış Qiyməti</strong> - Satış qiyməti (mütləq)</li>
+                                        </ul>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    )}
 
                     {/* Example Table */}
                     <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">

@@ -78,7 +78,7 @@ export default function ProductForm() {
     const [branchSettings, setBranchSettings] = useState({ showPurchasePrice: true });
 
     // Validation hook
-    const { validateForm } = useProductFormValidation(formData, setErrors);
+    const { validateForm } = useProductFormValidation(formData, setErrors, { showPurchasePrice: branchSettings.showPurchasePrice });
 
     // Stock management hook
     const {
@@ -108,8 +108,8 @@ export default function ProductForm() {
                         formData.branchId && formData.branchId !== 'central'
                             ? formData.branchId
                             : selectedBranchId && selectedBranchId !== 'central'
-                              ? selectedBranchId
-                              : undefined;
+                                ? selectedBranchId
+                                : undefined;
                     const response = await productApi.getById(
                         id,
                         resolvedBranchForApi ? { branchId: resolvedBranchForApi } : {}
@@ -204,7 +204,7 @@ export default function ProductForm() {
         };
 
         fetchProduct();
-    // formData.branchId dependency-si: edit modunda filial dəyişəndə həmin filialın stokunu göstər
+        // formData.branchId dependency-si: edit modunda filial dəyişəndə həmin filialın stokunu göstər
     }, [id, isEditMode, t, formData.branchId, selectedBranchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // İstifadəçi və filiallar
@@ -279,7 +279,7 @@ export default function ProductForm() {
             }
         };
         fetchCategories();
-    }, []); 
+    }, []);
 
     // Fetch existing products for search (only in create mode)
     useEffect(() => {
@@ -306,6 +306,15 @@ export default function ProductForm() {
         };
         fetchProducts();
     }, [isEditMode, formData.branchId]);
+
+    // Generate barcode automatically on mount in create mode
+    useEffect(() => {
+        if (!isEditMode && !formData.barcode) {
+            const randomPart = Math.floor(100000 + Math.random() * 900000);
+            const newBarcode = `2000006${randomPart}`;
+            setFormData(prev => ({ ...prev, barcode: newBarcode }));
+        }
+    }, [isEditMode]);
 
     // Fetch branch settings
     useEffect(() => {
@@ -450,6 +459,9 @@ export default function ProductForm() {
         e.preventDefault();
 
         if (!validateForm()) {
+            console.error("Validation failed with errors:", errors);
+            // Re-run validation to get the fresh errors immediately for logging
+            Alert.error(tAlert('error') || 'Xəta!', t('fill_required_fields') || 'Zəhmət olmasa tələb olunan sahələri düzgün doldurun.');
             return;
         }
 
@@ -523,7 +535,7 @@ export default function ProductForm() {
                 name: formData.name.trim(),
                 description: formData.description?.trim() || null,
                 imageUrl: imageUrlValue,
-                purchasePrice: parseFloat(formData.purchasePrice),
+                purchasePrice: parseFloat(formData.purchasePrice) || 0,
                 salePrice: parseFloat(formData.salePrice),
                 hasDiscount: formData.hasDiscount,
                 discountPrice: formData.hasDiscount && formData.discountPrice ? parseFloat(formData.discountPrice) : null,

@@ -98,5 +98,8 @@
     "filial_transfer_completed_success": "Transfer completed successfully",
     "submit_filial_transfer": "Confirm transfer",
     "filial_admin_no_branch": "Your account is not linked to a branch. A branch must be assigned to use product transfer.",
-    "back_to_products": "Back to products"
+    "back_to_products": "Back to products",
+    "show_purchase_price": "Show purchase price",
+    "is_show_ismayilli": "Show Ismayilli section",
+    "is_show_discount_price": "Show discount price"
 }

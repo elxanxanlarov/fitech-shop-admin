@@ -18,7 +18,9 @@ export default function BranchForm() {
         address: '',
         phone: '',
         isActive: true,
-        showPurchasePrice: true
+        showPurchasePrice: true,
+        isShowIsmayilli: false,
+        isShowDiscountPrice: true
     });
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
@@ -35,7 +37,9 @@ export default function BranchForm() {
                             address: response.data.address || '',
                             phone: response.data.phone || '',
                             isActive: response.data.isActive,
-                            showPurchasePrice: response.data.showPurchasePrice !== false
+                            showPurchasePrice: response.data.showPurchasePrice !== false,
+                            isShowIsmayilli: response.data.isShowIsmayilli === true,
+                            isShowDiscountPrice: response.data.isShowDiscountPrice !== false
                         });
                     }
                 } catch (error) {
@@ -180,6 +184,32 @@ export default function BranchForm() {
                                 />
                                 <label htmlFor="showPurchasePrice" className="text-sm font-medium text-gray-700 cursor-pointer">
                                     {t('show_purchase_price') || 'Alış qiyməti görünsün'}
+                                </label>
+                            </div>
+
+                            <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                                <input
+                                    type="checkbox"
+                                    id="isShowIsmayilli"
+                                    checked={formData.isShowIsmayilli}
+                                    onChange={(e) => setFormData({ ...formData, isShowIsmayilli: e.target.checked })}
+                                    className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                />
+                                <label htmlFor="isShowIsmayilli" className="text-sm font-medium text-gray-700 cursor-pointer">
+                                    {t('is_show_ismayilli') || 'İsmayıllı bölməsi görünsün'}
+                                </label>
+                            </div>
+
+                            <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                                <input
+                                    type="checkbox"
+                                    id="isShowDiscountPrice"
+                                    checked={formData.isShowDiscountPrice}
+                                    onChange={(e) => setFormData({ ...formData, isShowDiscountPrice: e.target.checked })}
+                                    className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                />
+                                <label htmlFor="isShowDiscountPrice" className="text-sm font-medium text-gray-700 cursor-pointer">
+                                    {t('is_show_discount_price') || 'Endirimli qiymət görünsün'}
                                 </label>
                             </div>
                         </div>

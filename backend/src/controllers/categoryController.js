@@ -1,12 +1,14 @@
 import prisma from "../lib/prisma.js";
 import { createActivityLog } from "./activityLogController.js";
+import { getStoreFilter } from "../utils/storeHelper.js";
 
 // Bütün kateqoriyaları gətir
 export const getAllCategories = async (req, res) => {
     try {
         const { deleteType, includeDeleted, branchId, includeUnassigned } = req.query;
 
-        const where = {};
+        const storeFilter = getStoreFilter(req);
+        const where = { ...storeFilter };
 
         // DeleteType filter - default olaraq yalnız silinməyən kateqoriyaları göstər
         if (includeDeleted === 'true') {
@@ -107,7 +109,7 @@ export const getCategoryById = async (req, res) => {
 // Yeni kateqoriya yarat
 export const createCategory = async (req, res) => {
     try {
-        const { name, description, isActive, branchId } = req.body;
+        const { name, description, isActive, branchId, store } = req.body;
 
         if (!name || name.trim() === "") {
             return res.status(400).json({
@@ -138,6 +140,7 @@ export const createCategory = async (req, res) => {
                 description: description?.trim() || null,
                 isActive: typeof isActive === "boolean" ? isActive : true,
                 branchId: effectiveBranchId,
+                store: store || 'FITECH',
             }
         });
 

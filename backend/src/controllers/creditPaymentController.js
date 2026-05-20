@@ -1,11 +1,12 @@
 import prisma from "../lib/prisma.js";
 import { Prisma } from "@prisma/client";
 import { createActivityLog } from "./activityLogController.js";
+import { getStoreFilter } from "../utils/storeHelper.js";
 
 // Kredit ödənişi et
 export const makeCreditPayment = async (req, res) => {
     try {
-        const { saleId, amount, paymentType, note } = req.body;
+        const { saleId, amount, paymentType, note, store } = req.body;
         const staffId = req.user?.id;
 
         if (!saleId || !amount) {
@@ -63,7 +64,8 @@ export const makeCreditPayment = async (req, res) => {
                 paymentType: paymentType || 'cash',
                 note: note?.trim() || null,
                 staffId: staffId || null,
-                branchId: sale.branchId // Satış olan filialı qeyd et
+                branchId: sale.branchId, // Satış olan filialı qeyd et
+                store: store || sale.store || getStoreFilter(req).store || 'FITECH',
             }
         });
 
@@ -161,10 +163,12 @@ export const getSaleCreditPayments = async (req, res) => {
 // Bütün aktiv kredit satışları
 export const getActiveCredits = async (req, res) => {
     try {
+        const storeFilter = getStoreFilter(req);
         const credits = await prisma.sale.findMany({
             where: {
                 isCredit: true,
-                isCreditPaid: false
+                isCreditPaid: false,
+                ...storeFilter
             },
             include: {
                 creditTerm: true,

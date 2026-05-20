@@ -1,7 +1,8 @@
 import { useTranslation } from 'react-i18next';
 
-export function useProductFormValidation(formData, setErrors) {
+export function useProductFormValidation(formData, setErrors, options = {}) {
     const { t } = useTranslation('product');
+    const { showPurchasePrice = true } = options;
 
     const validateForm = () => {
         const newErrors = {};
@@ -15,11 +16,13 @@ export function useProductFormValidation(formData, setErrors) {
         const purchasePriceNum = parseFloat(formData.purchasePrice || '0');
         const salePriceNum = parseFloat(formData.salePrice || '0');
 
-        // Alış qiyməti
-        if (!formData.purchasePrice || purchasePriceNum <= 0) {
-            newErrors.purchasePrice =
-                t('purchase_price_required') ||
-                'Alış qiyməti tələb olunur və 0-dan böyük olmalıdır';
+        // Alış qiyməti (Yalnız filialda göstərilirsə tələb olunur)
+        if (showPurchasePrice) {
+            if (!formData.purchasePrice || purchasePriceNum <= 0) {
+                newErrors.purchasePrice =
+                    t('purchase_price_required') ||
+                    'Alış qiyməti tələb olunur və 0-dan böyük olmalıdır';
+            }
         }
 
         // Satış qiyməti
@@ -29,8 +32,8 @@ export function useProductFormValidation(formData, setErrors) {
                 'Satış qiyməti tələb olunur və 0-dan böyük olmalıdır';
         }
 
-        // Satış qiyməti maya dəyərindən kiçik ola bilməz
-        if (purchasePriceNum > 0 && salePriceNum > 0 && salePriceNum < purchasePriceNum) {
+        // Satış qiyməti maya dəyərindən kiçik ola bilməz (Yalnız alış qiyməti varsa və böyükdürsə 0-dan yoxlayırıq)
+        if (showPurchasePrice && purchasePriceNum > 0 && salePriceNum > 0 && salePriceNum < purchasePriceNum) {
             newErrors.salePrice =
                 t('sale_price_less_than_cost') ||
                 'Satış qiyməti maya dəyərindən kiçik ola bilməz';

@@ -1,9 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
 import { ismayilliApi } from '../../api';
 import Alert from '../ui/Alert';
-import { Plus, Edit, Trash2, Tag, ShoppingCart, Barcode, DollarSign, Layers, Upload, FileSpreadsheet, QrCode, History, Package } from 'lucide-react';
+import { Plus, Edit, Trash2, Tag, ShoppingCart, Barcode, DollarSign, Layers, Upload, FileSpreadsheet, QrCode, History, Package, Search, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import IsmayilliStockHistoryModal from './IsmayilliStockHistoryModal';
+import ExcelTableModal from '../modals/ExcelTableModal';
+import BarcodePrintModal from '../modals/BarcodePrintModal';
 
 export default function IsmayilliProducts() {
   const navigate = useNavigate();
@@ -20,6 +22,40 @@ export default function IsmayilliProducts() {
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
+  const [isExcelTableModalOpen, setIsExcelTableModalOpen] = useState(false);
+  const [isBarcodePrintModalOpen, setIsBarcodePrintModalOpen] = useState(false);
+  const [selectedProductForBarcode, setSelectedProductForBarcode] = useState(null);
+
+  // Search History State
+  const [searchHistory, setSearchHistory] = useState(() => {
+    try {
+      const stored = localStorage.getItem('ismayilli-search-history');
+      return stored ? JSON.parse(stored) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const [showSearchHistory, setShowSearchHistory] = useState(false);
+
+  const saveToSearchHistory = (term) => {
+    if (!term || !term.trim()) return;
+    const cleanTerm = term.trim();
+    setSearchHistory(prev => {
+      const filtered = prev.filter(item => item !== cleanTerm);
+      const newHistory = [cleanTerm, ...filtered].slice(0, 10);
+      localStorage.setItem('ismayilli-search-history', JSON.stringify(newHistory));
+      return newHistory;
+    });
+  };
+
+  const removeFromSearchHistory = (e, term) => {
+    e.stopPropagation();
+    setSearchHistory(prev => {
+      const newHistory = prev.filter(item => item !== term);
+      localStorage.setItem('ismayilli-search-history', JSON.stringify(newHistory));
+      return newHistory;
+    });
+  };
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [historyTab, setHistoryTab] = useState('adjustment');
   const [editingProduct, setEditingProduct] = useState(null);
@@ -63,9 +99,11 @@ export default function IsmayilliProducts() {
 
   const handleOpenAddProduct = () => {
     setEditingProduct(null);
+    const randomPart = Math.floor(100000 + Math.random() * 900000);
+    const newBarcode = `2000006${randomPart}`;
     setProductForm({
       name: '',
-      barcode: '',
+      barcode: newBarcode,
       quantity: '0',
       unitPricePurchase: '0',
       unitPriceSale: '0',
@@ -271,9 +309,9 @@ export default function IsmayilliProducts() {
   }, [filteredProducts, currentPage, itemsPerPage]);
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="p-0 sm:p-6 max-w-7xl mx-auto space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white p-4 sm:p-6 rounded-none sm:rounded-2xl border-y sm:border border-slate-100 shadow-sm">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
             <ShoppingCart className="text-purple-600 w-7 h-7" /> Məhsullar (İsmayıllı)
@@ -288,10 +326,16 @@ export default function IsmayilliProducts() {
             <Tag className="w-4 h-4 text-purple-600" /> Yeni Kateqoriya
           </button>
           <button
-            onClick={() => setIsExcelModalOpen(true)}
+            onClick={() => setIsExcelTableModalOpen(true)}
             className="flex items-center gap-2 px-4 py-2 border border-emerald-200 text-emerald-700 bg-emerald-50 rounded-xl hover:bg-emerald-100 transition-all font-semibold shadow-sm"
           >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> Excel Yüklə
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> Excel ilə Əlavə Et
+          </button>
+          <button
+            onClick={() => setIsExcelModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 border border-slate-200 text-slate-700 bg-slate-50 rounded-xl hover:bg-slate-100 transition-all font-semibold"
+          >
+            <Upload className="w-4 h-4 text-slate-600" /> Excel Faylı Yüklə
           </button>
           <button
             onClick={handleOpenAddProduct}
@@ -304,13 +348,113 @@ export default function IsmayilliProducts() {
 
       {/* Filters & Bulk Actions */}
       <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <input
-          type="text"
-          placeholder="Məhsul adı və ya barkoduna görə axtar..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full md:w-96 px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
-        />
+        <div className="relative w-full md:w-96">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none z-20" />
+          <input
+            type="text"
+            placeholder="Məhsul adı və ya barkoduna görə axtar..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') saveToSearchHistory(search);
+            }}
+            onFocus={() => setShowSearchHistory(true)}
+            onBlur={() => setTimeout(() => setShowSearchHistory(false), 200)}
+            className="w-full pl-10 pr-10 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all relative z-10"
+          />
+          {search && (
+            <button
+              onClick={() => { setSearch(''); setShowSearchHistory(false); }}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors z-20"
+              type="button"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Search Suggestions & History Dropdown */}
+          {showSearchHistory && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 py-1 max-h-80 overflow-y-auto w-full">
+              {search.trim().length > 0 ? (
+                (() => {
+                  const term = search.toLowerCase().trim();
+                  const suggestions = products.filter(p =>
+                    p.name.toLowerCase().includes(term) ||
+                    (p.barcode && p.barcode.toLowerCase().includes(term))
+                  ).slice(0, 10);
+                  
+                  if (suggestions.length === 0) {
+                    return (
+                      <div className="px-4 py-3 text-sm text-gray-500 text-center">
+                        Nəticə tapılmadı
+                      </div>
+                    );
+                  }
+                  
+                  return suggestions.map((item, index) => {
+                    const price = item.unitPriceSale;
+                    const formattedPrice = price !== undefined && price !== null ? `${Number(price).toFixed(2)} AZN` : '';
+                    
+                    return (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between px-4 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-0"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          const clickVal = item.name || item.barcode || search;
+                          saveToSearchHistory(clickVal);
+                          setSearch(clickVal);
+                          setShowSearchHistory(false);
+                        }}
+                      >
+                        <div className="flex flex-col overflow-hidden">
+                          <span className="text-sm font-medium text-gray-800 truncate">{item.name || item.barcode || 'Adsız'}</span>
+                          {item.barcode && item.name && <span className="text-xs text-gray-400">{item.barcode}</span>}
+                        </div>
+                        {formattedPrice && (
+                          <span className="text-sm font-bold text-blue-600 whitespace-nowrap ml-4 bg-blue-50 px-2 py-1 rounded">
+                            {formattedPrice}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  });
+                })()
+              ) : (
+                searchHistory.length > 0 ? (
+                  searchHistory.map((item, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between px-4 py-2 hover:bg-gray-50 cursor-pointer"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        setSearch(item);
+                        saveToSearchHistory(item);
+                        setShowSearchHistory(false);
+                      }}
+                    >
+                      <div className="flex items-center gap-2 text-sm text-gray-700 overflow-hidden">
+                        <Search className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                        <span className="truncate">{item}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onMouseDown={(e) => removeFromSearchHistory(e, item)}
+                        className="text-gray-400 hover:text-red-500 p-1 flex-shrink-0"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  <div className="px-4 py-3 text-sm text-gray-400 text-center">
+                    Axtarış tarixçəsi boşdur
+                  </div>
+                )
+              )}
+            </div>
+          )}
+        </div>
         {selectedProductIds.length > 0 && (
           <button
             onClick={handleBulkDelete}
@@ -322,7 +466,7 @@ export default function IsmayilliProducts() {
       </div>
 
       {/* Table Card */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-none sm:rounded-2xl border-y sm:border-x border-slate-100 shadow-sm overflow-hidden">
         {loading ? (
           <div className="p-12 text-center text-slate-500">Məlumatlar yüklənir...</div>
         ) : filteredProducts.length === 0 ? (
@@ -361,7 +505,26 @@ export default function IsmayilliProducts() {
                       />
                     </td>
                     <td className="p-4 text-sm font-semibold text-slate-900">{p.name}</td>
-                    <td className="p-4 text-sm text-slate-500 font-mono">{p.barcode || '-'}</td>
+                    <td className="p-4 text-sm font-mono">
+                      {p.barcode ? (
+                        <div className="flex items-center gap-2">
+                           <span className="text-slate-500 font-mono">{p.barcode}</span>
+                           <button
+                               onClick={(e) => {
+                                   e.stopPropagation();
+                                   setSelectedProductForBarcode(p);
+                                   setIsBarcodePrintModalOpen(true);
+                               }}
+                               className="flex items-center justify-center px-2 py-1 bg-green-500 text-white rounded text-xs font-bold hover:bg-green-600 transition-all shadow-sm"
+                               title="Barkoda bax və çap et"
+                           >
+                               Bax
+                           </button>
+                        </div>
+                      ) : (
+                        <span className="text-slate-500">-</span>
+                      )}
+                    </td>
                     <td className="p-4 text-sm">
                       <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-700">
                         {p.category?.name || '-'}
@@ -739,6 +902,20 @@ export default function IsmayilliProducts() {
         productId={editingProduct?.id} 
         product={editingProduct} 
         initialTab={historyTab} 
+      />
+
+      {/* Excel Table Bulk Add Modal */}
+      <ExcelTableModal
+        isOpen={isExcelTableModalOpen}
+        onClose={() => setIsExcelTableModalOpen(false)}
+        onRefresh={fetchData}
+        isIsmayilli={true}
+      />
+
+      <BarcodePrintModal 
+        isOpen={isBarcodePrintModalOpen}
+        onClose={() => setIsBarcodePrintModalOpen(false)}
+        product={selectedProductForBarcode}
       />
     </div>
   );

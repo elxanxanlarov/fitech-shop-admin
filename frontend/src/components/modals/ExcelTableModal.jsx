@@ -5,7 +5,7 @@ import Alert from '../ui/Alert';
 import { productApi, branchApi } from '../../api';
 import { useAuth, useBranch } from '../../hooks';
 
-export default function ExcelTableModal({ isOpen, onClose, onRefresh }) {
+export default function ExcelTableModal({ isOpen, onClose, onRefresh, isIsmayilli = false }) {
     const { t } = useTranslation('product');
     const { t: tAlert } = useTranslation('alert');
     const { user } = useAuth();
@@ -37,12 +37,12 @@ export default function ExcelTableModal({ isOpen, onClose, onRefresh }) {
             }
         };
 
-        if (isOpen) {
+        if (isOpen && !isIsmayilli) {
             fetchBranches();
             const initialBranch = user?.branchId || contextBranchId || 'central';
             setTargetBranchId(initialBranch);
         }
-    }, [isOpen, user, contextBranchId]);
+    }, [isOpen, user, contextBranchId, isIsmayilli]);
 
     if (!isOpen) return null;
 
@@ -122,7 +122,8 @@ export default function ExcelTableModal({ isOpen, onClose, onRefresh }) {
             
             const response = await productApi.bulkCreate({
                 products: validProducts,
-                branchId: targetBranchId
+                branchId: isIsmayilli ? undefined : targetBranchId,
+                store: isIsmayilli ? 'ISMAYILLI' : undefined
             });
 
             Alert.close();
@@ -166,29 +167,31 @@ export default function ExcelTableModal({ isOpen, onClose, onRefresh }) {
                         </div>
                     </div>
                     <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 shadow-sm">
-                            <div className="bg-blue-600 p-1.5 rounded-lg">
-                                <MapPin className="w-4 h-4 text-white" />
+                        {!isIsmayilli && (
+                            <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 shadow-sm">
+                                <div className="bg-blue-600 p-1.5 rounded-lg">
+                                    <MapPin className="w-4 h-4 text-white" />
+                                </div>
+                                <div className="flex flex-col">
+                                    <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider leading-none mb-1">
+                                        {t('target_branch') || 'Hədəf Filial'}
+                                    </span>
+                                    <select
+                                        value={targetBranchId}
+                                        onChange={(e) => setTargetBranchId(e.target.value)}
+                                        disabled={user?.role?.name !== 'superadmin' && user?.isBoss !== true}
+                                        className="text-sm font-bold text-gray-900 bg-transparent outline-none disabled:cursor-not-allowed cursor-pointer"
+                                    >
+                                        <option value="central">{t('central_warehouse') || 'Mərkəzi Anbar'}</option>
+                                        {branches.map(branch => (
+                                            <option key={branch.id} value={branch.id}>
+                                                {branch.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
                             </div>
-                            <div className="flex flex-col">
-                                <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider leading-none mb-1">
-                                    {t('target_branch') || 'Hədəf Filial'}
-                                </span>
-                                <select
-                                    value={targetBranchId}
-                                    onChange={(e) => setTargetBranchId(e.target.value)}
-                                    disabled={user?.role?.name !== 'superadmin' && user?.isBoss !== true}
-                                    className="text-sm font-bold text-gray-900 bg-transparent outline-none disabled:cursor-not-allowed cursor-pointer"
-                                >
-                                    <option value="central">{t('central_warehouse') || 'Mərkəzi Anbar'}</option>
-                                    {branches.map(branch => (
-                                        <option key={branch.id} value={branch.id}>
-                                            {branch.name}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
+                        )}
                         <button
                             onClick={onClose}
                             className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-all"

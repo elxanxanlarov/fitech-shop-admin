@@ -1,13 +1,15 @@
 import prisma from "../lib/prisma.js";
 import { createActivityLog } from "./activityLogController.js";
 import { computeCashboxBalance, buildBranchFilter } from "../services/cashboxService.js";
+import { getStoreFilter } from "../utils/storeHelper.js";
 
 // Bütün məbləğ təslimlərini gətir
 export const getAllCashHandovers = async (req, res) => {
     try {
         const { startDate, endDate, deleteType, includeDeleted, branchId } = req.query;
         
-        const where = {};
+        const storeFilter = getStoreFilter(req);
+        const where = { ...storeFilter };
         
         // DeleteType filter - default olaraq yalnız silinməyən məbləğ təslimlərini göstər
         if (includeDeleted === 'true') {
@@ -131,7 +133,7 @@ export const getCashHandoverById = async (req, res) => {
 // Yeni məbləğ təslimi yarat
 export const createCashHandover = async (req, res) => {
     try {
-        const { date, amount, handedOverToId, handedOverById, note, branchId } = req.body;
+        const { date, amount, handedOverToId, handedOverById, note, branchId, store } = req.body;
         const staffId = req.user?.id;
 
         // Validation
@@ -219,7 +221,8 @@ export const createCashHandover = async (req, res) => {
                 handedOverToId,
                 handedOverById,
                 note: note || null,
-                branchId: (branchId && branchId !== 'central') ? branchId : null
+                branchId: (branchId && branchId !== 'central') ? branchId : null,
+                store: store || getStoreFilter(req).store || 'FITECH',
             },
             include: {
                 handedOverTo: {

@@ -52,7 +52,8 @@ export const createReceiptForSale = async (sale) => {
                 paidAmount: sale.paidAmount,
                 profitAmount: sale.profitAmount,
                 paymentType: sale.paymentType,
-                note: sale.note
+                note: sale.note,
+                store: sale.store || 'FITECH',
             }
         });
         

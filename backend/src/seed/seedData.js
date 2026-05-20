@@ -12,8 +12,7 @@ export const seedData = async () => {
       { name: "superadmin", isCore: true },
       { name: "admin", isCore: true },
       { name: "reception", isCore: true },
-      { name: "ismayilliadmin", isCore: true },
-      { name: "ismayilliseller", isCore: true },
+      { name: "seller", isCore: true },
     ];
 
     for (const roleData of roles) {
@@ -37,6 +36,28 @@ export const seedData = async () => {
         } else {
           console.log(`ℹ️  Role artıq mövcuddur: ${roleData.name} (isCore: ${roleData.isCore})`);
         }
+      }
+    }
+
+    // Köhnə İsmayıllı rolları artıq istifadə olunmur — varsa və heç bir staff
+    // onları istifadə etmirsə silinir.
+    const obsoleteRoleNames = ["ismayilliadmin", "ismayilliseller"];
+    for (const obsoleteName of obsoleteRoleNames) {
+      const obsoleteRole = await prisma.role.findFirst({
+        where: { name: obsoleteName },
+      });
+      if (!obsoleteRole) continue;
+
+      const usageCount = await prisma.staff.count({
+        where: { roleId: obsoleteRole.id },
+      });
+      if (usageCount === 0) {
+        await prisma.role.delete({ where: { id: obsoleteRole.id } });
+        console.log(`🗑️  Köhnə role silindi: ${obsoleteName}`);
+      } else {
+        console.log(
+          `⚠️  Köhnə role saxlanıldı (${usageCount} staff istifadə edir): ${obsoleteName}`
+        );
       }
     }
 

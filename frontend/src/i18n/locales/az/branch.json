@@ -122,5 +122,8 @@
     "transfer_list": "Transfer Siyahısı",
     "search_in_list": "Siyahıda axtar...",
     "max_stock_reached": "Maksimum stok həddinə çatılıb",
-    "no_results_found": "Axtarışa uyğun məhsul tapılmadı"
+    "no_results_found": "Axtarışa uyğun məhsul tapılmadı",
+    "show_purchase_price": "Alış qiyməti görünsün",
+    "is_show_ismayilli": "İsmayıllı bölməsi görünsün",
+    "is_show_discount_price": "Endirimli qiymət görünsün"
 }

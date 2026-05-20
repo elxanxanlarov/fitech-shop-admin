@@ -83,6 +83,11 @@ export const ismayilliApi = {
     return response.data;
   },
 
+  getSaleById: async (id) => {
+    const response = await api.get(`/ismayilli/sale/${id}`);
+    return response.data;
+  },
+
   createSale: async (saleData) => {
     const response = await api.post('/ismayilli/sale', saleData);
     return response.data;

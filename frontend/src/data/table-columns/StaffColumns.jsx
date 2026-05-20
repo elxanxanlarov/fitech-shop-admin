@@ -43,6 +43,8 @@ export const getStaffColumns = (t, language = 'az') => [
                 roleName = 'Admin (İsmayıllı)';
             } else if (rname === 'ismayilliseller') {
                 roleName = 'Satışçı (İsmayıllı)';
+            } else if (rname === 'seller') {
+                roleName = 'Satıcı';
             } else if (rname === 'admin' && isBoss) {
                 roleName = t('head_admin_short') || 'Baş Admin';
             }
@@ -55,6 +57,8 @@ export const getStaffColumns = (t, language = 'az') => [
                 badgeClass = 'bg-red-100 text-red-800';
             } else if (rl === 'reception') {
                 badgeClass = 'bg-blue-100 text-blue-800';
+            } else if (rl === 'satıcı' || rl === 'seller') {
+                badgeClass = 'bg-teal-100 text-teal-800';
             }
 
             return (

@@ -9,6 +9,18 @@ const api = axios.create({
   },
 });
 
+// Request Interceptor to dynamically attach active store type header
+api.interceptors.request.use(
+  (config) => {
+    const selectedStore = localStorage.getItem('selectedStore') || 'FITECH';
+    config.headers['x-store-type'] = selectedStore;
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
 
 // Response Interceptor
 api.interceptors.response.use(

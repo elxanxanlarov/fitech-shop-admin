@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { createActivityLog } from "./activityLogController.js";
 import { calculateProductStock } from "../utils/productStockHelper.js";
 import { resolveProductStock, formatDeliveryTitle } from "../utils/finalDeliveryHelper.js";
+import { getStoreFilter } from "../utils/storeHelper.js";
 
 function requesterCanPickAnyBranch(requester) {
     const r = requester?.role?.name?.toLowerCase();
@@ -14,7 +15,8 @@ export const getAllFinalDeliveries = async (req, res) => {
     try {
         const { deleteType, includeDeleted, page = 1, limit = 10, search, startDate, endDate, branchId } = req.query;
         
-        const where = {};
+        const storeFilter = getStoreFilter(req);
+        const where = { ...storeFilter };
         
         // DeleteType filter
         if (includeDeleted === 'true') {
@@ -342,6 +344,7 @@ export const createFinalDelivery = async (req, res) => {
                 note: note?.trim() || null,
                 staffId: req.staffId || null,
                 branchId: resolvedBranchId,
+                store: req.body.store || getStoreFilter(req).store || 'FITECH',
                 items: {
                     create: deliveryItems
                 }

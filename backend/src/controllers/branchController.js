@@ -1,7 +1,9 @@
 import prisma from "../lib/prisma.js";
 import { createActivityLog } from "./activityLogController.js";
+import { getStoreFilter } from "../utils/storeHelper.js";
 export const getAllBranchStocks = async (req, res) => {
     try {
+        const storeFilter = getStoreFilter(req);
         const stocks = await prisma.branchstock.findMany({
             include: {
                 branch: {
@@ -13,7 +15,8 @@ export const getAllBranchStocks = async (req, res) => {
             },
             where: {
                 branch: { deleteType: 'NONE' },
-                stock: { gt: 0 }
+                stock: { gt: 0 },
+                ...storeFilter
             }
         });
 
@@ -102,7 +105,7 @@ export const getBranchById = async (req, res) => {
 // Yeni filial yarat
 export const createBranch = async (req, res) => {
     try {
-        const { name, address, phone, showPurchasePrice } = req.body;
+        const { name, address, phone, showPurchasePrice, isShowIsmayilli, isShowDiscountPrice } = req.body;
 
         if (!name) {
             return res.status(400).json({
@@ -127,7 +130,9 @@ export const createBranch = async (req, res) => {
                 name,
                 address,
                 phone,
-                showPurchasePrice: showPurchasePrice !== undefined ? showPurchasePrice : true
+                showPurchasePrice: showPurchasePrice !== undefined ? showPurchasePrice : true,
+                isShowIsmayilli: isShowIsmayilli !== undefined ? isShowIsmayilli : false,
+                isShowDiscountPrice: isShowDiscountPrice !== undefined ? isShowDiscountPrice : true
             }
         });
 
@@ -159,7 +164,7 @@ export const createBranch = async (req, res) => {
 export const updateBranch = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, address, phone, isActive, showPurchasePrice } = req.body;
+        const { name, address, phone, isActive, showPurchasePrice, isShowIsmayilli, isShowDiscountPrice } = req.body;
 
         const branch = await prisma.branch.findUnique({
             where: { id }
@@ -179,7 +184,9 @@ export const updateBranch = async (req, res) => {
                 address: address !== undefined ? address : branch.address,
                 phone: phone !== undefined ? phone : branch.phone,
                 isActive: isActive !== undefined ? isActive : branch.isActive,
-                showPurchasePrice: showPurchasePrice !== undefined ? showPurchasePrice : branch.showPurchasePrice
+                showPurchasePrice: showPurchasePrice !== undefined ? showPurchasePrice : branch.showPurchasePrice,
+                isShowIsmayilli: isShowIsmayilli !== undefined ? isShowIsmayilli : branch.isShowIsmayilli,
+                isShowDiscountPrice: isShowDiscountPrice !== undefined ? isShowDiscountPrice : branch.isShowDiscountPrice
             }
         });
 
@@ -209,10 +216,12 @@ export const updateBranch = async (req, res) => {
 export const getBranchStocks = async (req, res) => {
     try {
         const { id } = req.params;
+        const storeFilter = getStoreFilter(req);
         const stocks = await prisma.branchstock.findMany({
             where: {
                 branchId: id,
-                stock: { gt: 0 }   // yalnız stoku > 0 olan məhsulları qaytart
+                stock: { gt: 0 },   // yalnız stoku > 0 olan məhsulları qaytart
+                ...storeFilter
             },
             include: {
                 product: {

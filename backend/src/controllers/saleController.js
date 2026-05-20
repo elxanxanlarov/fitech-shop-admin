@@ -3,12 +3,14 @@ import { Prisma } from "@prisma/client";
 import { createActivityLog } from "./activityLogController.js";
 import { createReceiptForSale } from "./receiptController.js";
 import { decreaseProductStock, increaseProductStock, calculateProductPrice, calculateProductStock } from "../utils/productStockHelper.js";
+import { getStoreFilter } from "../utils/storeHelper.js";
 
 export const getAllSales = async (req, res) => {
     try {
         const { deleteType, includeDeleted, startDate, endDate, branchId } = req.query;
         
-        const where = {};
+        const storeFilter = getStoreFilter(req);
+        const where = { ...storeFilter };
 
         // Branch filter
         if (branchId && branchId !== 'central') {
@@ -109,7 +111,8 @@ export const createSale = async (req, res) => {
             paymentType,
             isCredit,
             creditTermId,
-            branchId // From BranchContext
+            branchId, // From BranchContext
+            store
         } = req.body;
 
         if (!items || !Array.isArray(items) || items.length === 0) {
@@ -258,6 +261,7 @@ export const createSale = async (req, res) => {
                 paymentType: paymentType || 'cash', // "cash" (nagd) və ya "card" (kart)
                 note: note?.trim() || null,
                 branchId: (branchId && branchId !== 'central') ? branchId : null,
+                store: store || getStoreFilter(req).store || 'FITECH',
                 ...creditData,
                 items: {
                     create: saleItems
@@ -343,7 +347,8 @@ export const createSale = async (req, res) => {
                         paymentDate: new Date(),
                         note: 'Bu ayın ödənişi',
                         staffId: req.staffId || null,
-                        branchId: sale.branchId
+                        branchId: sale.branchId,
+                        store: sale.store || 'FITECH',
                     }
                 });
                 

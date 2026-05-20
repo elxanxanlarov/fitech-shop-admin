@@ -3,11 +3,13 @@ import { useTranslation } from 'react-i18next';
 import { MdSettings, MdArrowRight, MdSecurity, MdFolder, MdCreditCard, MdBusiness } from 'react-icons/md';
 import { useAuth } from '../../context/AuthContext';
 import { isFilialAdmin } from '../../utils/accessHelpers';
+import { useBranch } from '../../context/BranchContext';
 
 export default function Settings() {
     const navigate = useNavigate();
     const { t } = useTranslation('settings');
     const { user } = useAuth();
+    const { selectedStore } = useBranch();
     const filialAdminOnlyCategories = isFilialAdmin(user);
 
     const allSettingsItems = [
@@ -49,9 +51,13 @@ export default function Settings() {
         }
     ];
 
-    const settingsItems = filialAdminOnlyCategories
+    let settingsItems = filialAdminOnlyCategories
         ? allSettingsItems.filter((item) => item.id === 'category-management')
         : allSettingsItems;
+
+    if (selectedStore === 'ISMAYILLI') {
+        settingsItems = settingsItems.filter(item => item.id !== 'roles-management' && item.id !== 'branch-management');
+    }
 
     const handleNavigate = (path) => {
         navigate(path);

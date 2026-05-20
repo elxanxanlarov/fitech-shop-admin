@@ -79,6 +79,7 @@ export default function IsmayilliStaff() {
     const rname = (roleName || '').toLowerCase();
     if (rname === 'ismayilliadmin') return 'Admin (İsmayıllı)';
     if (rname === 'ismayilliseller') return 'Satışçı (İsmayıllı)';
+    if (rname === 'seller') return 'Satıcı';
     return roleName;
   };
 

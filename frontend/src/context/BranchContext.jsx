@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { useSearchParams } from 'react-router-dom';
+import { branchApi } from '../api';
 
 const BranchContext = createContext(null);
 
@@ -12,12 +13,48 @@ export const BranchProvider = ({ children }) => {
     const urlBranchId = searchParams.get('branchId');
     const urlBranchName = searchParams.get('branchName');
 
+    const [branches, setBranches] = useState([]);
     const [selectedBranchId, setSelectedBranchId] = useState(() => {
         return urlBranchId || localStorage.getItem('selectedBranchId') || 'central';
     });
     const [selectedBranchName, setSelectedBranchName] = useState(() => {
         return urlBranchName || localStorage.getItem('selectedBranchName') || '';
     });
+
+    const [selectedStore, setSelectedStore] = useState(() => {
+        return localStorage.getItem('selectedStore') || 'FITECH';
+    });
+
+    // Fetch all active branches and keep in context
+    useEffect(() => {
+        const fetchBranches = async () => {
+            try {
+                const response = await branchApi.getAll();
+                if (response.success && response.data) {
+                    setBranches(response.data);
+                }
+            } catch (error) {
+                console.error('Error fetching branches in BranchProvider:', error);
+            }
+        };
+        fetchBranches();
+    }, []);
+
+    // Find the full branch object
+    const selectedBranch = branches.find(b => b.id === selectedBranchId) || null;
+
+    // Auto-reset store to FITECH if the branch doesn't allow Ismayilli
+    useEffect(() => {
+        if (selectedBranchId === 'central') {
+            if (selectedStore === 'ISMAYILLI') {
+                setSelectedStore('FITECH');
+            }
+        } else if (selectedBranch && !selectedBranch.isShowIsmayilli) {
+            if (selectedStore === 'ISMAYILLI') {
+                setSelectedStore('FITECH');
+            }
+        }
+    }, [selectedBranchId, selectedBranch, selectedStore]);
 
     // URL dəyişəndə state-i yenilə
     useEffect(() => {
@@ -27,7 +64,7 @@ export const BranchProvider = ({ children }) => {
         if (urlBranchName && urlBranchName !== selectedBranchName) {
             setSelectedBranchName(urlBranchName);
         }
-    }, [urlBranchId, urlBranchName]);
+    }, [urlBranchId, urlBranchName, selectedBranchId, selectedBranchName]);
 
     useEffect(() => {
         if (!user?.branchId) return;
@@ -35,7 +72,6 @@ export const BranchProvider = ({ children }) => {
         const canPickBranch = r === 'superadmin' || (r === 'admin' && user.isBoss === true);
         if (!canPickBranch) {
             setSelectedBranchId(user.branchId);
-            // URL-i də təmizləyə bilərik və ya öz filialını qoya bilərik
         }
     }, [user]);
 
@@ -55,6 +91,10 @@ export const BranchProvider = ({ children }) => {
         }
     }, [selectedBranchName]);
 
+    useEffect(() => {
+        localStorage.setItem('selectedStore', selectedStore);
+    }, [selectedStore]);
+
     const selectBranch = (id, name = '') => {
         setSelectedBranchId(id);
         setSelectedBranchName(name);
@@ -72,7 +112,15 @@ export const BranchProvider = ({ children }) => {
     };
 
     return (
-        <BranchContext.Provider value={{ selectedBranchId, selectedBranchName, selectBranch }}>
+        <BranchContext.Provider value={{ 
+            branches,
+            selectedBranchId, 
+            selectedBranchName, 
+            selectedBranch,
+            selectedStore, 
+            setSelectedStore,
+            selectBranch 
+        }}>
             {children}
         </BranchContext.Provider>
     );

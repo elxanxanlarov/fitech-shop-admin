@@ -1,12 +1,14 @@
 import prisma from "../lib/prisma.js";
 import { createActivityLog } from "./activityLogController.js";
+import { getStoreFilter } from "../utils/storeHelper.js";
 
 // Bütün xərcləri gətir
 export const getAllExpenses = async (req, res) => {
     try {
         const { startDate, endDate, category, deleteType, includeDeleted, branchId } = req.query;
 
-        const where = {};
+        const storeFilter = getStoreFilter(req);
+        const where = { ...storeFilter };
 
         // DeleteType filter - default olaraq yalnız silinməyən xərcləri göstər
         if (includeDeleted === 'true') {
@@ -137,7 +139,7 @@ export const getExpenseById = async (req, res) => {
 // Yeni xərc yarat
 export const createExpense = async (req, res) => {
     try {
-        const { title, description, amount, category, date, note, branchId } = req.body;
+        const { title, description, amount, category, date, note, branchId, store } = req.body;
 
         if (!title || title.trim() === "") {
             return res.status(400).json({
@@ -163,6 +165,7 @@ export const createExpense = async (req, res) => {
                 note: note?.trim() || null,
                 staffId: req.staffId || null,
                 branchId: (branchId && branchId !== 'central') ? branchId : null,
+                store: store || getStoreFilter(req).store || 'FITECH',
             },
             include: {
                 staff: {

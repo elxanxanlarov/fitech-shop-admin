@@ -1,6 +1,7 @@
 import prisma from '../lib/prisma.js';
 import { Prisma } from '@prisma/client';
 import { computeCashboxBalance, buildBranchFilter } from '../services/cashboxService.js';
+import { getStoreFilter } from "../utils/storeHelper.js";
 
 /** Satış sorğularında filial: konkret id, 'central' → yalnız mərkəzi (branchId null), boş → süzülmür */
 function saleBranchWhere(branchId) {
@@ -17,6 +18,8 @@ function saleBranchWhere(branchId) {
 export const getOverallStatistics = async (req, res) => {
     try {
         const { startDate, endDate, branchId } = req.query;
+
+        const storeFilter = getStoreFilter(req);
 
         // ================= DATE FILTER =================
         let dateFilter = {};
@@ -39,7 +42,7 @@ export const getOverallStatistics = async (req, res) => {
         // ================= SALES CATEGORIES =================
 
         // 1. GROSS (Everything - not deleted)
-        const grossFilter = { deleteType: 'NONE', ...dateFilter, ...branchWhere };
+        const grossFilter = { deleteType: 'NONE', ...dateFilter, ...branchWhere, ...storeFilter };
         const grossSalesCount = await prisma.sale.count({ where: grossFilter });
         const grossAggregation = await prisma.sale.aggregate({
             where: grossFilter,
@@ -66,7 +69,8 @@ export const getOverallStatistics = async (req, res) => {
             ...dateFilter,
             sale: {
                 deleteType: 'NONE',
-                ...branchWhere
+                ...branchWhere,
+                ...storeFilter,
             }
         };
         const totalReturnsCount = await prisma.salereturn.count({ where: returnsFilter });
@@ -83,7 +87,8 @@ export const getOverallStatistics = async (req, res) => {
                     sale: {
                         deleteType: 'NONE',
                         isRefunded: false,
-                        ...branchWhere
+                        ...branchWhere,
+                        ...storeFilter,
                     }
                 }
             },
@@ -113,30 +118,30 @@ export const getOverallStatistics = async (req, res) => {
             };
 
             totalProducts = await prisma.product.count({
-                where: branchVisibleFilter
+                where: { ...branchVisibleFilter, ...storeFilter }
             });
             activeProducts = await prisma.product.count({
-                where: { ...branchVisibleFilter, isActive: true }
+                where: { ...branchVisibleFilter, isActive: true, ...storeFilter }
             });
             stockAggregation = await prisma.branchstock.aggregate({
                 where: {
                     branchId: branchId,
-                    product: { isActive: true, deleteType: 'NONE' }
+                    product: { isActive: true, deleteType: 'NONE', ...storeFilter }
                 },
                 _sum: { stock: true }
             });
             // Global deleted products count
-            deletedProducts = await prisma.product.count({ where: { deleteType: { not: 'NONE' } } });
+            deletedProducts = await prisma.product.count({ where: { deleteType: { not: 'NONE' }, ...storeFilter } });
         } else {
-            totalProducts = await prisma.product.count({ where: { deleteType: 'NONE' } });
-            activeProducts = await prisma.product.count({ where: { isActive: true, deleteType: 'NONE' } });
-            stockAggregation = await prisma.product.aggregate({ where: { isActive: true, deleteType: 'NONE' }, _sum: { stock: true } });
-            deletedProducts = await prisma.product.count({ where: { deleteType: { not: 'NONE' } } });
+            totalProducts = await prisma.product.count({ where: { deleteType: 'NONE', ...storeFilter } });
+            activeProducts = await prisma.product.count({ where: { isActive: true, deleteType: 'NONE', ...storeFilter } });
+            stockAggregation = await prisma.product.aggregate({ where: { isActive: true, deleteType: 'NONE', ...storeFilter }, _sum: { stock: true } });
+            deletedProducts = await prisma.product.count({ where: { deleteType: { not: 'NONE' }, ...storeFilter } });
         }
 
-        const softDeletedProducts = await prisma.product.count({ where: { deleteType: 'SOFT' } });
-        const hardDeletedProducts = await prisma.product.count({ where: { deleteType: 'HARD' } });
-        const archivedProducts = await prisma.product.count({ where: { deleteType: 'ARCHIVED' } });
+        const softDeletedProducts = await prisma.product.count({ where: { deleteType: 'SOFT', ...storeFilter } });
+        const hardDeletedProducts = await prisma.product.count({ where: { deleteType: 'HARD', ...storeFilter } });
+        const archivedProducts = await prisma.product.count({ where: { deleteType: 'ARCHIVED', ...storeFilter } });
 
         // ================= STAFF =================
         const totalStaff = await prisma.staff.count({ where: currentBranchFilter });
@@ -150,31 +155,31 @@ export const getOverallStatistics = async (req, res) => {
             expenseDateFilter = { date: { gte: start, lte: end } };
         }
         const expensesAggregation = await prisma.expense.aggregate({
-            where: { deleteType: 'NONE', ...expenseDateFilter, ...currentBranchFilter },
+            where: { deleteType: 'NONE', ...expenseDateFilter, ...currentBranchFilter, ...storeFilter },
             _sum: { amount: true }
         });
 
         const cashHandoverAggregation = await prisma.cashhandover.aggregate({
-            where: { deleteType: 'NONE', ...expenseDateFilter, ...currentBranchFilter },
+            where: { deleteType: 'NONE', ...expenseDateFilter, ...currentBranchFilter, ...storeFilter },
             _sum: { amount: true },
             _count: true
         });
 
         // ================= CREDITS =================
-        const creditSalesFilter = { isCredit: true, isRefunded: false, deleteType: 'NONE', ...dateFilter, ...currentBranchFilter };
+        const creditSalesFilter = { isCredit: true, isRefunded: false, deleteType: 'NONE', ...dateFilter, ...currentBranchFilter, ...storeFilter };
         const totalCreditSales = await prisma.sale.count({ where: creditSalesFilter });
         const creditSalesAggregation = await prisma.sale.aggregate({
             where: creditSalesFilter,
             _sum: { creditTotalAmount: true, creditRemainingAmount: true }
         });
-        const activeCredits = await prisma.sale.count({ where: { isCredit: true, isRefunded: false, isCreditPaid: false, deleteType: 'NONE' } });
+        const activeCredits = await prisma.sale.count({ where: { isCredit: true, isRefunded: false, isCreditPaid: false, deleteType: 'NONE', ...storeFilter } });
         const totalCreditPaid = Number(creditSalesAggregation._sum.creditTotalAmount || 0) - Number(creditSalesAggregation._sum.creditRemainingAmount || 0);
 
         // ================= TODAY STATS =================
         const today = new Date(); today.setHours(0, 0, 0, 0);
         const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
 
-        const todayGrossFilter = { deleteType: 'NONE', createdAt: { gte: today, lt: tomorrow }, ...currentBranchFilter };
+        const todayGrossFilter = { deleteType: 'NONE', createdAt: { gte: today, lt: tomorrow }, ...currentBranchFilter, ...storeFilter };
         const todayGrossCount = await prisma.sale.count({ where: todayGrossFilter });
         const todayGrossAgg = await prisma.sale.aggregate({ where: todayGrossFilter, _sum: { totalAmount: true, profitAmount: true } });
 
@@ -191,7 +196,7 @@ export const getOverallStatistics = async (req, res) => {
             where: {
                 return: {
                     createdAt: { gte: today, lt: tomorrow },
-                    sale: { deleteType: 'NONE', isRefunded: false, ...currentBranchFilter }
+                    sale: { deleteType: 'NONE', isRefunded: false, ...currentBranchFilter, ...storeFilter }
                 }
             },
             _sum: { loss: true }
@@ -202,19 +207,19 @@ export const getOverallStatistics = async (req, res) => {
         const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
         const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
         const todayExpensesAgg = await prisma.expense.aggregate({
-            where: { deleteType: 'NONE', date: { gte: todayStart, lte: todayEnd }, ...currentBranchFilter },
+            where: { deleteType: 'NONE', date: { gte: todayStart, lte: todayEnd }, ...currentBranchFilter, ...storeFilter },
             _sum: { amount: true }
         });
 
         // Today Handovers
         const todayHandoverAgg = await prisma.cashhandover.aggregate({
-            where: { deleteType: 'NONE', date: { gte: todayStart, lte: todayEnd }, ...currentBranchFilter },
+            where: { deleteType: 'NONE', date: { gte: todayStart, lte: todayEnd }, ...currentBranchFilter, ...storeFilter },
             _sum: { amount: true },
             _count: true
         });
 
         // ================= KASSA (CASHBOX) - ALL TIME =================
-        const kassaBranchFilter = buildBranchFilter(branchId);
+        const kassaBranchFilter = { ...buildBranchFilter(branchId), ...storeFilter };
         const cashboxResult = await computeCashboxBalance(kassaBranchFilter);
         const cashboxBalance = cashboxResult.balance;
 
@@ -770,6 +775,8 @@ export const getSalesLedger = async (req, res) => {
     try {
         const { startDate, endDate, branchId } = req.query;
 
+        const storeFilter = getStoreFilter(req);
+
         // Date filter
         let dateFilter = {};
         if (startDate && endDate) {
@@ -782,7 +789,7 @@ export const getSalesLedger = async (req, res) => {
 
         // Satışlar (Bütün satışlar, silinməmiş)
         const sales = await prisma.sale.findMany({
-            where: { deleteType: 'NONE', ...branchFilter, ...dateFilter },
+            where: { deleteType: 'NONE', ...branchFilter, ...dateFilter, ...storeFilter },
             select: {
                 id: true,
                 totalAmount: true,
@@ -818,15 +825,15 @@ export const getSalesLedger = async (req, res) => {
 
         const [expensesAgg, handoversAgg, cashbox] = await Promise.all([
             prisma.expense.aggregate({
-                where: { deleteType: 'NONE', ...branchFilter, ...expenseDateFilter },
+                where: { deleteType: 'NONE', ...branchFilter, ...expenseDateFilter, ...storeFilter },
                 _sum: { amount: true },
             }),
             prisma.cashhandover.aggregate({
-                where: { deleteType: 'NONE', ...branchFilter, ...expenseDateFilter },
+                where: { deleteType: 'NONE', ...branchFilter, ...expenseDateFilter, ...storeFilter },
                 _sum: { amount: true },
                 _count: true,
             }),
-            computeCashboxBalance(branchFilter),
+            computeCashboxBalance({ ...branchFilter, ...storeFilter }),
         ]);
 
         const totalSalesAmount = sales.reduce((s, x) => s + Number(x.totalAmount), 0);

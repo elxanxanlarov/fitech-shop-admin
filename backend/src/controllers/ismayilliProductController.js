@@ -8,6 +8,7 @@ import xlsx from "xlsx";
 export const getAllCategories = async (req, res) => {
   try {
     const categories = await prisma.ismayilliShopCategory.findMany({
+      where: { isActive: true },
       orderBy: { name: "asc" },
       include: {
         _count: {
@@ -124,10 +125,29 @@ export const createProduct = async (req, res) => {
     const pPrice = unitPricePurchase !== undefined ? parseFloat(unitPricePurchase) : 0;
     const sPrice = unitPriceSale !== undefined ? parseFloat(unitPriceSale) : 0;
 
+    // Generate a unique 13-digit EAN-13-compatible barcode if not provided
+    let finalBarcode = barcode?.trim() || null;
+    if (!finalBarcode) {
+      let isUnique = false;
+      let generatedBarcode;
+      while (!isUnique) {
+        const randomPart = Math.floor(100000 + Math.random() * 900000); // 6 digits
+        generatedBarcode = `2000006${randomPart}`;
+        
+        const existing = await prisma.ismayilliMagazaProduct.findUnique({
+          where: { barcode: generatedBarcode }
+        });
+        if (!existing) {
+          isUnique = true;
+        }
+      }
+      finalBarcode = generatedBarcode;
+    }
+
     const newProduct = await prisma.ismayilliMagazaProduct.create({
       data: {
         name: name.trim(),
-        barcode: barcode ? barcode.trim() : null,
+        barcode: finalBarcode,
         quantity: qty,
         unitPricePurchase: pPrice,
         unitPriceSale: sPrice,
@@ -345,32 +365,46 @@ export const importExcel = async (req, res) => {
     // Helper to extract purchase/sale prices with smart unit/total matching
     const getPriceFieldValue = (row, type) => {
       const keys = Object.keys(row);
-      
-      // Try to find unit price first (containing both price keyword and "ədəd" / "eded" / "ədədinə" / "eden")
+
+      // Exact match for the user's specific columns from the image: "Alış" qiymətinə eded, "Satış" qiymətinə eded
       for (const k of keys) {
         const normalized = k.toLowerCase().replace(/\s+/g, '').replace(/"/g, '');
         if (type === 'purchase') {
-          if ((normalized.includes('alış') || normalized.includes('alis') || normalized.includes('mədaxil') || normalized.includes('medaxil')) && 
-              (normalized.includes('eded') || normalized.includes('ədəd') || normalized.includes('vahid') || normalized.includes('ədədinə') || normalized.includes('eden'))) {
+          if (normalized.includes('alisqiymetineeded') || normalized.includes('alışqiymətinəeded')) {
             return row[k];
           }
         } else {
-          const isSaleWord = normalized.includes('satış') || normalized.includes('satis');
-          const isQiymetWord = (normalized.includes('qiymət') || normalized.includes('qiymet')) && 
-                               !(normalized.includes('alış') || normalized.includes('alis') || normalized.includes('mədaxil') || normalized.includes('medaxil'));
-          if ((isSaleWord || isQiymetWord) && 
-              (normalized.includes('eded') || normalized.includes('ədəd') || normalized.includes('vahid') || normalized.includes('ədədinə') || normalized.includes('eden'))) {
+          if (normalized.includes('satisqiymetineeded') || normalized.includes('satışqiymətinəeded')) {
             return row[k];
           }
         }
       }
-      
+
+      // Try to find unit price first (containing both price keyword and "ədəd" / "eded" / "ədədinə" / "eden")
+      for (const k of keys) {
+        const normalized = k.toLowerCase().replace(/\s+/g, '').replace(/"/g, '');
+        if (type === 'purchase') {
+          if ((normalized.includes('alış') || normalized.includes('alis') || normalized.includes('mədaxil') || normalized.includes('medaxil')) &&
+            (normalized.includes('eded') || normalized.includes('ədəd') || normalized.includes('vahid') || normalized.includes('ədədinə') || normalized.includes('eden'))) {
+            return row[k];
+          }
+        } else {
+          const isSaleWord = normalized.includes('satış') || normalized.includes('satis');
+          const isQiymetWord = (normalized.includes('qiymət') || normalized.includes('qiymet')) &&
+            !(normalized.includes('alış') || normalized.includes('alis') || normalized.includes('mədaxil') || normalized.includes('medaxil'));
+          if ((isSaleWord || isQiymetWord) &&
+            (normalized.includes('eded') || normalized.includes('ədəd') || normalized.includes('vahid') || normalized.includes('ədədinə') || normalized.includes('eden'))) {
+            return row[k];
+          }
+        }
+      }
+
       // Fallback 1: Try to find any price column that is NOT total (does not contain "görə", "gore", "cəmi", "cemi", "toplam", "total")
       for (const k of keys) {
         const normalized = k.toLowerCase().replace(/\s+/g, '').replace(/"/g, '');
         const isTotal = normalized.includes('görə') || normalized.includes('gore') || normalized.includes('cəmi') || normalized.includes('cemi') || normalized.includes('toplam') || normalized.includes('total');
         if (isTotal) continue;
-        
+
         if (type === 'purchase') {
           if (normalized.includes('alış') || normalized.includes('alis') || normalized.includes('purchase') || normalized.includes('mədaxil') || normalized.includes('medaxil')) {
             return row[k];
@@ -381,19 +415,19 @@ export const importExcel = async (req, res) => {
           }
         }
       }
-      
+
       // Fallback 2: Try to find using standard keys list
-      const standardKeys = type === 'purchase' 
+      const standardKeys = type === 'purchase'
         ? ['alis', 'alış', 'alisqiymeti', 'alışqiyməti', 'purchaseprice', 'purchase', 'alisqiymet', 'alışqiymət', 'mədaxil', 'medaxil']
         : ['satis', 'satış', 'satisqiymeti', 'satışqiyməti', 'saleprice', 'sale', 'satisqiymet', 'satışqiymət', 'qiymet', 'qiymət', 'mədaxilqiyməti'];
-        
+
       for (const key of standardKeys) {
         const matchedKey = keys.find(k => k.toLowerCase().replace(/\s+/g, '').replace(/"/g, '') === key.toLowerCase().replace(/\s+/g, ''));
         if (matchedKey && row[matchedKey] !== undefined && row[matchedKey] !== null) {
           return row[matchedKey];
         }
       }
-      
+
       return null;
     };
 
@@ -401,10 +435,10 @@ export const importExcel = async (req, res) => {
     const cleanNumber = (val) => {
       if (val === null || val === undefined || val === '') return 0;
       if (typeof val === 'number') return val;
-      
+
       let str = String(val).trim().toUpperCase();
       str = str.replace(/[A-Z\s$₼]/g, ''); // Remove AZN, ₼, $, and spaces
-      
+
       if (str.includes(',') && !str.includes('.')) {
         str = str.replace(',', '.');
       } else if (str.includes(',') && str.includes('.')) {
@@ -414,7 +448,7 @@ export const importExcel = async (req, res) => {
           str = str.replace(/,/g, '');
         }
       }
-      
+
       const parsed = parseFloat(str);
       return isNaN(parsed) ? 0 : parsed;
     };
@@ -436,7 +470,7 @@ export const importExcel = async (req, res) => {
     for (const sheetName of workbook.SheetNames) {
       const sheet = workbook.Sheets[sheetName];
       const rawRows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: null });
-      
+
       console.log(`Excel sheet "${sheetName}" has ${rawRows.length} raw rows.`);
 
       // Let's find which row is the header row
@@ -450,7 +484,7 @@ export const importExcel = async (req, res) => {
       for (let i = 0; i < rawRows.length; i++) {
         const row = rawRows[i];
         if (!row || !Array.isArray(row)) continue;
-        
+
         // Count how many keywords are matched in this row
         const matchCount = row.filter(cell => {
           if (cell === null || cell === undefined) return false;
@@ -465,7 +499,7 @@ export const importExcel = async (req, res) => {
           return ['mal', 'ad', 'mehsul', 'məhsul', 'barkod', 'ştrihkod', 'strixkod'].includes(str);
         }))) {
           firstHeaderIndex = i;
-          
+
           // Check if the next row is also part of a two-row header
           if (i + 1 < rawRows.length) {
             const nextRow = rawRows[i + 1];
@@ -503,11 +537,11 @@ export const importExcel = async (req, res) => {
         const row1 = rawRows[firstHeaderIndex];
         const row2 = rawRows[secondHeaderIndex];
         const maxLen = Math.max(row1.length, row2.length);
-        
+
         for (let j = 0; j < maxLen; j++) {
           const val1 = row1[j] !== null && row1[j] !== undefined ? String(row1[j]).trim() : '';
           const val2 = row2[j] !== null && row2[j] !== undefined ? String(row2[j]).trim() : '';
-          
+
           if (val1 && val2) {
             headers.push(`${val1} - ${val2}`);
           } else if (val1) {
@@ -533,7 +567,7 @@ export const importExcel = async (req, res) => {
         if (!rawRow || rawRow.every(c => c === null || c === undefined || c === '')) {
           continue; // Skip empty rows
         }
-        
+
         const rowObj = {};
         for (let j = 0; j < headers.length; j++) {
           if (headers[j]) {
@@ -550,11 +584,25 @@ export const importExcel = async (req, res) => {
       if (!sheetName.toLowerCase().startsWith("sheet")) {
         defaultCatName = sheetName;
       }
-      
+
       let currentCategoryName = defaultCatName;
 
       for (const row of rows) {
-        // 1. Check if it's a category header row (only one string column)
+        // 1. Check if it's a category header row
+        const nameValRaw = getFieldValue(row, ['mal', 'ad', 'mehsul', 'məhsul', 'name', 'product']);
+        const barcodeVal = getFieldValue(row, ['ştrixkod', 'ştrihkod', 'strixkod', 'strihkod', 'barcode', 'barkod', 'kod', 'barcod']);
+        const qtyVal = getFieldValue(row, ['miqdar', 'miqdari', 'miqdarı', 'eded', 'ədəd', 'quantity', 'qty', 'say', 'sayi', 'sayı', 'count']);
+
+        if (nameValRaw && !barcodeVal && !qtyVal) {
+          const val = String(nameValRaw).trim();
+          if (val && val.length > 2 && isNaN(Number(val))) {
+            currentCategoryName = val;
+            console.log(`Detected category header: "${currentCategoryName}"`);
+            continue; 
+          }
+        }
+
+        // Fallback: Check if it's a category header row with only one populated column
         const rowKeys = Object.keys(row).filter(k => row[k] !== null && row[k] !== undefined && row[k] !== '');
         if (rowKeys.length === 1) {
           const val = row[rowKeys[0]];
@@ -565,7 +613,6 @@ export const importExcel = async (req, res) => {
         }
 
         // 2. Extract fields
-        const nameValRaw = getFieldValue(row, ['mal', 'ad', 'mehsul', 'məhsul', 'name', 'product']);
         if (nameValRaw === null || nameValRaw === undefined) {
           continue; // Skip if no name
         }
@@ -582,14 +629,12 @@ export const importExcel = async (req, res) => {
         }
 
         const excelIdVal = getFieldValue(row, ['no', 'sira', 'sıra', 'id']);
-        const barcodeVal = getFieldValue(row, ['ştrixkod', 'ştrihkod', 'strixkod', 'strihkod', 'barcode', 'barkod', 'kod', 'barcod']);
-        const qtyVal = getFieldValue(row, ['miqdar', 'miqdari', 'miqdarı', 'eded', 'ədəd', 'quantity', 'qty', 'say', 'sayi', 'sayı', 'count']);
         const pPriceVal = getPriceFieldValue(row, 'purchase');
         const sPriceVal = getPriceFieldValue(row, 'sale');
         const catColumnVal = getFieldValue(row, ['kateqoriya', 'category']);
 
         const excelId = excelIdVal ? parseInt(excelIdVal) : null;
-        
+
         let barcode = null;
         if (barcodeVal !== null && barcodeVal !== undefined && barcodeVal !== '') {
           barcode = String(barcodeVal).trim();

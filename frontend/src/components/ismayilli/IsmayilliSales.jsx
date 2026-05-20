@@ -1,11 +1,17 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { ismayilliApi } from '../../api';
 import Alert from '../ui/Alert';
-import { ShoppingCart, Search, Plus, Minus, Trash2, Tag, CreditCard, DollarSign, Notebook } from 'lucide-react';
+import { ShoppingCart, Search, Plus, Minus, Trash2, DollarSign, Notebook, Printer, ScanLine } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import IsmayilliReceiptModal from './IsmayilliReceiptModal';
+import IsmayilliPosSaleModal from './IsmayilliPosSaleModal';
+import { useBarcodeScanner, playPosBeep } from '../../hooks/useBarcodeScanner';
 
 export default function IsmayilliSales() {
   const { user } = useAuth();
+  const [receiptSale, setReceiptSale] = useState(null);
+  const [posModalOpen, setPosModalOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [products, setProducts] = useState([]);
   const [sales, setSales] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -71,55 +77,105 @@ export default function IsmayilliSales() {
     return sales.slice(startIndex, startIndex + historyItemsPerPage);
   }, [sales, historyPage, historyItemsPerPage]);
 
-  const addToBasket = (prod) => {
-    const existingIndex = basket.findIndex(item => item.productId === prod.id);
-    if (existingIndex > -1) {
-      const nextQty = basket[existingIndex].quantity + 1;
-      if (nextQty > parseFloat(prod.quantity)) {
-        Alert.error('Xəta', `Kifayət qədər stok yoxdur. Maksimum: ${parseFloat(prod.quantity)}`);
-        return;
-      }
-      const newBasket = [...basket];
-      newBasket[existingIndex].quantity = nextQty;
-      setBasket(newBasket);
-    } else {
-      setBasket([...basket, {
-        productId: prod.id,
-        name: prod.name,
-        quantity: 1,
-        price: parseFloat(prod.unitPriceSale),
-        maxStock: parseFloat(prod.quantity)
-      }]);
+  const addProductToBasket = useCallback((prod, { openModal = false } = {}) => {
+    const maxStock = parseFloat(prod.quantity);
+    if (maxStock <= 0) {
+      Alert.error('Xəta', 'Bu məhsulun stoku tükənib!');
+      return false;
     }
-  };
+
+    setBasket((prev) => {
+      const existingIndex = prev.findIndex((item) => item.productId === prod.id);
+      if (existingIndex > -1) {
+        const nextQty = prev[existingIndex].quantity + 1;
+        if (nextQty > maxStock) {
+          Alert.error('Xəta', `Kifayət qədər stok yoxdur. Maksimum: ${maxStock}`);
+          return prev;
+        }
+        const newBasket = [...prev];
+        newBasket[existingIndex].quantity = nextQty;
+        return newBasket;
+      }
+      return [
+        ...prev,
+        {
+          productId: prod.id,
+          name: prod.name,
+          barcode: prod.barcode,
+          quantity: 1,
+          price: parseFloat(prod.unitPriceSale),
+          maxStock,
+        },
+      ];
+    });
+
+    if (openModal) {
+      setActiveTab('pos');
+      setPosModalOpen(true);
+    }
+    return true;
+  }, []);
+
+  const addToBasket = (prod) => addProductToBasket(prod);
 
   const updateQuantity = (productId, amount) => {
-    const existingIndex = basket.findIndex(item => item.productId === productId);
-    if (existingIndex === -1) return;
+    setBasket((prev) => {
+      const existingIndex = prev.findIndex((item) => item.productId === productId);
+      if (existingIndex === -1) return prev;
 
-    const nextQty = basket[existingIndex].quantity + amount;
-    if (nextQty <= 0) {
-      setBasket(basket.filter(item => item.productId !== productId));
-      return;
-    }
+      const nextQty = prev[existingIndex].quantity + amount;
+      if (nextQty <= 0) {
+        return prev.filter((item) => item.productId !== productId);
+      }
 
-    if (nextQty > basket[existingIndex].maxStock) {
-      Alert.error('Xəta', `Kifayət qədər stok yoxdur. Maksimum: ${basket[existingIndex].maxStock}`);
-      return;
-    }
+      if (nextQty > prev[existingIndex].maxStock) {
+        Alert.error('Xəta', `Kifayət qədər stok yoxdur. Maksimum: ${prev[existingIndex].maxStock}`);
+        return prev;
+      }
 
-    const newBasket = [...basket];
-    newBasket[existingIndex].quantity = nextQty;
-    setBasket(newBasket);
+      const newBasket = [...prev];
+      newBasket[existingIndex].quantity = nextQty;
+      return newBasket;
+    });
   };
 
   const removeFromBasket = (productId) => {
-    setBasket(basket.filter(item => item.productId !== productId));
+    setBasket((prev) => prev.filter((item) => item.productId !== productId));
   };
 
   const totalBasketAmount = useMemo(() => {
     return basket.reduce((sum, item) => sum + (item.quantity * item.price), 0);
   }, [basket]);
+
+  useEffect(() => {
+    setPaidAmount(totalBasketAmount.toString());
+  }, [totalBasketAmount]);
+
+  const handleBarcodeScan = useCallback(
+    async (barcode) => {
+      let prod = products.find((p) => p.barcode === barcode);
+      if (!prod) {
+        try {
+          const res = await ismayilliApi.getAllProducts({ search: barcode });
+          if (res.success && res.data?.length) {
+            prod = res.data.find((p) => p.barcode === barcode);
+          }
+        } catch (err) {
+          console.error('Barcode lookup error:', err);
+        }
+      }
+
+      if (prod) {
+        playPosBeep();
+        addProductToBasket(prod, { openModal: true });
+      } else {
+        Alert.error('Xəta', `Bu barkoda uyğun məhsul tapılmadı: ${barcode}`);
+      }
+    },
+    [products, addProductToBasket]
+  );
+
+  useBarcodeScanner(handleBarcodeScan, activeTab === 'pos');
 
   const handleCompleteSale = async () => {
     if (basket.length === 0) {
@@ -127,6 +183,7 @@ export default function IsmayilliSales() {
       return;
     }
 
+    setSubmitting(true);
     try {
       Alert.loading('Satış tamamlanır...');
       const payload = {
@@ -141,14 +198,18 @@ export default function IsmayilliSales() {
       const res = await ismayilliApi.createSale(payload);
       if (res.success) {
         Alert.success('Uğurlu', 'Satış uğurla tamamlandı');
+        setReceiptSale(res.data);
         setBasket([]);
         setPaidAmount('');
         setNote('');
+        setPosModalOpen(false);
         fetchData();
       }
     } catch (error) {
       Alert.close();
       Alert.error('Xəta', error.response?.data?.message || 'Satış zamanı xəta baş verdi');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -206,9 +267,20 @@ export default function IsmayilliSales() {
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
             <ShoppingCart className="text-purple-600 w-7 h-7" /> Satış Paneli (İsmayıllı)
           </h1>
-          <p className="text-slate-500 text-sm mt-1">İsmayıllı mağazasında sürətli satış və fakturalar</p>
+          <p className="text-slate-500 text-sm mt-1">
+            Barkod skan: input fokusda olmayanda məhsul əlavə olunur və satış modalı açılır
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-4">
+          {activeTab === 'pos' && basket.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setPosModalOpen(true)}
+              className="px-4 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-xl font-bold text-sm flex items-center gap-1.5 border border-purple-200"
+            >
+              <ScanLine className="w-4 h-4" /> Barkod satışı ({basket.length})
+            </button>
+          )}
           {isHeadAdmin && (
             <button
               onClick={handleClearAllSales}
@@ -412,6 +484,7 @@ export default function IsmayilliSales() {
                       <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Ümumi Məbləğ</th>
                       <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Ödənilən</th>
                       <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Qeyd</th>
+                      <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Çek</th>
                       {isHeadAdmin && <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Əməliyyat</th>}
                     </tr>
                   </thead>
@@ -439,9 +512,22 @@ export default function IsmayilliSales() {
                         <td className="p-4 text-sm text-slate-500">
                           {sale.note || '-'}
                         </td>
+                        <td className="p-4 text-sm text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setReceiptSale(sale)}
+                              className="p-1.5 text-purple-600 hover:text-purple-800 hover:bg-purple-50 rounded-lg transition-all"
+                              title="Çeki aç / çap et"
+                            >
+                              <Printer className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
                         {isHeadAdmin && (
                           <td className="p-4 text-sm text-right">
                             <button
+                              type="button"
                               onClick={() => handleDeleteSale(sale.id)}
                               className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-all"
                               title="Satışı Sil"
@@ -517,6 +603,28 @@ export default function IsmayilliSales() {
           )}
         </div>
       )}
+
+      <IsmayilliPosSaleModal
+        isOpen={posModalOpen}
+        onClose={() => setPosModalOpen(false)}
+        basket={basket}
+        onUpdateQuantity={updateQuantity}
+        onRemoveItem={removeFromBasket}
+        paidAmount={paidAmount}
+        onPaidAmountChange={setPaidAmount}
+        note={note}
+        onNoteChange={setNote}
+        totalAmount={totalBasketAmount}
+        onCompleteSale={handleCompleteSale}
+        submitting={submitting}
+      />
+
+      <IsmayilliReceiptModal
+        isOpen={!!receiptSale}
+        sale={receiptSale}
+        type="sale"
+        onClose={() => setReceiptSale(null)}
+      />
     </div>
   );
 }
