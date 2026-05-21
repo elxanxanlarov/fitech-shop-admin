@@ -4,53 +4,54 @@ import { useReactToPrint } from 'react-to-print';
 import JsBarcode from 'jsbarcode';
 
 // Predefined sticker / receipt sizes
+// Qiymət dominant, ad orta, barkod aşağıda — şəklə uyğun.
 const SIZES = {
   '30x20': {
     label: '30mm x 20mm (Kiçik)',
     width: '30mm',
     height: '20mm',
-    barcodeHeight: 20,
+    barcodeHeight: 22,
     barcodeWidth: 1.1,
     fontSize: 7,
     textMargin: 1,
-    nameSize: '7px',
-    priceSize: '11px',
+    nameSize: '8px',
+    priceSize: '15px',
     maxSvgHeight: '9mm'
   },
   '40x30': {
     label: '40mm x 30mm (Orta)',
     width: '40mm',
     height: '30mm',
-    barcodeHeight: 35,
+    barcodeHeight: 36,
     barcodeWidth: 1.3,
     fontSize: 9,
     textMargin: 2,
-    nameSize: '9px',
-    priceSize: '15px',
+    nameSize: '11px',
+    priceSize: '22px',
     maxSvgHeight: '14mm'
   },
   '58x40': {
     label: '58mm x 40mm (Standart)',
     width: '58mm',
     height: '40mm',
-    barcodeHeight: 50,
+    barcodeHeight: 52,
     barcodeWidth: 1.6,
     fontSize: 11,
     textMargin: 3,
-    nameSize: '12px',
-    priceSize: '22px',
+    nameSize: '14px',
+    priceSize: '32px',
     maxSvgHeight: '19mm'
   },
   '80': {
     label: '80mm x 80mm (Geniş)',
     width: '80mm',
     height: '80mm',
-    barcodeHeight: 100,
+    barcodeHeight: 110,
     barcodeWidth: 2.0,
     fontSize: 14,
     textMargin: 4,
-    nameSize: '16px',
-    priceSize: '32px',
+    nameSize: '20px',
+    priceSize: '48px',
     maxSvgHeight: '38mm'
   }
 };
@@ -96,19 +97,21 @@ function BarcodeCard({ product, sizeConfig }) {
       {/* Product Name */}
       <div 
         className="text-center font-bold uppercase tracking-tight leading-none w-full px-[2px] truncate"
-        style={{ fontSize: sizeConfig.nameSize, fontFamily: 'Arial, sans-serif' }}
+        style={{ fontSize: sizeConfig.nameSize, fontFamily: 'Arial, sans-serif', fontWeight: 700 }}
       >
         {product.name}
       </div>
       
-      {/* Price */}
+      {/* Price — dominant */}
       <div 
-        className="text-center font-extrabold whitespace-nowrap"
+        className="text-center whitespace-nowrap"
         style={{ 
-          fontFamily: 'Arial, sans-serif', 
+          fontFamily: 'Arial Black, Arial, sans-serif',
+          fontWeight: 900,
           fontSize: sizeConfig.priceSize, 
-          lineHeight: '1', 
-          margin: sizeConfig.width === '30mm' ? '2px 0' : '4px 0' 
+          lineHeight: '1',
+          letterSpacing: '-0.5px',
+          margin: sizeConfig.width === '30mm' ? '1px 0' : '3px 0' 
         }}
       >
         {typeof product.salePrice === 'number' 
@@ -292,18 +295,18 @@ export default function BarcodePrintModal({ isOpen, onClose, product, products }
             <div className="flex justify-center items-center w-full bg-white shadow-inner p-4 rounded-lg">
               <div 
                 className="bg-white flex flex-col items-center justify-between p-2 overflow-hidden select-none pointer-events-none"
-                style={{ width: '150px', height: '100px', boxSizing: 'border-box' }}
+                style={{ width: '180px', height: '115px', boxSizing: 'border-box' }}
               >
                 <div 
-                  className="text-center font-bold uppercase tracking-tight leading-none w-full px-1 truncate text-slate-800"
-                  style={{ fontSize: '9px', fontFamily: 'Arial, sans-serif' }}
+                  className="text-center uppercase tracking-tight leading-none w-full px-1 truncate text-slate-800"
+                  style={{ fontSize: '11px', fontFamily: 'Arial, sans-serif', fontWeight: 700 }}
                 >
                   {previewProduct.name}
                 </div>
                 
                 <div 
-                  className="text-center font-extrabold whitespace-nowrap text-slate-900"
-                  style={{ fontFamily: 'Arial, sans-serif', fontSize: '15px', lineHeight: '1', margin: '2px 0' }}
+                  className="text-center whitespace-nowrap text-slate-900"
+                  style={{ fontFamily: 'Arial Black, Arial, sans-serif', fontWeight: 900, fontSize: '24px', lineHeight: '1', letterSpacing: '-0.5px', margin: '3px 0' }}
                 >
                   {(() => {
                     const price = previewProduct.salePrice ?? previewProduct.unitPriceSale ?? 0;
