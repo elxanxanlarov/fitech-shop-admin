@@ -1,5 +1,5 @@
 import { FiHome, FiLogOut, FiChevronsLeft, FiChevronsRight } from "react-icons/fi"
-import { MdShoppingCart, MdPointOfSale, MdBarChart, MdPeople, MdQrCode } from "react-icons/md"
+import { MdShoppingCart, MdBarChart, MdPeople, MdQrCode, MdReceipt, MdAttachMoney, MdHistory } from "react-icons/md"
 import { Link, NavLink } from "react-router-dom"
 import { useClickOutside } from "../../hooks"
 import { useTranslation } from "react-i18next"
@@ -20,42 +20,64 @@ const Sidebar = ({ sidebarData, onItemClick, collapsed, onToggleCollapse, isMobi
   const { selectedStore } = useBranch();
   const [transferCount, setTransferCount] = useState(0);
 
-  const isIsmayilli = currentUser?.store === 'ISMAYILLI' || selectedStore === 'ISMAYILLI';
+  // Sidebar görünüşü tamamilə selectedStore-a tabedir. Hər rol (admin,
+  // superadmin, ismayilliadmin, seller, reception) header-dəki Fitech/İsmayıllı
+  // toggle-i ilə öz görünüşünü dəyişə bilər.
+  const roleName = currentUser?.role?.name?.toLowerCase();
+  const isIsmayilliRole = roleName === 'ismayilliadmin' || roleName === 'ismayilliseller';
+  const isIsmayilli = selectedStore === 'ISMAYILLI';
 
-  const activeSidebarData = isIsmayilli
-    ? [
-        {
-          title: 'ismayilli_products',
-          label: 'Məhsullar (İsmayıllı)',
-          path: '/admin/ismayilli-products',
-          icon: <MdShoppingCart />,
-        },
-        {
-          title: 'ismayilli_sales',
-          label: 'Satış (İsmayıllı)',
-          path: '/admin/ismayilli-sales',
-          icon: <MdPointOfSale />,
-        },
-        {
-          title: 'ismayilli_barcode_generator',
-          label: 'Ştrixkod Yaradıcı',
-          path: '/admin/ismayilli-barcode-generator',
-          icon: <MdQrCode />,
-        },
-        {
-          title: 'ismayilli_statistics',
-          label: 'Statistika (İsmayıllı)',
-          path: '/admin/ismayilli-statistics',
-          icon: <MdBarChart />,
-        },
-        {
-          title: 'ismayilli_staff',
-          label: 'İşçilər (İsmayıllı)',
-          path: '/admin/ismayilli-staff',
-          icon: <MdPeople />,
-        }
-      ]
-    : sidebarData;
+  const ismayilliMenu = [
+    {
+      title: 'ismayilli_products',
+      label: 'Məhsullar (İsmayıllı)',
+      path: '/admin/ismayilli-products',
+      icon: <MdShoppingCart />,
+    },
+    {
+      title: 'ismayilli_barcode_generator',
+      label: 'Ştrixkod Yaradıcı',
+      path: '/admin/ismayilli-barcode-generator',
+      icon: <MdQrCode />,
+    },
+    {
+      title: 'ismayilli_statistics',
+      label: 'Statistika (İsmayıllı)',
+      path: '/admin/ismayilli-statistics',
+      icon: <MdBarChart />,
+    },
+    {
+      title: 'ismayilli_activities',
+      label: 'Son Əməliyyatlar',
+      path: '/admin/ismayilli-activities',
+      icon: <MdHistory />,
+    },
+    {
+      title: 'ismayilli_expenses',
+      label: 'Xərclər (İsmayıllı)',
+      path: '/admin/expenses',
+      icon: <MdReceipt />,
+    },
+    {
+      title: 'ismayilli_cash_handover',
+      label: 'Məbləğ Təslimi (İsmayıllı)',
+      path: '/admin/cash-handover',
+      icon: <MdAttachMoney />,
+    },
+  ];
+
+  // ismayilliadmin və ismayilliseller-də işçilər link-i də olsun (admin/superadmin
+  // toggle ilə baxanda işçilər link-i admin sidebar-da onsuz da olduğu üçün lazım deyil)
+  if (isIsmayilliRole) {
+    ismayilliMenu.push({
+      title: 'ismayilli_staff',
+      label: 'İşçilər (İsmayıllı)',
+      path: '/admin/ismayilli-staff',
+      icon: <MdPeople />,
+    });
+  }
+
+  const activeSidebarData = isIsmayilli ? ismayilliMenu : sidebarData;
 
   useEffect(() => {
     const fetchTransferCount = async () => {

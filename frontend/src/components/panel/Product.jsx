@@ -5,7 +5,7 @@ import TableTemplate from '../ui/TableTamplate';
 import Alert from '../ui/Alert';
 import { Edit, Trash2, Eye, Plus, FileSpreadsheet, Upload } from 'lucide-react';
 import { getProductColumns } from '../../data/table-columns/ProductColumns';
-import { productApi, categoryApi, subCategoryApi, ismayilliApi } from '../../api';
+import { productApi, categoryApi, subCategoryApi, ismayilliApi, branchApi } from '../../api';
 import ExcelImportModal from '../modals/ExcelImportModal';
 import ExcelTableModal from '../modals/ExcelTableModal';
 import BarcodePrintModal from '../modals/BarcodePrintModal';
@@ -351,7 +351,7 @@ export default function Product() {
         navigate(addProductPath);
     };
 
-    const handleExcelImport = async (file, branchId = null, isIsmayilli = false) => {
+    const handleExcelImport = async (file, branchId = null, isIsmayilli = false, opts = {}) => {
         try {
             Alert.loading(t('uploading') || 'Yüklənir...');
 
@@ -359,9 +359,13 @@ export default function Product() {
             if (isIsmayilli) {
                 const formData = new FormData();
                 formData.append('file', file);
+                if (opts.categoryName) formData.append('categoryName', opts.categoryName);
+                if (opts.profitPercent !== undefined && opts.profitPercent !== null && opts.profitPercent !== '') {
+                    formData.append('profitPercent', String(opts.profitPercent));
+                }
                 result = await ismayilliApi.importExcel(formData);
             } else {
-                result = await productApi.importFromExcel(file, branchId);
+                result = await productApi.importFromExcel(file, branchId, opts);
             }
 
             Alert.close();
@@ -469,6 +473,13 @@ export default function Product() {
                     >
                         <Upload className="w-4 h-4" />
                         Excel Faylı Yüklə
+                    </button>
+                    <button
+                        onClick={() => setIsExcelTableModalOpen(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-all shadow-md hover:shadow-lg"
+                    >
+                        <FileSpreadsheet className="w-4 h-4" />
+                        Excel Üslubunda Məhsul Əlavə Et
                     </button>
                     <button
                         onClick={handleAddProduct}

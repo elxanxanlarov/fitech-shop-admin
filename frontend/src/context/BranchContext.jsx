@@ -43,8 +43,27 @@ export const BranchProvider = ({ children }) => {
     // Find the full branch object
     const selectedBranch = branches.find(b => b.id === selectedBranchId) || null;
 
-    // Auto-reset store to FITECH if the branch doesn't allow Ismayilli
+    // İsmayıllı işçi rolu ilk dəfə yükləndikdə default İsmayıllı görünüş ver
+    // (sonradan toggle ilə Fitech-ə keçə bilərlər). Bunu yalnız hər user üçün
+    // bir dəfə tətbiq edirik ki, toggle-a basanda yenidən geri qaytarmasın.
     useEffect(() => {
+        if (!user?.id) return;
+        const rname = (user?.role?.name || '').toLowerCase();
+        const isIsmayilliRole = rname === 'ismayilliadmin' || rname === 'ismayilliseller';
+        if (!isIsmayilliRole) return;
+        const initKey = `storeInitedForUser_${user.id}`;
+        if (!localStorage.getItem(initKey)) {
+            setSelectedStore('ISMAYILLI');
+            localStorage.setItem(initKey, '1');
+        }
+    }, [user]);
+
+    // İsmayıllı görünüşü dəstəkləməyən branch seçildikdə FITECH-ə düş.
+    // İsmayıllı işçi rolu üçün bunu tətbiq etmirik — toggle-i sərbəst saxlayır.
+    useEffect(() => {
+        const rname = (user?.role?.name || '').toLowerCase();
+        const isIsmayilliRole = rname === 'ismayilliadmin' || rname === 'ismayilliseller';
+        if (isIsmayilliRole) return;
         if (selectedBranchId === 'central') {
             if (selectedStore === 'ISMAYILLI') {
                 setSelectedStore('FITECH');
@@ -54,7 +73,7 @@ export const BranchProvider = ({ children }) => {
                 setSelectedStore('FITECH');
             }
         }
-    }, [selectedBranchId, selectedBranch, selectedStore]);
+    }, [selectedBranchId, selectedBranch, selectedStore, user]);
 
     // URL dəyişəndə state-i yenilə
     useEffect(() => {

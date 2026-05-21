@@ -88,7 +88,9 @@ export const getAllProducts = async (req, res) => {
     const products = await prisma.ismayilliMagazaProduct.findMany({
       where,
       include: { category: true },
-      orderBy: { createdAt: "desc" }
+      // Kateqoriya yaradılma sırası (Excel kateqoriya sırası),
+      // sonra Excel-dəki sıra nömrəsi (excelId), sonra ad
+      orderBy: [{ category: { createdAt: "asc" } }, { excelId: "asc" }, { name: "asc" }]
     });
     return res.status(200).json({ success: true, data: products });
   } catch (error) {
@@ -162,6 +164,89 @@ export const createProduct = async (req, res) => {
   } catch (error) {
     console.error("createProduct error", error);
     return res.status(500).json({ success: false, message: "Məhsul yaradılarkən xəta baş verdi" });
+  }
+};
+
+/**
+ * POST /ismayilli/product/products/bulk-create
+ * Body: { products: [{ name, quantity, unitPricePurchase, unitPriceSale, categoryId, barcode? }] }
+ */
+export const bulkCreateProducts = async (req, res) => {
+  try {
+    const { products } = req.body;
+    if (!products || !Array.isArray(products) || products.length === 0) {
+      return res.status(400).json({ success: false, message: "Məhsul siyahısı boşdur" });
+    }
+
+    const results = [];
+    const errors = [];
+
+    for (const prod of products) {
+      try {
+        const { name, barcode, quantity, unitPricePurchase, unitPriceSale, categoryId } = prod;
+        if (!name || !categoryId) {
+          errors.push({ name: name || 'Adsız', error: "Ad və kateqoriya tələb olunur" });
+          continue;
+        }
+
+        const qty = quantity !== undefined ? parseFloat(quantity) : 0;
+        const pPrice = unitPricePurchase !== undefined ? parseFloat(unitPricePurchase) : 0;
+        const sPrice = unitPriceSale !== undefined ? parseFloat(unitPriceSale) : 0;
+
+        let finalBarcode = barcode?.trim?.() || null;
+        if (finalBarcode) {
+          const existing = await prisma.ismayilliMagazaProduct.findUnique({ where: { barcode: finalBarcode } });
+          if (existing) {
+            errors.push({ name, error: `Barcode "${finalBarcode}" artıq istifadə olunur` });
+            continue;
+          }
+        } else {
+          let isUnique = false;
+          let generated;
+          while (!isUnique) {
+            const randomPart = Math.floor(100000 + Math.random() * 900000);
+            generated = `2000006${randomPart}`;
+            const ex = await prisma.ismayilliMagazaProduct.findUnique({ where: { barcode: generated } });
+            if (!ex) isUnique = true;
+          }
+          finalBarcode = generated;
+        }
+
+        const newProduct = await prisma.ismayilliMagazaProduct.create({
+          data: {
+            name: name.trim(),
+            barcode: finalBarcode,
+            quantity: qty,
+            unitPricePurchase: pPrice,
+            unitPriceSale: sPrice,
+            totalPurchasePrice: qty * pPrice,
+            totalSalePrice: qty * sPrice,
+            categoryId,
+            deleteType: 'NONE'
+          },
+          include: { category: true }
+        });
+
+        results.push(newProduct);
+      } catch (err) {
+        console.error("Ismayilli bulkCreate single product error:", err);
+        errors.push({ name: prod.name || 'Naməlum', error: err.message });
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `${results.length} məhsul uğurla əlavə edildi`,
+      data: {
+        successCount: results.length,
+        errorCount: errors.length,
+        errors,
+        products: results
+      }
+    });
+  } catch (error) {
+    console.error("Ismayilli bulkCreateProducts error", error);
+    return res.status(500).json({ success: false, message: "Toplu əlavə etmə zamanı xəta baş verdi" });
   }
 };
 
@@ -343,18 +428,30 @@ export const importExcel = async (req, res) => {
     let importedCount = 0;
     let categoryMap = new Map(); // name -> id cache to avoid redundant database calls
 
+    // Helper to normalize header key for matching (removes spaces, quotes, leading space)
+    const normalizeKey = (s) => String(s).trim().toLowerCase()
+      .replace(/\s+/g, '')
+      .replace(/"/g, '')
+      .replace(/'/g, '')
+      .replace(/«/g, '')
+      .replace(/»/g, '')
+      .replace(/№/g, 'no');  // Kiril № → 'no'
+
     // Helper to search row fields
     const getFieldValue = (row, keys) => {
-      // First try exact match
+      const rowKeys = Object.keys(row);
+      // First try exact match (with normalization)
       for (const key of keys) {
-        const matchedKey = Object.keys(row).find(k => k.toLowerCase().replace(/\s+/g, '') === key.toLowerCase().replace(/\s+/g, ''));
+        const nk = normalizeKey(key);
+        const matchedKey = rowKeys.find(k => normalizeKey(k) === nk);
         if (matchedKey && row[matchedKey] !== undefined && row[matchedKey] !== null) {
           return row[matchedKey];
         }
       }
-      // Fallback: try substring match (useful for merged two-row headers like 'Anbar - Miqdar')
+      // Fallback: substring match (useful for merged two-row headers like 'Anbar - Miqdar')
       for (const key of keys) {
-        const matchedKey = Object.keys(row).find(k => k.toLowerCase().replace(/\s+/g, '').includes(key.toLowerCase().replace(/\s+/g, '')));
+        const nk = normalizeKey(key);
+        const matchedKey = rowKeys.find(k => normalizeKey(k).includes(nk));
         if (matchedKey && row[matchedKey] !== undefined && row[matchedKey] !== null) {
           return row[matchedKey];
         }
@@ -431,26 +528,74 @@ export const importExcel = async (req, res) => {
       return null;
     };
 
-    // Helper to clean and parse Azerbaijani decimal values
+    /**
+     * Excel-dən gələn rəqəm dəyərini Azərbaycan/Avropa/ABŞ format-larından
+     * təhlükəsiz şəkildə parse et.
+     *
+     * Dəstəklənən formatlar:
+     *   "50,000"        → 50      (AZ/EU: virgül = onluq separator)
+     *   "18,2"          → 18.2    (AZ/EU)
+     *   "1.170,000"     → 1170    (EU minlik nöqtə + onluq virgül)
+     *   "1,170,000.00"  → 1170000 (US minlik virgül + onluq nöqtə)
+     *   "1,170,000"     → 1170000 (US: birdən çox virgül = minlik separator)
+     *   "910 AZN"       → 910
+     *   "3.50"          → 3.5
+     *   50.0 (number)   → 50.0
+     */
     const cleanNumber = (val) => {
       if (val === null || val === undefined || val === '') return 0;
-      if (typeof val === 'number') return val;
+      if (typeof val === 'number') return Number.isFinite(val) ? val : 0;
 
       let str = String(val).trim().toUpperCase();
-      str = str.replace(/[A-Z\s$₼]/g, ''); // Remove AZN, ₼, $, and spaces
+      // Valyuta simvolu, hərflər, boşluqları sil
+      str = str.replace(/[A-Z\s$₼€£¥]/g, '').replace(/[^\d.,\-]/g, '');
+      if (!str) return 0;
 
-      if (str.includes(',') && !str.includes('.')) {
-        str = str.replace(',', '.');
-      } else if (str.includes(',') && str.includes('.')) {
-        if (str.indexOf('.') < str.indexOf(',')) {
+      // İşarəni sondan əvvələ köçür (bəzən "-50" yox, "50-" formatında ola bilər)
+      let negative = false;
+      if (str.startsWith('-') || str.endsWith('-')) {
+        negative = true;
+        str = str.replace(/-/g, '');
+      }
+      if (!str) return 0;
+
+      const hasComma = str.includes(',');
+      const hasDot = str.includes('.');
+
+      if (hasComma && hasDot) {
+        // Hər ikisi var: sonuncu görünən separator onluqdur, digərləri minlikdir
+        const lastComma = str.lastIndexOf(',');
+        const lastDot = str.lastIndexOf('.');
+        if (lastComma > lastDot) {
+          // EU: nöqtə minlik, virgül onluq
           str = str.replace(/\./g, '').replace(',', '.');
         } else {
+          // US: virgül minlik, nöqtə onluq
           str = str.replace(/,/g, '');
         }
+      } else if (hasComma) {
+        // Yalnız virgül
+        const commaCount = (str.match(/,/g) || []).length;
+        if (commaCount === 1) {
+          // Tək virgül — onluq separator hesab et (AZ/EU)
+          str = str.replace(',', '.');
+        } else {
+          // Birdən çox virgül = minlik separator (US: 1,170,000)
+          str = str.replace(/,/g, '');
+        }
+      } else if (hasDot) {
+        // Yalnız nöqtə
+        const dotCount = (str.match(/\./g) || []).length;
+        if (dotCount > 1) {
+          // Birdən çox nöqtə = minlik separator (EU: 1.170.000)
+          str = str.replace(/\./g, '');
+        }
+        // Tək nöqtə — onluq, dəyişiklik yox
       }
 
       const parsed = parseFloat(str);
-      return isNaN(parsed) ? 0 : parsed;
+      if (isNaN(parsed)) return 0;
+      return negative ? -parsed : parsed;
     };
 
     // Helper to find or create category
@@ -469,7 +614,12 @@ export const importExcel = async (req, res) => {
 
     for (const sheetName of workbook.SheetNames) {
       const sheet = workbook.Sheets[sheetName];
-      const rawRows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: null });
+      // raw: false → cell-lər Excel-də göstərildiyi kimi formatlanmış mətn olaraq gəlir.
+      // Bu, Azərbaycan onluq formatını ("50,000" = 50.0, "18,2" = 18.2) düzgün
+      // parse etməyə imkan verir. xlsx default raw=true ilə cell-in saxlanılan
+      // numerik dəyərini qaytarır ki, bu da Avropa formatlı vərəqlərdə yanlış
+      // nəticə verir (məs. "50,000" → 50000 numeric).
+      const rawRows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: false });
 
       console.log(`Excel sheet "${sheetName}" has ${rawRows.length} raw rows.`);
 
@@ -628,7 +778,8 @@ export const importExcel = async (req, res) => {
           continue;
         }
 
-        const excelIdVal = getFieldValue(row, ['no', 'sira', 'sıra', 'id']);
+        // "№" Kiril simvolu 'no' ilə uyğun gəlmir — birbaşa yoxla da əlavə et
+        const excelIdVal = getFieldValue(row, ['no', '№', 'sira', 'sıra', 'n', 'id', '#']);
         const pPriceVal = getPriceFieldValue(row, 'purchase');
         const sPriceVal = getPriceFieldValue(row, 'sale');
         const catColumnVal = getFieldValue(row, ['kateqoriya', 'category']);

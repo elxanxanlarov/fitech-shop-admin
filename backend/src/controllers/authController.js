@@ -59,15 +59,23 @@ export const login = async (req, res) => {
       });
     }
 
-    // Giriş saatı yoxlanışı (Superadmin və Baş Adminə aid deyil)
+    // Giriş saatı yoxlanışı (Superadmin, Baş Admin, Satıcı və İsmayıllı rollarına aid deyil)
     const currentHour = new Date().getHours();
     const roleName = foundStaff.role?.name?.toLowerCase();
-    const isPrivileged = roleName === "superadmin" || (roleName === "admin" && foundStaff.isBoss);
+    const WORK_HOURS_EXEMPT_ROLES = new Set([
+      "superadmin",
+      "seller",
+      "ismayilliadmin",
+      "ismayilliseller",
+    ]);
+    const isPrivileged =
+      WORK_HOURS_EXEMPT_ROLES.has(roleName) ||
+      (roleName === "admin" && foundStaff.isBoss);
 
     if (!isPrivileged) {
       const start = foundStaff.allowedStartHour ?? 9;
       const end = foundStaff.allowedEndHour ?? 21;
-      
+
       if (currentHour < start || currentHour >= end) {
         return res.status(401).json({
           success: false,

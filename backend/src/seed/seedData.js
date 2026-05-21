@@ -13,6 +13,7 @@ export const seedData = async () => {
       { name: "admin", isCore: true },
       { name: "reception", isCore: true },
       { name: "seller", isCore: true },
+      { name: "ismayilliadmin", isCore: true },
     ];
 
     for (const roleData of roles) {
@@ -26,22 +27,38 @@ export const seedData = async () => {
         });
         console.log(`✅ Role yaradıldı: ${roleData.name} (isCore: ${roleData.isCore})`);
       } else {
-        // Əgər rol mövcuddursa, isCore dəyərini yenilə
-        if (existingRole.isCore !== roleData.isCore) {
+        // Əgər rol mövcuddursa, isCore və deleteType dəyərlərini bərpa et.
+        // Beləliklə soft/hard "silinmiş" core rollar (məs. seller) avtomatik
+        // dirçəldilir.
+        const patch = {};
+        if (existingRole.isCore !== roleData.isCore) patch.isCore = roleData.isCore;
+        if (existingRole.deleteType !== "NONE") patch.deleteType = "NONE";
+
+        if (Object.keys(patch).length > 0) {
           await prisma.role.update({
             where: { id: existingRole.id },
-            data: { isCore: roleData.isCore },
+            data: patch,
           });
-          console.log(`🔄 Role yeniləndi: ${roleData.name} (isCore: ${existingRole.isCore} → ${roleData.isCore})`);
+          console.log(`🔄 Role bərpa olundu / yeniləndi: ${roleData.name}`, patch);
         } else {
           console.log(`ℹ️  Role artıq mövcuddur: ${roleData.name} (isCore: ${roleData.isCore})`);
         }
       }
     }
 
-    // Köhnə İsmayıllı rolları artıq istifadə olunmur — varsa və heç bir staff
-    // onları istifadə etmirsə silinir.
-    const obsoleteRoleNames = ["ismayilliadmin", "ismayilliseller"];
+    // Əlavə təminat: bu rollar mütləq mövcud olmalıdır.
+    const mustExistRoles = ["seller", "ismayilliadmin"];
+    for (const mustName of mustExistRoles) {
+      const exists = await prisma.role.findFirst({ where: { name: mustName } });
+      if (!exists) {
+        await prisma.role.create({ data: { name: mustName, isCore: true } });
+        console.log(`✅ Fallback: '${mustName}' rolu yaradıldı.`);
+      }
+    }
+
+    // Köhnə İsmayıllı satıcı rolu artıq istifadə olunmur — varsa və heç bir staff
+    // onu istifadə etmirsə silinir.
+    const obsoleteRoleNames = ["ismayilliseller"];
     for (const obsoleteName of obsoleteRoleNames) {
       const obsoleteRole = await prisma.role.findFirst({
         where: { name: obsoleteName },

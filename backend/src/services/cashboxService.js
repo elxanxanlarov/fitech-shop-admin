@@ -39,7 +39,9 @@ export function buildBranchFilter(branchId) {
  * Kassa balansını hesabla.
  *
  * @param {{ branchId?: string|null }} branchFilter  buildBranchFilter() nəticəsi
- * @param {{ excludeHandoverId?: string }} [opts]    update zamanı cari id xaric et
+ * @param {{ excludeHandoverId?: string, store?: 'FITECH'|'ISMAYILLI' }} [opts]
+ *   - excludeHandoverId: update zamanı cari id xaric et
+ *   - store: hansı mağaza (default FITECH)
  * @returns {Promise<{
  *   balance: number,       // yekun kassa balansı (< 0 ola bilməz)
  *   cashSales: number,
@@ -53,7 +55,50 @@ export function buildBranchFilter(branchId) {
  */
 export async function computeCashboxBalance(branchFilter = {}, opts = {}) {
     const { excludeHandoverId } = opts;
+    // Backward compat: əgər branchFilter-in özündə `store` property varsa onu götür
+    const { store: storeFromFilter, ...pureBranchFilter } = branchFilter;
+    branchFilter = pureBranchFilter;
+    const storeUpper = String(opts.store || storeFromFilter || 'FITECH').toUpperCase();
 
+    // İsmayıllı: ayrı table-lar, branch və paymentType-dən asılı deyil
+    if (storeUpper === 'ISMAYILLI') {
+        const [salesAgg, returnsAgg, expensesAgg, handoversAgg] = await Promise.all([
+            prisma.ismayilliSale.aggregate({
+                where: { isRefunded: false },
+                _sum: { paidAmount: true },
+            }),
+            prisma.ismayilliSaleReturn.aggregate({
+                _sum: { returnedAmount: true },
+            }),
+            prisma.expense.aggregate({
+                where: { deleteType: 'NONE', store: 'ISMAYILLI', ...branchFilter },
+                _sum: { amount: true },
+            }),
+            prisma.cashhandover.aggregate({
+                where: {
+                    deleteType: 'NONE',
+                    store: 'ISMAYILLI',
+                    ...branchFilter,
+                    ...(excludeHandoverId ? { id: { not: excludeHandoverId } } : {}),
+                },
+                _sum: { amount: true },
+            }),
+        ]);
+
+        const cashSales = Number(salesAgg._sum.paidAmount || 0);
+        const creditPayments = 0;
+        const returns = Number(returnsAgg._sum.returnedAmount || 0);
+        const expenses = Number(expensesAgg._sum.amount || 0);
+        const handovers = Number(handoversAgg._sum.amount || 0);
+
+        const cashIn = cashSales + creditPayments;
+        const cashOut = returns + expenses;
+        const balance = Math.round((cashIn - cashOut - handovers) * 100) / 100;
+
+        return { balance, cashSales, creditPayments, returns, expenses, handovers, cashIn, cashOut };
+    }
+
+    // FITECH (default)
     const [
         salesAgg,
         creditAgg,
@@ -62,49 +107,47 @@ export async function computeCashboxBalance(branchFilter = {}, opts = {}) {
         handoversAgg,
     ] = await Promise.all([
 
-        // 1. Nəğd satışlar — yalnız silinməmiş, qaytarılmamış, nəğd ödənişli
         prisma.sale.aggregate({
             where: {
                 deleteType: 'NONE',
                 isRefunded: false,
                 paymentType: 'cash',
+                store: 'FITECH',
                 ...branchFilter,
             },
             _sum: { paidAmount: true },
         }),
 
-        // 2. Kredit ödənişləri — nəğd ödənilmiş, silinməmiş satışa aid
         prisma.creditpayment.aggregate({
             where: {
                 paymentType: 'cash',
-                sale: { deleteType: 'NONE', ...branchFilter },
+                sale: { deleteType: 'NONE', store: 'FITECH', ...branchFilter },
             },
             _sum: { amount: true },
         }),
 
-        // 3. Qaytarmalar — nəğd satışa aid, silinməmiş
         prisma.salereturn.aggregate({
             where: {
                 sale: {
                     paymentType: 'cash',
                     deleteType: 'NONE',
-                    isRefunded: false, // Only subtract from balance if original sale wasn't already excluded
+                    isRefunded: false,
+                    store: 'FITECH',
                     ...branchFilter,
                 },
             },
             _sum: { returnedAmount: true },
         }),
 
-        // 4. Xərclər — silinməmiş
         prisma.expense.aggregate({
-            where: { deleteType: 'NONE', ...branchFilter },
+            where: { deleteType: 'NONE', store: 'FITECH', ...branchFilter },
             _sum: { amount: true },
         }),
 
-        // 5. Məbləğ Təslimatları — silinməmiş, (update zamanı cari id xaric)
         prisma.cashhandover.aggregate({
             where: {
                 deleteType: 'NONE',
+                store: 'FITECH',
                 ...branchFilter,
                 ...(excludeHandoverId ? { id: { not: excludeHandoverId } } : {}),
             },

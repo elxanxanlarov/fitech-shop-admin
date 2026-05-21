@@ -14,7 +14,7 @@ export default function CashHandover() {
     const location = useLocation();
     const [cashHandoverData, setCashHandoverData] = useState([]);
     const [loading, setLoading] = useState(true);
-    const { selectedBranchId } = useBranch();
+    const { selectedBranchId, selectedStore } = useBranch();
     const [kassaBalance, setKassaBalance] = useState(null);
     const [kassaBreakdown, setKassaBreakdown] = useState(null);
     const [loadingKassa, setLoadingKassa] = useState(false);
@@ -108,13 +108,16 @@ export default function CashHandover() {
         } finally {
             setLoading(false);
         }
-    }, [dateRange, selectedBranchId, t]);
+    }, [dateRange, selectedBranchId, selectedStore, t]);
 
     const fetchKassaBalance = useCallback(async () => {
         setLoadingKassa(true);
         try {
-            const branchId = selectedBranchId && selectedBranchId !== 'central' ? selectedBranchId : null;
-            const response = await cashHandoverApi.getPendingDates(branchId);
+            // selectedBranchId-ni olduğu kimi backend-ə ötürürük:
+            // - 'central'     => yalnız mərkəz (branchId=null saxlayan satışlar)
+            // - konkret id    => həmin filial
+            // - null/undef    => bütün filiallar
+            const response = await cashHandoverApi.getPendingDates(selectedBranchId || null);
             if (response.success) {
                 setKassaBalance(response.totalAvailable ?? 0);
                 setKassaBreakdown(response.breakdown ?? null);
@@ -124,7 +127,7 @@ export default function CashHandover() {
         } finally {
             setLoadingKassa(false);
         }
-    }, [selectedBranchId]);
+    }, [selectedBranchId, selectedStore]);
 
     useEffect(() => {
         fetchCashHandovers();

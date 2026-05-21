@@ -9,6 +9,8 @@ import { ReceptionSidebarData } from './data/sidebar-data/ReceptionSidebarData'
 import { AuthProvider } from './context/AuthContext'
 import { BranchProvider } from './context/BranchContext'
 import SyncCenter from './pages/SyncCenter'
+import SellerLayout from './components/seller-layout/SellerLayout'
+import SellerPage from './pages/SellerPage'
 
 export default function App() {
   return (
@@ -49,6 +51,22 @@ export default function App() {
                 <DashboardLayout sidebarData={ReceptionSidebarData} profilePath="/reception" title="Reception Panel">
                   <ReceptionPage />
                 </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Seller (POS) Routes */}
+          <Route
+            path="/seller"
+            element={<Navigate to="/seller/pos" replace />}
+          />
+          <Route
+            path="/seller/:slug"
+            element={
+              <ProtectedRoute>
+                <SellerLayout>
+                  <SellerPage />
+                </SellerLayout>
               </ProtectedRoute>
             }
           />

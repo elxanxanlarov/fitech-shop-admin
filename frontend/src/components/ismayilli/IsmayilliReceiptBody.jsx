@@ -19,6 +19,8 @@ export default function IsmayilliReceiptBody({ sale, type = 'sale', paper }) {
   const dateStr = formatCheckDate(sale.createdAt || new Date());
   const total = parseFloat(sale.totalAmount || 0);
   const paid = parseFloat(sale.paidAmount ?? sale.totalAmount ?? 0);
+  const returnedAmount = parseFloat(sale.returnedAmount || 0);
+  const originalSaleAmount = parseFloat(sale.originalSaleAmount || 0);
   const items = sale.items || [];
 
   return (
@@ -49,8 +51,16 @@ export default function IsmayilliReceiptBody({ sale, type = 'sale', paper }) {
       <div>{checkLabel} №{checkNo}</div>
       <div>{dateStr}</div>
       <div style={{ height: 6 }} />
-      <div><span style={{ display: 'inline-block', minWidth: 52 }}>Alıcı:</span></div>
-      <div><span style={{ display: 'inline-block', minWidth: 52 }}>Satıcı:</span></div>
+      <div>
+        <span style={{ display: 'inline-block', minWidth: 52 }}>Alıcı:</span>
+        {sale.customerName || sale.customerSurname
+          ? ` ${[sale.customerName, sale.customerSurname].filter(Boolean).join(' ')}`
+          : ''}
+      </div>
+      <div>
+        <span style={{ display: 'inline-block', minWidth: 52 }}>Satıcı:</span>
+        {sale.sellerName ? ` ${sale.sellerName}` : ''}
+      </div>
       <div><span style={{ display: 'inline-block', minWidth: 52 }}>Valyuta:</span> {CURRENCY}</div>
       <div style={{ height: 6 }} />
 
@@ -114,17 +124,29 @@ export default function IsmayilliReceiptBody({ sale, type = 'sale', paper }) {
         {fmtMoney(total)}
       </div>
       <div style={{ marginTop: 8, borderTop: '1px dashed #000', paddingTop: 6 }}>
-        <div>{formatAmountInWords(total)}</div>
-        {isReturn ? (
+        {isReturn && originalSaleAmount > 0 && (
           <div>
-            Qaytarılmalı: -{fmtMoney(total).replace('.', ',')} ({formatAmountInWords(total)})
+            <span style={{ display: 'inline-block', minWidth: 110 }}>Satış məbləği:</span>
+            {fmtMoney(originalSaleAmount)}
           </div>
-        ) : (
-          <div>Nəğd: {formatCashParenthetical(paid)}</div>
         )}
+        <div>{formatAmountInWords(total)}</div>
+        <div>Nəğd: {formatCashParenthetical(paid)}</div>
         <div>IlkinQaliqBonus:--</div>
         <div>CekinBonusu:--</div>
         <div>SonQaliqBonus:--</div>
+        {returnedAmount > 0 && (
+          <div>
+            Qaytarılmalı: -{fmtMoney(returnedAmount).replace('.', ',')} (
+            {formatAmountInWords(returnedAmount)})
+          </div>
+        )}
+        {!isReturn && returnedAmount > 0 && total - returnedAmount > 0 && (
+          <div style={{ fontWeight: 'bold', marginTop: 2 }}>
+            <span style={{ display: 'inline-block', minWidth: 110 }}>Qalıq məbləğ:</span>
+            {fmtMoney(total - returnedAmount)}
+          </div>
+        )}
       </div>
     </div>
   );

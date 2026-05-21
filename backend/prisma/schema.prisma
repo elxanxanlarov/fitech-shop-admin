@@ -601,6 +601,7 @@ model ismayilliMagazaProduct {
   updatedAt          DateTime                  @updatedAt
   movements          ismayilliStockMovement[]
   saleItems          ismayilliSaleItem[]
+  returnItems        ismayilliSaleReturnItem[]
 
   @@map("ismayilli_magaza_product")
 }
@@ -623,24 +624,60 @@ model ismayilliSale {
   totalAmount Float
   paidAmount  Float               @default(0)
   note        String?
+  isRefunded  Boolean             @default(false)
+  refundedAt  DateTime?
   createdAt   DateTime            @default(now())
   items       ismayilliSaleItem[]
+  returns     ismayilliSaleReturn[]
 
   @@map("ismayilli_sale")
 }
 
 model ismayilliSaleItem {
-  id            String                 @id @default(uuid())
+  id            String                    @id @default(uuid())
   saleId        String
-  sale          ismayilliSale          @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  sale          ismayilliSale             @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId     String
+  product       ismayilliMagazaProduct    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity      Float
+  pricePerItem  Float
+  totalPrice    Float
+  purchasePrice Float
+  createdAt     DateTime                  @default(now())
+  returnItems   ismayilliSaleReturnItem[]
+
+  @@map("ismayilli_sale_item")
+}
+
+model ismayilliSaleReturn {
+  id             String                    @id @default(uuid())
+  saleId         String
+  sale           ismayilliSale             @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  totalAmount    Float
+  returnedAmount Float
+  reason         String?
+  note           String?
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+  items          ismayilliSaleReturnItem[]
+
+  @@map("ismayilli_sale_return")
+}
+
+model ismayilliSaleReturnItem {
+  id            String                 @id @default(uuid())
+  returnId      String
+  return        ismayilliSaleReturn    @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  saleItemId    String
+  saleItem      ismayilliSaleItem      @relation(fields: [saleItemId], references: [id], onDelete: Cascade)
   productId     String
   product       ismayilliMagazaProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
   quantity      Float
   pricePerItem  Float
   totalPrice    Float
   purchasePrice Float
-  createdAt     DateTime               @default(now())
+  loss          Float                  @default(0)
 
-  @@map("ismayilli_sale_item")
+  @@map("ismayilli_sale_return_item")
 }
 

@@ -6,7 +6,8 @@ export const getAllSales = async (req, res) => {
       include: {
         items: {
           include: {
-            product: true
+            product: true,
+            returnItems: true
           }
         }
       },
@@ -27,7 +28,8 @@ export const getSaleById = async (req, res) => {
       include: {
         items: {
           include: {
-            product: true
+            product: true,
+            returnItems: true
           }
         }
       }

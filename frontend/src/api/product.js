@@ -49,12 +49,16 @@ export const productApi = {
     return response.data;
   },
 
-  // Import products from Excel
-  importFromExcel: async (file, branchId = null) => {
+  // Import products from Excel (with optional category & profit % overrides)
+  importFromExcel: async (file, branchId = null, opts = {}) => {
     const formData = new FormData();
     formData.append('file', file);
     if (branchId) formData.append('branchId', branchId);
-    
+    if (opts.categoryName) formData.append('categoryName', opts.categoryName);
+    if (opts.profitPercent !== undefined && opts.profitPercent !== null && opts.profitPercent !== '') {
+      formData.append('profitPercent', String(opts.profitPercent));
+    }
+
     const response = await api.post('/product/import', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',

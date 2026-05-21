@@ -622,7 +622,9 @@ export const bulkCreateProducts = async (req, res) => {
                     purchasePrice,
                     salePrice,
                     stock,
-                    unitType
+                    unitType,
+                    categoryId,
+                    subCategoryId
                 } = prod;
 
                 if (!name || purchasePrice === undefined || salePrice === undefined) {
@@ -630,15 +632,27 @@ export const bulkCreateProducts = async (req, res) => {
                     continue;
                 }
 
-                // Check for existing barcode
-                if (barcode) {
+                let finalBarcode = barcode?.trim() || null;
+
+                if (finalBarcode) {
                     const existing = await prisma.product.findFirst({
-                        where: { barcode: barcode.trim() }
+                        where: { barcode: finalBarcode }
                     });
                     if (existing) {
-                        errors.push({ name: name, error: `Barcode "${barcode}" artıq istifadə olunur` });
+                        errors.push({ name: name, error: `Barcode "${finalBarcode}" artıq istifadə olunur` });
                         continue;
                     }
+                } else {
+                    // Auto-generate uniq EAN-13 uyğunlu barcode
+                    let isUnique = false;
+                    let generated;
+                    while (!isUnique) {
+                        const randomPart = Math.floor(100000 + Math.random() * 900000);
+                        generated = `2000006${randomPart}`;
+                        const ex = await prisma.product.findUnique({ where: { barcode: generated } });
+                        if (!ex) isUnique = true;
+                    }
+                    finalBarcode = generated;
                 }
 
                 const purchasePriceDecimal = new Prisma.Decimal(purchasePrice);
@@ -649,7 +663,7 @@ export const bulkCreateProducts = async (req, res) => {
                 const newProduct = await prisma.product.create({
                     data: {
                         name: name.trim(),
-                        barcode: barcode?.trim() || null,
+                        barcode: finalBarcode,
                         purchasePrice: purchasePriceDecimal,
                         salePrice: salePriceDecimal,
                         stock: branchId && branchId !== 'central' ? 0 : calculatedStock,
@@ -657,7 +671,9 @@ export const bulkCreateProducts = async (req, res) => {
                         isActive: true,
                         isOfficial: false,
                         deleteType: 'NONE',
-                        store: storeValue
+                        store: storeValue,
+                        categoryId: categoryId || null,
+                        subCategoryId: subCategoryId || null
                     }
                 });
 
@@ -700,7 +716,8 @@ export const bulkCreateProducts = async (req, res) => {
             data: {
                 successCount,
                 errorCount: errors.length,
-                errors
+                errors,
+                products: results
             }
         });
     } catch (error) {
@@ -1279,7 +1296,10 @@ export const deleteProduct = async (req, res) => {
 
 export const importProductsFromExcel = async (req, res) => {
     try {
-        const { branchId } = req.body;
+        const { branchId, categoryName: requestedCategoryName, profitPercent: profitPercentRaw } = req.body;
+        const profitPercent = profitPercentRaw !== undefined && profitPercentRaw !== null && String(profitPercentRaw).trim() !== ''
+            ? parseFloat(String(profitPercentRaw).replace(',', '.'))
+            : null;
         if (!req.file) {
             return res.status(400).json({
                 success: false,
@@ -1312,8 +1332,8 @@ export const importProductsFromExcel = async (req, res) => {
             const normalized = String(header).toLowerCase().trim();
 
             // Map to standard column names - check for Azerbaijani first
-            // Name
-            if ((normalized === 'ad' || normalized.startsWith('ad')) && !normalized.includes('qiymət') && !normalized.includes('qiymat') && !normalized.includes('qaimə') && !normalized.includes('qayime')) {
+            // Name — həm "Ad", həm "Məhsul Adı" / "Mehsul Adi"
+            if ((normalized === 'ad' || normalized.startsWith('ad') || normalized === 'məhsul adı' || normalized === 'mehsul adi' || normalized.includes('məhsul adı') || normalized.includes('mehsul adi') || normalized === 'məhsuladı' || normalized === 'mehsuladi') && !normalized.includes('qiymət') && !normalized.includes('qiymat') && !normalized.includes('qaimə') && !normalized.includes('qayime')) {
                 if (!columnMap['name']) columnMap['name'] = index;
             }
             // Invoice Name (Qaimə Adı)
@@ -1414,6 +1434,23 @@ export const importProductsFromExcel = async (req, res) => {
         const categoryMap = new Map(categories.map(cat => [cat.name.toLowerCase().trim(), cat.id]));
         const subCategoryMap = new Map(subCategories.map(sub => [sub.name.toLowerCase().trim(), sub.id]));
 
+        // Sürətli kateqoriya: əgər user yuxarıdan "categoryName" göndəribsə,
+        // varsa tap, yoxdursa yarat — bütün məhsullara assign edilsin
+        let forcedCategoryId = null;
+        if (requestedCategoryName && String(requestedCategoryName).trim()) {
+            const cname = String(requestedCategoryName).trim();
+            const found = categoryMap.get(cname.toLowerCase());
+            if (found) {
+                forcedCategoryId = found;
+            } else {
+                const newCat = await prisma.category.create({
+                    data: { name: cname, branchId: null, store: 'FITECH', isActive: true }
+                });
+                forcedCategoryId = newCat.id;
+                categoryMap.set(cname.toLowerCase(), newCat.id);
+            }
+        }
+
         for (let i = 0; i < data.length; i++) {
             const row = data[i];
             const rowNumber = i + 2; // +2 because Excel starts at row 1 and we have header
@@ -1426,11 +1463,11 @@ export const importProductsFromExcel = async (req, res) => {
                 const salePriceStr = row.sale_price !== null && row.sale_price !== undefined && row.sale_price !== '' ? String(row.sale_price) : '';
                 const stockStr = row.stock !== null && row.stock !== undefined && row.stock !== '' ? String(row.stock) : '';
 
-                // Validate required fields
-                if (!name || !purchasePriceStr || !salePriceStr || !stockStr) {
+                // Validate required fields — satış qiyməti opsionaldır (profit % varsa hesablanır)
+                if (!name || !purchasePriceStr || !stockStr) {
                     errors.push({
                         row: rowNumber,
-                        error: "Ad, Qiymət (Alış), Cəmi məbləğ (Satış) və Miqdar (Stok) mütləqdir"
+                        error: "Ad, Qiymət (Alış) və Miqdar (Stok) mütləqdir"
                     });
                     errorCount++;
                     continue;
@@ -1438,7 +1475,19 @@ export const importProductsFromExcel = async (req, res) => {
 
                 // Parse values
                 const purchasePrice = parseFloat(purchasePriceStr.replace(',', '.'));
-                const salePrice = parseFloat(salePriceStr.replace(',', '.'));
+                let salePrice;
+                if (salePriceStr) {
+                    salePrice = parseFloat(salePriceStr.replace(',', '.'));
+                } else if (profitPercent !== null && Number.isFinite(profitPercent) && profitPercent >= 0) {
+                    salePrice = purchasePrice * (1 + profitPercent / 100);
+                } else {
+                    errors.push({
+                        row: rowNumber,
+                        error: "Satış qiyməti yoxdur və mənfəət faizi də verilməyib"
+                    });
+                    errorCount++;
+                    continue;
+                }
                 const stock = parseInt(stockStr);
                 const barcode = row.barcode ? String(row.barcode).trim() : null;
                 const description = row.description ? String(row.description).trim() : null;
@@ -1454,9 +1503,9 @@ export const importProductsFromExcel = async (req, res) => {
                     else if (ut.includes('metr') || ut.includes('mtr') || ut === 'm') unitType = 'METER';
                 }
 
-                // Category mapping
-                let categoryId = null;
-                if (row.category) {
+                // Category mapping — qlobal kateqoriya istəyi varsa onu üstün tut
+                let categoryId = forcedCategoryId;
+                if (!categoryId && row.category) {
                     const categoryName = String(row.category).toLowerCase().trim();
                     categoryId = categoryMap.get(categoryName) || null;
                 }

@@ -14,7 +14,7 @@ export default function Expenses() {
     const location = useLocation();
     const [expenseData, setExpenseData] = useState([]);
     const [loading, setLoading] = useState(true);
-    const { selectedBranchId } = useBranch();
+    const { selectedBranchId, selectedStore } = useBranch();
 
     const defaultDateRange = useMemo(() => {
         const today = new Date();
@@ -129,7 +129,7 @@ export default function Expenses() {
         } finally {
             setLoading(false);
         }
-    }, [dateRange, selectedBranchId, t, pagination.page, pagination.limit]);
+    }, [dateRange, selectedBranchId, selectedStore, t, pagination.page, pagination.limit]);
 
     useEffect(() => {
         fetchExpenses();
@@ -145,10 +145,10 @@ export default function Expenses() {
         };
     }, [fetchExpenses]);
 
-    // Reset page to 1 when branch or date range changes
+    // Reset page to 1 when branch, store or date range changes
     useEffect(() => {
         setPagination(prev => ({ ...prev, page: 1 }));
-    }, [selectedBranchId, dateRange]);
+    }, [selectedBranchId, selectedStore, dateRange]);
 
     const handleEdit = async (expense) => {
         if (!isAdmin) return;

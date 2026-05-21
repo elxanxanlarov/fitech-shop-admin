@@ -6,11 +6,9 @@ import DeletedProductsBell from "../ui/DeletedProductsBell"
 import BranchSelector from "../ui/BranchSelector"
 import { useState } from "react"
 import { FiMenu } from "react-icons/fi"
-import { useAuth } from "../../context/AuthContext"
 import { useBranch } from "../../context/BranchContext"
 
 export default function DashboardLayout({ children, sidebarData, title, profilePath }) {
-  const { user } = useAuth()
   const { selectedStore } = useBranch()
   const [isOpen, setIsOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
@@ -24,7 +22,9 @@ export default function DashboardLayout({ children, sidebarData, title, profileP
     setIsOpen(false)
   }
   
-  const isIsmayilli = user?.store === 'ISMAYILLI' || selectedStore === 'ISMAYILLI';
+  // Görünüş tamamilə selectedStore-a tabedir. Hər rol header toggle-i ilə
+  // Fitech / İsmayıllı görünüşü arasında keçə bilər.
+  const isIsmayilli = selectedStore === 'ISMAYILLI';
 
   return (
     <div className="min-h-screen bg-slate-50">

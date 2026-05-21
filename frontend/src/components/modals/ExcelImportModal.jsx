@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Upload, FileSpreadsheet, AlertCircle, CheckCircle, MapPin } from 'lucide-react';
+import { X, Upload, FileSpreadsheet, AlertCircle, CheckCircle, MapPin, Tag, Percent, Layers } from 'lucide-react';
 import Alert from '../ui/Alert';
 import { useAuth, useBranch } from '../../hooks';
 import { branchApi } from '../../api';
@@ -15,6 +15,11 @@ export default function ExcelImportModal({ isOpen, onClose, onImport, isHeaderIs
     const [uploading, setUploading] = useState(false);
     const [branches, setBranches] = useState([]);
     const [targetBranchId, setTargetBranchId] = useState(contextBranchId || 'central');
+
+    // Şablon seçimi: 'standard' (mövcud) və ya 'qabqacaq' (Sıra/Kod/Cəm skip + Satış opsional)
+    const [template, setTemplate] = useState('standard');
+    const [categoryName, setCategoryName] = useState('');
+    const [profitPercent, setProfitPercent] = useState(50);
 
     useEffect(() => {
         const fetchBranches = async () => {
@@ -78,9 +83,13 @@ export default function ExcelImportModal({ isOpen, onClose, onImport, isHeaderIs
 
         setUploading(true);
         try {
-            await onImport(selectedFile, targetBranchId, isIsmayilli);
+            const opts = {};
+            if (categoryName.trim()) opts.categoryName = categoryName.trim();
+            if (template === 'qabqacaq' && profitPercent !== '' && profitPercent !== null) {
+                opts.profitPercent = profitPercent;
+            }
+            await onImport(selectedFile, targetBranchId, isIsmayilli, opts);
             setSelectedFile(null);
-            // Reset file input
             const fileInput = document.getElementById('excel-file-input');
             if (fileInput) fileInput.value = '';
         } catch (error) {
@@ -118,6 +127,86 @@ export default function ExcelImportModal({ isOpen, onClose, onImport, isHeaderIs
 
                 {/* Content */}
                 <div className="p-6 space-y-6">
+                    {/* Template Switch — yalnız non-Ismayilli üçün göstərilir */}
+                    {!isIsmayilli && (
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-bold text-slate-500 uppercase mr-1">Şablon:</span>
+                            <button
+                                type="button"
+                                onClick={() => setTemplate('standard')}
+                                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all border-2 ${
+                                    template === 'standard'
+                                        ? 'bg-blue-600 text-white border-blue-600 shadow-md'
+                                        : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'
+                                }`}
+                            >
+                                <FileSpreadsheet className="w-4 h-4 inline mr-1" />
+                                Standart
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setTemplate('qabqacaq')}
+                                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all border-2 ${
+                                    template === 'qabqacaq'
+                                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-md'
+                                        : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-300'
+                                }`}
+                            >
+                                <Layers className="w-4 h-4 inline mr-1" />
+                                Qabqacaq
+                            </button>
+                            <p className="text-[11px] text-slate-500 ml-auto italic">
+                                {template === 'qabqacaq'
+                                    ? 'Sıra № / Kod / Cəmi məbləğ sütunları skip olunur, satış qiyməti faizlə hesablana bilər'
+                                    : 'Hazır cədvəlinizi olduğu kimi yükləyin'}
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Kateqoriya & Faiz */}
+                    <div className="bg-amber-50/60 border border-amber-200 rounded-xl p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label className="text-xs font-bold text-amber-700 uppercase block mb-1.5">
+                                Kateqoriya Adı (Opsional)
+                            </label>
+                            <div className="relative">
+                                <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-500" />
+                                <input
+                                    type="text"
+                                    value={categoryName}
+                                    onChange={(e) => setCategoryName(e.target.value)}
+                                    placeholder="Məs: Qabqacaq"
+                                    className="w-full pl-10 pr-3 py-2 border-2 border-amber-300 bg-white rounded-lg text-sm font-semibold text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                />
+                            </div>
+                            <p className="text-[11px] text-amber-600 mt-1">
+                                Verilərsə, bütün məhsullar bu kateqoriyaya assign olunacaq. Yoxdursa, avtomatik yaradılacaq.
+                            </p>
+                        </div>
+
+                        {template === 'qabqacaq' && !isIsmayilli && (
+                            <div>
+                                <label className="text-xs font-bold text-amber-700 uppercase block mb-1.5">
+                                    Mənfəət Faizi (%)
+                                </label>
+                                <div className="relative">
+                                    <Percent className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-500" />
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="0.1"
+                                        value={profitPercent}
+                                        onChange={(e) => setProfitPercent(e.target.value)}
+                                        className="w-full pl-10 pr-3 py-2 border-2 border-amber-300 bg-white rounded-lg text-sm font-semibold text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                    />
+                                </div>
+                                <p className="text-[11px] text-amber-600 mt-1">
+                                    Excel-də satış qiyməti yoxdursa: Satış = Alış × {(1 + parseFloat(profitPercent || 0) / 100).toFixed(2)}
+                                </p>
+                            </div>
+                        )}
+                    </div>
+
                     {/* Format Information */}
                     {isIsmayilli ? (
                         <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 text-xs text-amber-800 space-y-1">
@@ -125,6 +214,30 @@ export default function ExcelImportModal({ isOpen, onClose, onImport, isHeaderIs
                             <p>• Excel faylındakı sütun başlıqları avtomatik tanınır.</p>
                             <p>• Kateqoriya adları (məsələn, <b>Geyim, Ətir, Xırdavat</b>) qalın başlıqlı sətirlərdən və ya Kateqoriya sütunundan oxunaraq avtomatik yaradılacaqdır.</p>
                             <p>• Eyni ştrihkoda malik məhsullar təkrar yükləndikdə qiymət və stok miqdarı yenilənəcəkdir.</p>
+                        </div>
+                    ) : template === 'qabqacaq' ? (
+                        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+                            <div className="flex items-start gap-3">
+                                <AlertCircle className="w-5 h-5 text-emerald-600 mt-0.5 flex-shrink-0" />
+                                <div className="flex-1">
+                                    <h3 className="font-semibold text-emerald-900 mb-2">
+                                        Qabqacaq Şablonu — Tələblər
+                                    </h3>
+                                    <div className="text-sm text-emerald-800 space-y-2">
+                                        <p className="font-medium">Sütun başlıqları:</p>
+                                        <ul className="list-disc list-inside space-y-1 ml-2">
+                                            <li><strong>Sıra №</strong> - Skip olunur</li>
+                                            <li><strong>Kod</strong> - Skip olunur (barkod arxa planda yaranır)</li>
+                                            <li><strong>Məhsul Adı</strong> - Mütləq</li>
+                                            <li><strong>Miqdar</strong> - Mütləq</li>
+                                            <li><strong>Ölçü vahidi</strong> - əd, kq, litr...</li>
+                                            <li><strong>Qiymət (AZN)</strong> - Alış qiyməti (mütləq)</li>
+                                            <li><strong>Məbləğ (AZN)</strong> - Cəmi məbləğ (skip olunur)</li>
+                                            <li><strong>Satış Qiymət</strong> - <em>Opsional</em> — yoxdursa faizlə hesablanacaq</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     ) : (
                         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -158,30 +271,59 @@ export default function ExcelImportModal({ isOpen, onClose, onImport, isHeaderIs
                             {t('excel_example') || 'Nümunə Format:'}
                         </h3>
                         <div className="overflow-x-auto">
-                            <table className="min-w-full text-sm border-collapse border border-gray-300">
-                                <thead>
-                                    <tr className="bg-gray-200">
-                                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Strixkod</th>
-                                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Ad</th>
-                                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Miqdar</th>
-                                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Ölçü vahidi</th>
-                                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Qiymət (AZN)</th>
-                                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Cəmi məbləğ</th>
-                                        <th className="border border-gray-300 px-3 py-2 text-left font-semibold bg-green-100">Satış Qiyməti</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td className="border border-gray-300 px-3 py-2">2400000028109</td>
-                                        <td className="border border-gray-300 px-3 py-2">TOZSORAN SULU</td>
-                                        <td className="border border-gray-300 px-3 py-2">2</td>
-                                        <td className="border border-gray-300 px-3 py-2">əd</td>
-                                        <td className="border border-gray-300 px-3 py-2">60.00</td>
-                                        <td className="border border-gray-300 px-3 py-2">120.00</td>
-                                        <td className="border border-gray-300 px-3 py-2 bg-green-50 font-bold">85.00</td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                            {(!isIsmayilli && template === 'qabqacaq') ? (
+                                <table className="min-w-full text-sm border-collapse border border-gray-300">
+                                    <thead>
+                                        <tr className="bg-gray-200">
+                                            <th className="border border-gray-300 px-3 py-2 text-left font-semibold text-slate-400">Sıra №</th>
+                                            <th className="border border-gray-300 px-3 py-2 text-left font-semibold text-slate-400">Kod</th>
+                                            <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Məhsul Adı</th>
+                                            <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Miqdar</th>
+                                            <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Ölçü vahidi</th>
+                                            <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Qiymət (AZN)</th>
+                                            <th className="border border-gray-300 px-3 py-2 text-left font-semibold text-slate-400">Məbləğ (AZN)</th>
+                                            <th className="border border-gray-300 px-3 py-2 text-left font-semibold bg-green-100">Satış Qiymət</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td className="border border-gray-300 px-3 py-2 text-slate-400">1</td>
+                                            <td className="border border-gray-300 px-3 py-2 text-slate-400">16577</td>
+                                            <td className="border border-gray-300 px-3 py-2">CSJ2 caska nelbeki</td>
+                                            <td className="border border-gray-300 px-3 py-2">2</td>
+                                            <td className="border border-gray-300 px-3 py-2">əd</td>
+                                            <td className="border border-gray-300 px-3 py-2">25,00</td>
+                                            <td className="border border-gray-300 px-3 py-2 text-slate-400">50,00</td>
+                                            <td className="border border-gray-300 px-3 py-2 bg-green-50 font-bold">38,00</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            ) : (
+                                <table className="min-w-full text-sm border-collapse border border-gray-300">
+                                    <thead>
+                                        <tr className="bg-gray-200">
+                                            <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Strixkod</th>
+                                            <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Ad</th>
+                                            <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Miqdar</th>
+                                            <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Ölçü vahidi</th>
+                                            <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Qiymət (AZN)</th>
+                                            <th className="border border-gray-300 px-3 py-2 text-left font-semibold">Cəmi məbləğ</th>
+                                            <th className="border border-gray-300 px-3 py-2 text-left font-semibold bg-green-100">Satış Qiyməti</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td className="border border-gray-300 px-3 py-2">2400000028109</td>
+                                            <td className="border border-gray-300 px-3 py-2">TOZSORAN SULU</td>
+                                            <td className="border border-gray-300 px-3 py-2">2</td>
+                                            <td className="border border-gray-300 px-3 py-2">əd</td>
+                                            <td className="border border-gray-300 px-3 py-2">60.00</td>
+                                            <td className="border border-gray-300 px-3 py-2">120.00</td>
+                                            <td className="border border-gray-300 px-3 py-2 bg-green-50 font-bold">85.00</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            )}
                         </div>
                     </div>
 

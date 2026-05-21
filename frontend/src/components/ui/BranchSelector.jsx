@@ -18,10 +18,14 @@ export default function BranchSelector() {
 
     const roleName = (user?.role?.name || '').toLowerCase();
     const isSuperadmin = roleName === 'superadmin';
-    const isHeadAdmin = roleName === 'admin' && user?.isBoss === true;
+    const isAdmin = roleName === 'admin';
+    const isHeadAdmin = isAdmin && user?.isBoss === true;
     const isSeller = roleName === 'seller';
+    const isIsmayilliAdmin = roleName === 'ismayilliadmin';
     /** Filial dəyişdirə bilənlər */
     const canChangeBranch = isSuperadmin || isHeadAdmin;
+    /** Fitech / İsmayıllı store toggle-i görmək haqqı: satıcı, admin, superadmin, ismayilliadmin */
+    const canToggleStore = isSeller || isAdmin || isSuperadmin || isIsmayilliAdmin;
 
     const showBranchInHeader = user && (canChangeBranch || !!user.branchId);
 
@@ -69,7 +73,7 @@ export default function BranchSelector() {
                     <span className="max-w-[140px] truncate">{label || '—'}</span>
                 </div>
 
-                {isSeller && mine?.isShowIsmayilli && (
+                {canToggleStore && mine?.isShowIsmayilli && (
                     <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">
                         <button
                             onClick={() => setSelectedStore('FITECH')}
@@ -135,7 +139,7 @@ export default function BranchSelector() {
                 )}
             </div>
 
-            {isSeller && selectedBranch?.isShowIsmayilli && (
+            {canToggleStore && selectedBranch?.isShowIsmayilli && (
                 <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">
                     <button
                         onClick={() => setSelectedStore('FITECH')}

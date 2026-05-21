@@ -27,6 +27,7 @@ import stockTransferRoutes from "./src/routes/stockTransferRoutes.js";
 import convertRoutes from "./src/routes/convertRoutes.js";
 import ismayilliProductRoutes from "./src/routes/ismayilliProductRoutes.js";
 import ismayilliSaleRoutes from "./src/routes/ismayilliSaleRoutes.js";
+import ismayilliReturnRoutes from "./src/routes/ismayilliReturnRoutes.js";
 import ismayilliStatisticsRoutes from "./src/routes/ismayilliStatisticsRoutes.js";
 import { seedData } from "./src/seed/seedData.js";
 import { checkCreditPaymentDue } from "./src/controllers/notificationController.js";
@@ -93,6 +94,7 @@ app.use("/api/convert", convertRoutes);
 // Ismayilli Shop Routes
 app.use("/api/ismayilli/product", ismayilliProductRoutes);
 app.use("/api/ismayilli/sale", ismayilliSaleRoutes);
+app.use("/api/ismayilli/return", ismayilliReturnRoutes);
 app.use("/api/ismayilli/statistics", ismayilliStatisticsRoutes);
 
 app.get("/api/health", (req, res) => {

@@ -29,9 +29,17 @@ export const authenticateToken = async (req, res, next) => {
       return res.status(401).json({ success: false, message: "Hesabınız deaktiv edilib" });
     }
 
-    // Superadmin və Baş Adminə aid deyil
+    // Superadmin, Baş Admin, Satıcı və İsmayıllı rollarına aid deyil
     const roleName = staff.role?.name?.toLowerCase();
-    const isPrivileged = roleName === "superadmin" || (roleName === "admin" && staff.isBoss);
+    const WORK_HOURS_EXEMPT_ROLES = new Set([
+      "superadmin",
+      "seller",
+      "ismayilliadmin",
+      "ismayilliseller",
+    ]);
+    const isPrivileged =
+      WORK_HOURS_EXEMPT_ROLES.has(roleName) ||
+      (roleName === "admin" && staff.isBoss);
 
     if (!isPrivileged) {
       const currentHour = new Date().getHours();

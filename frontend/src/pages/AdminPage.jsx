@@ -46,6 +46,7 @@ import IsmayilliStatistics from "../components/ismayilli/IsmayilliStatistics.jsx
 import IsmayilliStaff from "../components/ismayilli/IsmayilliStaff.jsx"
 import IsmayilliBarcodeGenerator from "../components/ismayilli/IsmayilliBarcodeGenerator.jsx"
 import IsmayilliCheck from "../components/ismayilli/IsmayilliCheck.jsx"
+import IsmayilliRecentActivities from "../components/ismayilli/IsmayilliRecentActivities.jsx"
 
 
 export default function AdminPanel() {
@@ -53,7 +54,11 @@ export default function AdminPanel() {
     const { user } = useAuth()
     const { selectedStore } = useBranch()
 
-    if (selectedStore === 'ISMAYILLI') {
+    // Görünüş tamamilə selectedStore-a tabedir. Hər rol (ismayilliadmin daxil)
+    // header toggle-i ilə Fitech / İsmayıllı görünüşü arasında keçə bilər.
+    const effectiveIsmayilli = selectedStore === 'ISMAYILLI';
+
+    if (effectiveIsmayilli) {
         if (slug === 'products') return <Navigate to="/admin/ismayilli-products" replace />
         if (slug === 'sales') return <Navigate to="/admin/ismayilli-sales" replace />
         if (slug === 'statistics') return <Navigate to="/admin/ismayilli-statistics" replace />
@@ -71,7 +76,7 @@ export default function AdminPanel() {
         return <Navigate to="/admin/settings" replace />
     }
 
-    if (slug && selectedStore === 'ISMAYILLI' && ['roles-management', 'branch-management', 'branch-detail', 'branch-form', 'role-form'].includes(slug)) {
+    if (slug && effectiveIsmayilli && ['roles-management', 'branch-management', 'branch-detail', 'branch-form', 'role-form'].includes(slug)) {
         return <Navigate to="/admin/settings" replace />
     }
 
@@ -127,6 +132,7 @@ export default function AdminPanel() {
             {slug === "ismayilli-staff" && <IsmayilliStaff />}
             {slug === "ismayilli-barcode-generator" && <IsmayilliBarcodeGenerator />}
             {slug === "ismayilli-check" && <IsmayilliCheck />}
+            {slug === "ismayilli-activities" && <IsmayilliRecentActivities />}
         </div>
     )
 }

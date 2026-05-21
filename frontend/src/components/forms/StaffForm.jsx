@@ -44,7 +44,13 @@ export default function StaffForm() {
     const [isLoading, setIsLoading] = useState(false);
 
     const isAdmin = location.pathname.includes('/admin');
-    const staffPagePath = currentUser?.store === 'ISMAYILLI'
+    // İsmayıllı staff səhifəsinə qayıdış yalnız İsmayıllı işçi rolları üçün.
+    // Superadmin/admin rolu olduğu halda hətta `store === 'ISMAYILLI'`
+    // olsa belə standart admin staff səhifəsinə qayıdır.
+    const currentRoleName = currentUser?.role?.name?.toLowerCase();
+    const isCurrentIsmayilliRole =
+        currentRoleName === 'ismayilliadmin' || currentRoleName === 'ismayilliseller';
+    const staffPagePath = isCurrentIsmayilliRole
         ? '/admin/ismayilli-staff'
         : (isAdmin ? '/admin/staff' : '/reception/staff');
 

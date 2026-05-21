@@ -12,15 +12,22 @@ export default function Login() {
     const { t } = useTranslation('auth');
     const auth = useAuth();
 
-    // Əgər artıq login olubsa (token varsa), admin səhifəsinə yönləndir
+    // Əgər artıq login olubsa (token varsa), uyğun səhifəyə yönləndir.
+    // Qayda: rol əsasdır. Superadmin/admin store-undan asılı olmayaraq əsas
+    // admin panelinə getməlidir. İsmayıllı paneli yalnız ismayilliadmin/seller üçündür.
     useEffect(() => {
         if (!auth.loading && auth.user) {
-            if (auth.user.store === 'ISMAYILLI') {
-                navigate('/admin/ismayilli-products');
-            } else if (auth.user.role?.name?.toLowerCase() === 'superadmin' || auth.user.role?.name?.toLowerCase() === 'admin') {
+            const rname = auth.user.role?.name?.toLowerCase();
+            if (rname === 'superadmin' || rname === 'admin') {
                 navigate('/admin/staff');
-            } else if (auth.user.role?.name?.toLowerCase() === 'reception') {
+            } else if (rname === 'ismayilliadmin' || rname === 'ismayilliseller') {
+                navigate('/admin/ismayilli-products');
+            } else if (rname === 'reception') {
                 navigate('/reception/sales');
+            } else if (rname === 'seller') {
+                navigate('/seller/pos');
+            } else if (auth.user.store === 'ISMAYILLI') {
+                navigate('/admin/ismayilli-products');
             } else {
                 navigate('/');
             }
@@ -90,20 +97,24 @@ export default function Login() {
                     // AuthContext-də login funksiyasını çağır
                     auth.login(meResponse.data);
 
-                    // Store-a görə İsmayıllı yönləndirməsi
-                    if (meResponse.data.store === 'ISMAYILLI') {
-                        navigate('/admin/ismayilli-products');
-                        return;
-                    }
-
-                    // Role məlumatını al
+                    // Yönləndirmə qaydası: rol əsasdır. Superadmin/admin store-undan
+                    // asılı olmayaraq əsas admin panelinə getməlidir. İsmayıllı paneli
+                    // yalnız ismayilliadmin/seller rolları üçündür.
                     const roleName = meResponse.data.role?.name?.toLowerCase();
 
-                    // Superadmin və ya Admin olsa /admin/staff-ə yönləndir
                     if (roleName === 'superadmin' || roleName === 'admin') {
+                        localStorage.setItem('selectedStore', 'FITECH');
                         navigate('/admin/staff');
+                    } else if (roleName === 'ismayilliadmin' || roleName === 'ismayilliseller') {
+                        localStorage.setItem('selectedStore', 'ISMAYILLI');
+                        navigate('/admin/ismayilli-products');
                     } else if (roleName === 'reception') {
                         navigate('/reception/sales');
+                    } else if (roleName === 'seller') {
+                        navigate('/seller/pos');
+                    } else if (meResponse.data.store === 'ISMAYILLI') {
+                        localStorage.setItem('selectedStore', 'ISMAYILLI');
+                        navigate('/admin/ismayilli-products');
                     } else {
                         navigate('/');
                     }

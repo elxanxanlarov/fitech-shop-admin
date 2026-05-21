@@ -51,9 +51,11 @@ export const getAllSales = async (req, res) => {
             include: {
                 items: {
                     include: {
-                        product: true
+                        product: true,
+                        returnItems: true
                     }
-                }
+                },
+                returns: true
             },
             orderBy: {
                 createdAt: 'desc',

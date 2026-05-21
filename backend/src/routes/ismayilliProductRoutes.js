@@ -11,6 +11,7 @@ import {
   updateProduct,
   deleteProduct,
   importExcel,
+  bulkCreateProducts,
   bulkDeleteProducts,
   adjustStock,
   getStockMovements,
@@ -33,6 +34,7 @@ router.delete("/categories/:id", deleteCategory);
 // Mehsullar
 router.get("/products", getAllProducts);
 router.post("/products/import-excel", upload.single("file"), importExcel);
+router.post("/products/bulk-create", bulkCreateProducts);
 router.post("/products/bulk-delete", bulkDeleteProducts);
 router.get("/products/:id", getProductById);
 router.post("/products", createProduct);

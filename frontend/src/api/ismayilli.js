@@ -62,6 +62,11 @@ export const ismayilliApi = {
     return response.data;
   },
 
+  bulkCreateProducts: async (data) => {
+    const response = await api.post('/ismayilli/product/products/bulk-create', data);
+    return response.data;
+  },
+
   adjustStock: async (id, data) => {
     const response = await api.post(`/ismayilli/product/products/${id}/adjust-stock`, data);
     return response.data;
@@ -103,9 +108,30 @@ export const ismayilliApi = {
     return response.data;
   },
 
-  // Statistics
-  getStatistics: async () => {
-    const response = await api.get('/ismayilli/statistics');
+  // Returns
+  getAllReturns: async () => {
+    const response = await api.get('/ismayilli/return');
     return response.data;
-  }
+  },
+
+  getReturnsBySaleId: async (saleId) => {
+    const response = await api.get(`/ismayilli/return/sale/${saleId}`);
+    return response.data;
+  },
+
+  createReturn: async (returnData) => {
+    const response = await api.post('/ismayilli/return', returnData);
+    return response.data;
+  },
+
+  // Statistics
+  getStatistics: async (params = {}) => {
+    const response = await api.get('/ismayilli/statistics', { params });
+    return response.data;
+  },
+
+  getActivities: async (params = {}) => {
+    const response = await api.get('/ismayilli/statistics/activities', { params });
+    return response.data;
+  },
 };

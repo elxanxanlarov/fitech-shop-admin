@@ -197,9 +197,10 @@ export const createCashHandover = async (req, res) => {
         }
 
         const branchFilter = buildBranchFilter(branchId);
+        const effectiveStore = store || getStoreFilter(req).store || 'FITECH';
 
-        // Kəssa balasnı hesabla (vahid service ilə)
-        const cashbox = await computeCashboxBalance(branchFilter);
+        // Kəssa balasnı hesabla (vahid service ilə) — store-aware
+        const cashbox = await computeCashboxBalance(branchFilter, { store: effectiveStore });
         const totalAvailableAllTime = cashbox.balance;
 
         const roundedTotalAvailable = Math.round(totalAvailableAllTime * 100) / 100;
@@ -222,7 +223,7 @@ export const createCashHandover = async (req, res) => {
                 handedOverById,
                 note: note || null,
                 branchId: (branchId && branchId !== 'central') ? branchId : null,
-                store: store || getStoreFilter(req).store || 'FITECH',
+                store: effectiveStore,
             },
             include: {
                 handedOverTo: {
@@ -344,8 +345,11 @@ export const updateCashHandover = async (req, res) => {
                 (existingCashHandover.branchId === null ? 'central' : undefined)
             );
 
-            // Kəssa balasnı hesabla (cari id xaric) — vahid service ilə
-            const cashbox = await computeCashboxBalance(updateBranchFilter, { excludeHandoverId: id });
+            // Kəssa balasnı hesabla (cari id xaric) — vahid service ilə, store-aware
+            const cashbox = await computeCashboxBalance(updateBranchFilter, {
+                excludeHandoverId: id,
+                store: existingCashHandover.store || getStoreFilter(req).store || 'FITECH',
+            });
             const totalAvailableAllTime = cashbox.balance;
 
 
@@ -686,6 +690,7 @@ export const getAvailableRevenueByDate = async (req, res) => {
 export const getPayoutPendingDates = async (req, res) => {
     try {
         const { branchId } = req.query;
+        const store = getStoreFilter(req).store; // FITECH | ISMAYILLI
         // branchId yoxdursa => hamısı (bütün filiallar)
         // branchId === 'central' => yalnız filialsız (null)
         // branchId => konkret filial
@@ -698,90 +703,83 @@ export const getPayoutPendingDates = async (req, res) => {
             currentBranchFilter = { branchId: null };
             saleBranchFilter = { branchId: null };
         }
-        // branchId yoxdursa: {} = bütün filiallar (statistika ilə eyni)
         // Son 180 günü yoxlayaq (təxminən 6 ay)
         const startDate = new Date();
         startDate.setDate(startDate.getDate() - 180);
         startDate.setHours(0, 0, 0, 0);
 
-        // Satışları gətir (Nəğd)
-        const sales = await prisma.sale.findMany({
-            where: {
-                deleteType: 'NONE',
-                isRefunded: false,
-                paymentType: 'cash',
-                ...saleBranchFilter,
-                createdAt: {
-                    gte: startDate
-                }
-            },
-            select: {
-                paidAmount: true,
-                createdAt: true
-            }
-        });
+        let sales = [];
+        let creditPayments = [];
+        let returns = [];
 
-        // Kredit ödənişlərini gətir (Nəğd)
-        const creditPayments = await prisma.creditpayment.findMany({
-            where: {
-                paymentType: 'cash',
-                sale: saleBranchFilter,
-                paymentDate: {
-                    gte: startDate
-                }
-            },
-            select: {
-                amount: true,
-                paymentDate: true
-            }
-        });
+        if (store === 'ISMAYILLI') {
+            const ismSales = await prisma.ismayilliSale.findMany({
+                where: { isRefunded: false, createdAt: { gte: startDate } },
+                select: { paidAmount: true, createdAt: true },
+            });
+            sales = ismSales.map(s => ({ paidAmount: s.paidAmount, createdAt: s.createdAt }));
 
-        // Qaytarmaları gətir
-        const returns = await prisma.salereturn.findMany({
-            where: {
-                createdAt: {
-                    gte: startDate
-                },
-                sale: {
+            const ismReturns = await prisma.ismayilliSaleReturn.findMany({
+                where: { createdAt: { gte: startDate } },
+                select: { returnedAmount: true, createdAt: true },
+            });
+            returns = ismReturns.map(r => ({ returnedAmount: r.returnedAmount, createdAt: r.createdAt }));
+        } else {
+            sales = await prisma.sale.findMany({
+                where: {
                     deleteType: 'NONE',
+                    isRefunded: false,
                     paymentType: 'cash',
-                    ...saleBranchFilter
-                }
-            },
-            select: {
-                returnedAmount: true,
-                createdAt: true
-            }
-        });
+                    store: 'FITECH',
+                    ...saleBranchFilter,
+                    createdAt: { gte: startDate }
+                },
+                select: { paidAmount: true, createdAt: true }
+            });
 
-        // Xərcləri gətir
+            creditPayments = await prisma.creditpayment.findMany({
+                where: {
+                    paymentType: 'cash',
+                    sale: { store: 'FITECH', ...saleBranchFilter },
+                    paymentDate: { gte: startDate }
+                },
+                select: { amount: true, paymentDate: true }
+            });
+
+            returns = await prisma.salereturn.findMany({
+                where: {
+                    createdAt: { gte: startDate },
+                    sale: {
+                        deleteType: 'NONE',
+                        paymentType: 'cash',
+                        store: 'FITECH',
+                        ...saleBranchFilter
+                    }
+                },
+                select: { returnedAmount: true, createdAt: true }
+            });
+        }
+
+        // Xərcləri gətir (store filtri ilə)
         const expenses = await prisma.expense.findMany({
             where: {
                 deleteType: 'NONE',
+                store,
                 ...currentBranchFilter,
-                date: {
-                    gte: startDate
-                }
+                date: { gte: startDate }
             },
-            select: {
-                amount: true,
-                date: true
-            }
+            select: { amount: true, date: true }
         });
 
-        // Artıq edilmiş təslimləri gətir
+        // Artıq edilmiş təslimləri gətir (store filtri ilə)
         const handovers = await prisma.cashhandover.findMany({
             where: {
                 deleteType: 'NONE',
+                store,
                 ...currentBranchFilter,
-                date: {
-                    gte: startDate
-                }
+                date: { gte: startDate }
             },
-            select: {
-                amount: true,
-                date: true
-            }
+            select: { amount: true, date: true }
         });
 
         const dailyData = {};
@@ -844,7 +842,7 @@ export const getPayoutPendingDates = async (req, res) => {
             .sort((a, b) => b.date.localeCompare(a.date));
 
         // K\u0259ssa balans\u0131n\u0131 vahid service il\u0259 hesabla
-        const allTimeResult = await computeCashboxBalance(currentBranchFilter);
+        const allTimeResult = await computeCashboxBalance(currentBranchFilter, { store });
 
         return res.status(200).json({
             success: true,

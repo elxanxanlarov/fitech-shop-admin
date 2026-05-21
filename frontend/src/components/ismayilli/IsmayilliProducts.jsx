@@ -7,12 +7,32 @@ import IsmayilliStockHistoryModal from './IsmayilliStockHistoryModal';
 import ExcelTableModal from '../modals/ExcelTableModal';
 import BarcodePrintModal from '../modals/BarcodePrintModal';
 
+/**
+ * Excel-də saxlanılan həqiqi rəqəmi trailing sıfırlar olmadan göstərir.
+ *   5.000  → "5"
+ *   3.50   → "3.5"
+ *   18.20  → "18.2"
+ *   3.55   → "3.55"
+ *   0      → "0"
+ *
+ * Yuvarlama yox — Excel-dəki dəqiq dəyəri qoruyur, sadəcə artıq nümayiş
+ * üçün əlavə olunmuş sıfırları atır.
+ */
+const formatNumber = (val) => {
+  if (val === null || val === undefined || val === '') return '0';
+  const n = Number(val);
+  if (!Number.isFinite(n)) return '0';
+  // Float dəqiqliyini qorumaq üçün maksimum 6 onluqla yuvarla, sonra trailing 0-ları at
+  return parseFloat(n.toFixed(6)).toString();
+};
+
 export default function IsmayilliProducts() {
   const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -289,17 +309,20 @@ export default function IsmayilliProducts() {
   };
 
   const filteredProducts = useMemo(() => {
-    if (!search.trim()) return products;
-    const query = search.toLowerCase();
-    return products.filter(p =>
-      p.name.toLowerCase().includes(query) ||
-      (p.barcode && p.barcode.toLowerCase().includes(query))
-    );
-  }, [products, search]);
+    const query = search.toLowerCase().trim();
+    return products.filter(p => {
+      if (categoryFilter && p.categoryId !== categoryFilter) return false;
+      if (!query) return true;
+      return (
+        p.name.toLowerCase().includes(query) ||
+        (p.barcode && p.barcode.toLowerCase().includes(query))
+      );
+    });
+  }, [products, search, categoryFilter]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search]);
+  }, [search, categoryFilter]);
 
   const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
 
@@ -348,20 +371,21 @@ export default function IsmayilliProducts() {
 
       {/* Filters & Bulk Actions */}
       <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="relative w-full md:w-96">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none z-20" />
-          <input
-            type="text"
-            placeholder="Məhsul adı və ya barkoduna görə axtar..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') saveToSearchHistory(search);
-            }}
-            onFocus={() => setShowSearchHistory(true)}
-            onBlur={() => setTimeout(() => setShowSearchHistory(false), 200)}
-            className="w-full pl-10 pr-10 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all relative z-10"
-          />
+        <div className="flex flex-col md:flex-row md:items-center gap-3 w-full md:w-auto">
+          <div className="relative w-full md:w-96">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none z-20" />
+            <input
+              type="text"
+              placeholder="Məhsul adı və ya barkoduna görə axtar..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') saveToSearchHistory(search);
+              }}
+              onFocus={() => setShowSearchHistory(true)}
+              onBlur={() => setTimeout(() => setShowSearchHistory(false), 200)}
+              className="w-full pl-10 pr-10 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all relative z-10"
+            />
           {search && (
             <button
               onClick={() => { setSearch(''); setShowSearchHistory(false); }}
@@ -393,7 +417,7 @@ export default function IsmayilliProducts() {
                   
                   return suggestions.map((item, index) => {
                     const price = item.unitPriceSale;
-                    const formattedPrice = price !== undefined && price !== null ? `${Number(price).toFixed(2)} AZN` : '';
+                    const formattedPrice = price !== undefined && price !== null ? `${formatNumber(price)} AZN` : '';
                     
                     return (
                       <div
@@ -454,6 +478,35 @@ export default function IsmayilliProducts() {
               )}
             </div>
           )}
+          </div>
+
+          {/* Category Filter */}
+          <div className="relative w-full md:w-56">
+            <Layers className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-500 w-4 h-4 pointer-events-none" />
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className={`w-full pl-10 pr-8 py-2 rounded-xl border bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 transition-all appearance-none cursor-pointer text-sm ${
+                categoryFilter
+                  ? 'border-amber-300 font-bold text-amber-700'
+                  : 'border-slate-200 text-slate-600'
+              }`}
+            >
+              <option value="">Bütün kateqoriyalar</option>
+              {categories.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            {categoryFilter && (
+              <button
+                onClick={() => setCategoryFilter('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-amber-400 hover:text-amber-600 transition-colors"
+                type="button"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
         {selectedProductIds.length > 0 && (
           <button
@@ -530,9 +583,9 @@ export default function IsmayilliProducts() {
                         {p.category?.name || '-'}
                       </span>
                     </td>
-                    <td className="p-4 text-sm font-bold text-slate-800">{parseFloat(p.quantity)}</td>
-                    <td className="p-4 text-sm font-medium text-emerald-600">{parseFloat(p.unitPricePurchase).toFixed(2)} AZN</td>
-                    <td className="p-4 text-sm font-bold text-blue-600">{parseFloat(p.unitPriceSale).toFixed(2)} AZN</td>
+                    <td className="p-4 text-sm font-bold text-slate-800">{formatNumber(p.quantity)}</td>
+                    <td className="p-4 text-sm font-medium text-emerald-600">{formatNumber(p.unitPricePurchase)} AZN</td>
+                    <td className="p-4 text-sm font-bold text-blue-600">{formatNumber(p.unitPriceSale)} AZN</td>
                     <td className="p-4 text-sm">
                       <div className="flex gap-2">
                         <button

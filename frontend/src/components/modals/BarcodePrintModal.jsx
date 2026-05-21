@@ -134,17 +134,24 @@ function BarcodeCard({ product, sizeConfig }) {
   );
 }
 
-export default function BarcodePrintModal({ isOpen, onClose, product }) {
+export default function BarcodePrintModal({ isOpen, onClose, product, products }) {
   const componentRef = useRef(null);
   const screenBarcodeRef = useRef(null);
   const [selectedSize, setSelectedSize] = useState('30x20');
+  const [previewIdx, setPreviewIdx] = useState(0);
+
+  // Normalize: either bulk products list, or single product
+  const productList = Array.isArray(products) && products.length > 0
+    ? products
+    : (product ? [product] : []);
+  const isBulk = productList.length > 1;
+  const previewProduct = productList[Math.min(previewIdx, productList.length - 1)] || null;
 
   // Generate the clean barcode preview on screen (always fixed size for gorgeous UI)
   useEffect(() => {
-    if (isOpen && product?.barcode && screenBarcodeRef.current) {
+    if (isOpen && previewProduct?.barcode && screenBarcodeRef.current) {
       try {
-        // Strictly use CODE128 for screen rendering too to prevent invalid EAN13 checksum failures
-        JsBarcode(screenBarcodeRef.current, product.barcode.trim(), {
+        JsBarcode(screenBarcodeRef.current, previewProduct.barcode.trim(), {
           format: "CODE128",
           lineColor: "#000",
           width: 1.3,
@@ -158,13 +165,16 @@ export default function BarcodePrintModal({ isOpen, onClose, product }) {
         console.error("Screen preview barcode error:", error);
       }
     }
-  }, [isOpen, product]);
+  }, [isOpen, previewProduct]);
+
+  // Reset preview index when products change
+  useEffect(() => { setPreviewIdx(0); }, [productList.length, isOpen]);
 
   const activeSize = SIZES[selectedSize] || SIZES['30x20'];
 
   const handlePrint = useReactToPrint({
     contentRef: componentRef,
-    documentTitle: product ? `Barcode_${product.barcode}` : 'Barcode',
+    documentTitle: isBulk ? `Barcodes_${productList.length}` : (previewProduct ? `Barcode_${previewProduct.barcode}` : 'Barcode'),
     pageStyle: `
       @page {
         size: ${activeSize.width} ${activeSize.height} !important;
@@ -180,7 +190,7 @@ export default function BarcodePrintModal({ isOpen, onClose, product }) {
     `
   });
 
-  if (!isOpen || !product) return null;
+  if (!isOpen || productList.length === 0) return null;
 
   // Print-only styling rules
   const printStyles = `
@@ -220,11 +230,16 @@ export default function BarcodePrintModal({ isOpen, onClose, product }) {
 
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden border border-slate-100 animate-in zoom-in-95 duration-200 flex flex-col">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-slate-100 animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
           <h3 className="font-bold text-slate-900 flex items-center gap-2">
             Barkod Çapı
+            {isBulk && (
+              <span className="px-2 py-0.5 rounded-full text-xs font-black bg-purple-100 text-purple-700">
+                {productList.length} ədəd
+              </span>
+            )}
           </h3>
           <button onClick={onClose} className="text-slate-400 hover:text-red-500 transition-colors">
             <X className="w-5 h-5" />
@@ -232,12 +247,11 @@ export default function BarcodePrintModal({ isOpen, onClose, product }) {
         </div>
 
         {/* Content */}
-        <div className="p-6 flex flex-col items-center justify-center bg-gray-50/50">
+        <div className="p-6 flex flex-col items-center justify-center bg-gray-50/50 overflow-y-auto">
           
           {/* Options Panel: Size Selector */}
           <div className="flex flex-col gap-3 w-full bg-white p-3 rounded-xl border border-slate-100 shadow-sm mb-4">
             
-            {/* Size Selection */}
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-semibold text-slate-600">Ölçü Seçimi:</span>
               <select 
@@ -250,57 +264,88 @@ export default function BarcodePrintModal({ isOpen, onClose, product }) {
                 ))}
               </select>
             </div>
+
+            {isBulk && (
+              <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-100">
+                <span className="text-sm font-semibold text-slate-600">Önizləmə:</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setPreviewIdx(i => Math.max(0, i - 1))}
+                    disabled={previewIdx === 0}
+                    className="px-2 py-1 text-xs font-bold border border-slate-200 rounded-lg disabled:opacity-30 hover:bg-slate-50"
+                  >‹</button>
+                  <span className="text-xs font-black text-purple-700">
+                    {previewIdx + 1} / {productList.length}
+                  </span>
+                  <button
+                    onClick={() => setPreviewIdx(i => Math.min(productList.length - 1, i + 1))}
+                    disabled={previewIdx >= productList.length - 1}
+                    className="px-2 py-1 text-xs font-bold border border-slate-200 rounded-lg disabled:opacity-30 hover:bg-slate-50"
+                  >›</button>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Clean Screen Preview (Fixed-size, Border-free, Beautiful) */}
-          <div className="flex justify-center items-center w-full bg-white shadow-inner p-4 rounded-lg">
-            <div 
-              className="bg-white flex flex-col items-center justify-between p-2 overflow-hidden select-none pointer-events-none"
-              style={{ width: '150px', height: '100px', boxSizing: 'border-box' }}
-            >
+          {/* Clean Screen Preview */}
+          {previewProduct && (
+            <div className="flex justify-center items-center w-full bg-white shadow-inner p-4 rounded-lg">
               <div 
-                className="text-center font-bold uppercase tracking-tight leading-none w-full px-1 truncate text-slate-800"
-                style={{ fontSize: '9px', fontFamily: 'Arial, sans-serif' }}
+                className="bg-white flex flex-col items-center justify-between p-2 overflow-hidden select-none pointer-events-none"
+                style={{ width: '150px', height: '100px', boxSizing: 'border-box' }}
               >
-                {product.name}
-              </div>
-              
-              <div 
-                className="text-center font-extrabold whitespace-nowrap text-slate-900"
-                style={{ fontFamily: 'Arial, sans-serif', fontSize: '15px', lineHeight: '1', margin: '2px 0' }}
-              >
-                {typeof product.salePrice === 'number' 
-                  ? product.salePrice.toFixed(2) 
-                  : parseFloat(product.salePrice || 0).toFixed(2)} man.
-              </div>
+                <div 
+                  className="text-center font-bold uppercase tracking-tight leading-none w-full px-1 truncate text-slate-800"
+                  style={{ fontSize: '9px', fontFamily: 'Arial, sans-serif' }}
+                >
+                  {previewProduct.name}
+                </div>
+                
+                <div 
+                  className="text-center font-extrabold whitespace-nowrap text-slate-900"
+                  style={{ fontFamily: 'Arial, sans-serif', fontSize: '15px', lineHeight: '1', margin: '2px 0' }}
+                >
+                  {(() => {
+                    const price = previewProduct.salePrice ?? previewProduct.unitPriceSale ?? 0;
+                    return (typeof price === 'number' ? price : parseFloat(price || 0)).toFixed(2);
+                  })()} man.
+                </div>
 
-              <div className="flex items-center justify-center w-full overflow-hidden">
-                <svg 
-                  ref={screenBarcodeRef} 
-                  style={{ 
-                    maxWidth: '100%', 
-                    height: 'auto', 
-                    maxHeight: '40px',
-                    shapeRendering: 'crispEdges'
-                  }}
-                ></svg>
+                <div className="flex items-center justify-center w-full overflow-hidden">
+                  <svg 
+                    ref={screenBarcodeRef} 
+                    style={{ 
+                      maxWidth: '100%', 
+                      height: 'auto', 
+                      maxHeight: '40px',
+                      shapeRendering: 'crispEdges'
+                    }}
+                  ></svg>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
-          {/* Hidden Print Container used solely by react-to-print */}
+          {/* Hidden Print Container - render all products sequentially */}
           <div className="hidden">
             <div ref={componentRef} className="bg-white flex flex-col items-center barcode-print-container">
               <style dangerouslySetInnerHTML={{ __html: printStyles }} />
-              <BarcodeCard 
-                product={product}
-                sizeConfig={activeSize}
-              />
+              {productList.map((p, idx) => (
+                <BarcodeCard
+                  key={p.id || p.barcode || idx}
+                  product={{
+                    ...p,
+                    salePrice: p.salePrice ?? p.unitPriceSale ?? 0,
+                  }}
+                  sizeConfig={activeSize}
+                />
+              ))}
             </div>
           </div>
 
           <p className="text-[11px] text-gray-500 mt-4 text-center">
             Etiket ölçüsü: {activeSize.label}
+            {isBulk && ` · ${productList.length} ədəd ardıcıl çap olunacaq`}
           </p>
         </div>
 
