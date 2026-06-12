@@ -82,7 +82,9 @@ export const getAllFinalDeliveries = async (req, res) => {
                                     id: true,
                                     name: true,
                                     unitType: true,
-                                    piecesPerBox: true
+                                    piecesPerBox: true,
+                                    purchasePrice: true,
+                                    salePrice: true
                                 }
                             }
                         }
@@ -146,6 +148,7 @@ export const getFinalDeliveryById = async (req, res) => {
                                 unitType: true,
                                 piecesPerBox: true,
                                 purchasePrice: true,
+                                salePrice: true,
                                 category: {
                                     select: {
                                         id: true,
@@ -238,6 +241,7 @@ export const previewFinalDelivery = async (req, res) => {
                     unitType: product.unitType,
                     piecesPerBox: product.piecesPerBox,
                     purchasePrice: product.purchasePrice,
+                    salePrice: product.salePrice,
                     category: product.category,
                     subCategory: product.subCategory
                 },
@@ -370,7 +374,9 @@ export const createFinalDelivery = async (req, res) => {
                                 id: true,
                                 name: true,
                                 unitType: true,
-                                piecesPerBox: true
+                                piecesPerBox: true,
+                                purchasePrice: true,
+                                salePrice: true
                             }
                         }
                     }
@@ -464,7 +470,9 @@ export const updateFinalDelivery = async (req, res) => {
                                 id: true,
                                 name: true,
                                 unitType: true,
-                                piecesPerBox: true
+                                piecesPerBox: true,
+                                purchasePrice: true,
+                                salePrice: true
                             }
                         }
                     }
@@ -638,7 +646,9 @@ export const updateFinalDeliveryItem = async (req, res) => {
                         id: true,
                         name: true,
                         unitType: true,
-                        piecesPerBox: true
+                        piecesPerBox: true,
+                        purchasePrice: true,
+                        salePrice: true
                     }
                 }
             }
@@ -757,7 +767,9 @@ export const addFinalDeliveryItem = async (req, res) => {
                         id: true,
                         name: true,
                         unitType: true,
-                        piecesPerBox: true
+                        piecesPerBox: true,
+                        purchasePrice: true,
+                        salePrice: true
                     }
                 }
             }

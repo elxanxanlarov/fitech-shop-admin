@@ -12,11 +12,13 @@ import SyncCenter from './pages/SyncCenter'
 import SellerLayout from './components/seller-layout/SellerLayout'
 import SellerPage from './pages/SellerPage'
 import ExcelToFirmaProduct from './pages/testExcel/ExcelToFirmaProduct'
+import VersionChecker from './components/VersionChecker'
 
 export default function App() {
   return (
     <AuthProvider>
       <BranchProvider>
+        <VersionChecker />
         <Routes>
           <Route path="/dashboard/login" element={<Login />} />
 

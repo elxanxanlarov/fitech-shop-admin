@@ -87,6 +87,18 @@ export default function FinalDeliveryForm() {
     const [stockModalSort, setStockModalSort] = useState({ key: 'stock', dir: 'desc' });
     const printStockRef = useRef(null);
 
+    // Prevent body scroll when modals are open
+    useEffect(() => {
+        if (showEditModal || showAddModal || showPurchaseModal || showStockModal) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = 'unset';
+        }
+        return () => {
+            document.body.style.overflow = 'unset';
+        };
+    }, [showEditModal, showAddModal, showPurchaseModal, showStockModal]);
+
     // Fetch current user to check role
     useEffect(() => {
         const fetchCurrentUser = async () => {
@@ -1611,9 +1623,7 @@ export default function FinalDeliveryForm() {
                         unitType: unitTypeLabelAz(item.product?.unitType),
                         stock,
                         purchasePrice,
-                        salePrice,
-                        totalPurchase: stock * purchasePrice,
-                        totalSale: stock * salePrice
+                        salePrice
                     };
                 }).filter(r => r.stock > 0);
 
@@ -1625,8 +1635,8 @@ export default function FinalDeliveryForm() {
                 });
 
                 const grandTotalStock = rows.reduce((s, r) => s + r.stock, 0);
-                const grandTotalPurchase = rows.reduce((s, r) => s + r.totalPurchase, 0);
-                const grandTotalSale = rows.reduce((s, r) => s + r.totalSale, 0);
+                const grandTotalPurchase = rows.reduce((s, r) => s + (r.stock * r.purchasePrice), 0);
+                const grandTotalSale = rows.reduce((s, r) => s + (r.stock * r.salePrice), 0);
 
                 const handleSort = (key) => {
                     setStockModalSort(prev => ({
@@ -1644,13 +1654,13 @@ export default function FinalDeliveryForm() {
 
                 const exportExcel = () => {
                     const wsData = [
-                        ['Məhsul Adı', 'Kateqoriya', 'Alt Kateqoriya', 'Ölçü', 'Stok Miqdarı', 'Alış Qiyməti (₼)', 'Satış Qiyməti (₼)', 'Alış Dəyəri (₼)', 'Satış Dəyəri (₼)'],
-                        ...sorted.map(r => [r.name, r.category, r.subCategory, r.unitType, r.stock, r.purchasePrice, r.salePrice, r.totalPurchase, r.totalSale]),
+                        ['Məhsul Adı', 'Kateqoriya', 'Alt Kateqoriya', 'Ölçü', 'Stok Miqdarı', 'Alış Qiyməti (₼)', 'Satış Qiyməti (₼)'],
+                        ...sorted.map(r => [r.name, r.category, r.subCategory, r.unitType, r.stock, r.purchasePrice, r.salePrice]),
                         [],
-                        ['', '', '', 'ÜMUMİ CƏM:', grandTotalStock, '', '', grandTotalPurchase, grandTotalSale],
+                        ['', '', '', 'ÜMUMİ CƏM:', grandTotalStock, grandTotalPurchase, grandTotalSale],
                     ];
                     const ws = XLSX.utils.aoa_to_sheet(wsData);
-                    ws['!cols'] = [{ wch: 30 }, { wch: 18 }, { wch: 18 }, { wch: 10 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }];
+                    ws['!cols'] = [{ wch: 30 }, { wch: 18 }, { wch: 18 }, { wch: 10 }, { wch: 12 }, { wch: 15 }, { wch: 15 }];
                     const wb = XLSX.utils.book_new();
                     XLSX.utils.book_append_sheet(wb, ws, 'Ümumi Stok');
                     const dateStr = new Date().toLocaleDateString('az-AZ').replace(/\./g, '-');
@@ -1740,8 +1750,6 @@ export default function FinalDeliveryForm() {
                                             <th className="text-right">Stok</th>
                                             <th className="text-right">Alış Qiyməti</th>
                                             <th className="text-right">Satış Qiyməti</th>
-                                            <th className="text-right">Alış Dəyəri</th>
-                                            <th className="text-right">Satış Dəyəri</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -1755,15 +1763,11 @@ export default function FinalDeliveryForm() {
                                                 <td className="text-right">{r.stock}</td>
                                                 <td className="text-right">{r.purchasePrice.toFixed(2)} ₼</td>
                                                 <td className="text-right">{r.salePrice.toFixed(2)} ₼</td>
-                                                <td className="text-right">{r.totalPurchase.toFixed(2)} ₼</td>
-                                                <td className="text-right">{r.totalSale.toFixed(2)} ₼</td>
                                             </tr>
                                         ))}
                                         <tr className="total-row">
                                             <td colSpan={5} className="text-right">ÜMUMİ CƏM:</td>
                                             <td className="text-right">{grandTotalStock.toLocaleString('az-AZ')}</td>
-                                            <td className="text-right"></td>
-                                            <td className="text-right"></td>
                                             <td className="text-right">{grandTotalPurchase.toLocaleString('az-AZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₼</td>
                                             <td className="text-right">{grandTotalSale.toLocaleString('az-AZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₼</td>
                                         </tr>
@@ -1792,8 +1796,6 @@ export default function FinalDeliveryForm() {
                                                 { key: 'stock', label: 'Stok' },
                                                 { key: 'purchasePrice', label: 'Alış Q.' },
                                                 { key: 'salePrice', label: 'Satış Q.' },
-                                                { key: 'totalPurchase', label: 'Alış Dəyəri' },
-                                                { key: 'totalSale', label: 'Satış Dəyəri' },
                                             ].map(({ key, label }) => (
                                                 <th key={key}
                                                     className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-indigo-700 select-none"
@@ -1826,12 +1828,6 @@ export default function FinalDeliveryForm() {
                                                         <span className="text-red-400 text-xs italic">yox</span>
                                                     )}
                                                 </td>
-                                                <td className="px-4 py-2.5 text-right text-indigo-700 font-semibold">
-                                                    {r.totalPurchase > 0 ? `${r.totalPurchase.toLocaleString('az-AZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₼` : '—'}
-                                                </td>
-                                                <td className="px-4 py-2.5 text-right text-indigo-700 font-semibold">
-                                                    {r.totalSale > 0 ? `${r.totalSale.toLocaleString('az-AZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₼` : '—'}
-                                                </td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -1843,12 +1839,10 @@ export default function FinalDeliveryForm() {
                                             <td className="px-4 py-3 text-right text-lg font-black text-indigo-700">
                                                 {grandTotalStock.toLocaleString('az-AZ')}
                                             </td>
-                                            <td className="px-4 py-3 text-right"></td>
-                                            <td className="px-4 py-3 text-right"></td>
-                                            <td className="px-4 py-3 text-right text-base font-black text-indigo-700">
+                                            <td className="px-4 py-3 text-right text-sm font-black text-indigo-700">
                                                 {grandTotalPurchase.toLocaleString('az-AZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₼
                                             </td>
-                                            <td className="px-4 py-3 text-right text-base font-black text-indigo-700">
+                                            <td className="px-4 py-3 text-right text-sm font-black text-indigo-700">
                                                 {grandTotalSale.toLocaleString('az-AZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₼
                                             </td>
                                         </tr>
