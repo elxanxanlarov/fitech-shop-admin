@@ -9,6 +9,8 @@ import {
     MdAttachMoney,
     MdCreditCard,
     MdStorefront,
+    MdDelete,
+    MdDeleteSweep,
 } from 'react-icons/md';
 import { saleApi, ismayilliApi } from '../../api';
 import { useAuth } from '../../context/AuthContext';
@@ -81,6 +83,8 @@ export default function SellerSalesHistory() {
     const [endDate, setEndDate] = useState(todayStr());
     const [paymentFilter, setPaymentFilter] = useState('all');
     const [search, setSearch] = useState('');
+    const [selectedIds, setSelectedIds] = useState(new Set());
+    const [deleting, setDeleting] = useState(false);
 
     const fetchSales = useCallback(async () => {
         setLoading(true);
@@ -99,6 +103,7 @@ export default function SellerSalesHistory() {
                 const list = res?.data || res?.date || [];
                 setSales(list);
             }
+            setSelectedIds(new Set());
         } catch (e) {
             console.error('history error', e);
             Alert.error('Xəta', 'Satışlar yüklənərkən xəta baş verdi');
@@ -163,6 +168,83 @@ export default function SellerSalesHistory() {
             total: netTotal,
         };
     }, [filtered]);
+
+    const toggleSelect = (id) => {
+        setSelectedIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
+    const toggleSelectAll = () => {
+        const visibleIds = filtered.map((s) => s.id);
+        const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+        setSelectedIds(() => {
+            if (allVisibleSelected) return new Set();
+            return new Set(visibleIds);
+        });
+    };
+
+    const handleDeleteOne = async (sale) => {
+        const text = isIsmayilli
+            ? `Çek #${sale.checkNumber} silinəcək və məhsullar stoka qaytarılacaq.`
+            : `${formatPrice(sale.totalAmount || 0)} dəyərində satış silinəcək.`;
+        const result = await Alert.confirm('Satışı silmək istəyirsiniz?', text, {
+            confirmText: 'Bəli, sil',
+            cancelText: 'Ləğv et',
+            icon: 'warning',
+        });
+        if (!result.isConfirmed) return;
+        setDeleting(true);
+        try {
+            if (isIsmayilli) {
+                await ismayilliApi.deleteSale(sale.id);
+            } else {
+                await saleApi.delete(sale.id, 'HARD');
+            }
+            Alert.success('Silindi!', 'Satış uğurla silindi');
+            await fetchSales();
+        } catch (e) {
+            console.error('delete sale error', e);
+            Alert.error('Xəta!', e.response?.data?.message || 'Satış silinərkən xəta baş verdi');
+        } finally {
+            setDeleting(false);
+        }
+    };
+
+    const handleBulkDelete = async () => {
+        const ids = Array.from(selectedIds);
+        if (ids.length === 0) return;
+        const result = await Alert.confirm(
+            `${ids.length} satışı silmək?`,
+            'Seçilmiş satışlar tamamilə silinəcək və məhsullar stoka qaytarılacaq.',
+            {
+                confirmText: `Bəli, ${ids.length} satışı sil`,
+                cancelText: 'Ləğv et',
+                icon: 'warning',
+            }
+        );
+        if (!result.isConfirmed) return;
+        setDeleting(true);
+        try {
+            const res = isIsmayilli
+                ? await ismayilliApi.bulkDeleteSales(ids)
+                : await saleApi.bulkDelete(ids, 'HARD');
+            if (res?.success) {
+                Alert.success('Silindi!', res.message || `${ids.length} satış silindi`);
+                await fetchSales();
+            } else {
+                Alert.error('Xəta!', res?.message || 'Satışlar silinərkən xəta baş verdi');
+            }
+        } catch (e) {
+            console.error('bulk delete error', e);
+            Alert.error('Xəta!', e.response?.data?.message || 'Toplu silmə zamanı xəta baş verdi');
+        } finally {
+            setDeleting(false);
+        }
+    };
 
     const handleSetPreset = (preset) => {
         const today = new Date();
@@ -329,6 +411,36 @@ export default function SellerSalesHistory() {
 
                 {/* Sales list */}
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    {/* Selection toolbar */}
+                    {filtered.length > 0 && (
+                        <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-slate-100 bg-slate-50/60">
+                            <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                                <input
+                                    type="checkbox"
+                                    className="w-4 h-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                                    checked={filtered.length > 0 && filtered.every((s) => selectedIds.has(s.id))}
+                                    onChange={toggleSelectAll}
+                                />
+                                <span className="text-xs font-bold text-slate-700">
+                                    {selectedIds.size > 0
+                                        ? `${selectedIds.size} seçildi`
+                                        : 'Hamısını seç'}
+                                </span>
+                            </label>
+                            {selectedIds.size > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={handleBulkDelete}
+                                    disabled={deleting}
+                                    className="inline-flex items-center gap-2 px-3 h-9 rounded-lg bg-rose-600 text-white text-xs font-extrabold hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                                >
+                                    <MdDeleteSweep className="w-4 h-4" />
+                                    Seçilənləri sil ({selectedIds.size})
+                                </button>
+                            )}
+                        </div>
+                    )}
+
                     {loading ? (
                         <div className="text-center py-20 text-slate-400 text-sm">Yüklənir...</div>
                     ) : filtered.length === 0 ? (
@@ -345,8 +457,15 @@ export default function SellerSalesHistory() {
 
                                 if (isIsmayilli) {
                                     return (
-                                        <div key={sale.id} className="p-4 hover:bg-slate-50 transition-colors">
-                                            <div className="flex items-start justify-between gap-3 flex-wrap">
+                                        <div key={sale.id} className={`p-4 hover:bg-slate-50 transition-colors ${selectedIds.has(sale.id) ? 'bg-rose-50/40' : ''}`}>
+                                            <div className="flex items-start gap-3">
+                                                <input
+                                                    type="checkbox"
+                                                    className="mt-1 w-4 h-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500 shrink-0"
+                                                    checked={selectedIds.has(sale.id)}
+                                                    onChange={() => toggleSelect(sale.id)}
+                                                />
+                                            <div className="flex items-start justify-between gap-3 flex-wrap flex-1 min-w-0">
                                                 <div className="min-w-0 flex-1">
                                                     <div className="flex items-center gap-2 flex-wrap mb-1">
                                                         <span className="text-xs font-mono font-bold text-slate-500">
@@ -413,15 +532,33 @@ export default function SellerSalesHistory() {
                                                                 Qaytar
                                                             </button>
                                                         )}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleDeleteOne(sale)}
+                                                            disabled={deleting}
+                                                            title="Satışı sil"
+                                                            className="px-2.5 h-8 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 text-xs font-semibold inline-flex items-center gap-1 disabled:opacity-50"
+                                                        >
+                                                            <MdDelete className="w-3.5 h-3.5" />
+                                                            Sil
+                                                        </button>
                                                     </div>
                                                 </div>
+                                            </div>
                                             </div>
                                         </div>
                                     );
                                 }
                                 return (
-                                    <div key={sale.id} className="p-4 hover:bg-slate-50 transition-colors">
-                                        <div className="flex items-start justify-between gap-3 flex-wrap">
+                                    <div key={sale.id} className={`p-4 hover:bg-slate-50 transition-colors ${selectedIds.has(sale.id) ? 'bg-rose-50/40' : ''}`}>
+                                        <div className="flex items-start gap-3">
+                                            <input
+                                                type="checkbox"
+                                                className="mt-1 w-4 h-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500 shrink-0"
+                                                checked={selectedIds.has(sale.id)}
+                                                onChange={() => toggleSelect(sale.id)}
+                                            />
+                                        <div className="flex items-start justify-between gap-3 flex-wrap flex-1 min-w-0">
                                             <div className="min-w-0 flex-1">
                                                 <div className="flex items-center gap-2 flex-wrap mb-1">
                                                     <span className="text-xs font-mono font-bold text-slate-500">
@@ -492,8 +629,19 @@ export default function SellerSalesHistory() {
                                                             Qaytar
                                                         </button>
                                                     )}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDeleteOne(sale)}
+                                                        disabled={deleting}
+                                                        title="Satışı sil"
+                                                        className="px-2.5 h-8 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 text-xs font-semibold inline-flex items-center gap-1 disabled:opacity-50"
+                                                    >
+                                                        <MdDelete className="w-3.5 h-3.5" />
+                                                        Sil
+                                                    </button>
                                                 </div>
                                             </div>
+                                        </div>
                                         </div>
                                     </div>
                                 );

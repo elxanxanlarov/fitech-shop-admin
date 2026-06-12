@@ -20,6 +20,11 @@ export default function ExcelImportModal({ isOpen, onClose, onImport, isHeaderIs
     const [template, setTemplate] = useState('standard');
     const [categoryName, setCategoryName] = useState('');
     const [profitPercent, setProfitPercent] = useState(50);
+    // Qiymət hesablama rejimi:
+    //   'unit' (default): Excel-də qiymət sütunu BİR ədədin qiymətidir
+    //   'total': Excel-də qiymət sütunu BÜTÜN miqdarın ümumi məbləğidir,
+    //            backend hər sətrdə qiyməti miqdara böləcək (vahid qiymət əldə etmək üçün)
+    const [priceMode, setPriceMode] = useState('unit');
 
     useEffect(() => {
         const fetchBranches = async () => {
@@ -88,6 +93,7 @@ export default function ExcelImportModal({ isOpen, onClose, onImport, isHeaderIs
             if (template === 'qabqacaq' && profitPercent !== '' && profitPercent !== null) {
                 opts.profitPercent = profitPercent;
             }
+            if (priceMode === 'total') opts.priceMode = 'total';
             await onImport(selectedFile, targetBranchId, isIsmayilli, opts);
             setSelectedFile(null);
             const fileInput = document.getElementById('excel-file-input');
@@ -205,6 +211,57 @@ export default function ExcelImportModal({ isOpen, onClose, onImport, isHeaderIs
                                 </p>
                             </div>
                         )}
+                    </div>
+
+                    {/* Qiymət hesablama rejimi */}
+                    <div className="bg-indigo-50/60 border border-indigo-200 rounded-xl p-4">
+                        <label className="text-xs font-bold text-indigo-700 uppercase block mb-2">
+                            Qiymət Hesablama Rejimi
+                        </label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setPriceMode('unit')}
+                                className={`p-3 rounded-lg border-2 text-left transition-all ${
+                                    priceMode === 'unit'
+                                        ? 'border-indigo-500 bg-white shadow-sm'
+                                        : 'border-indigo-200 bg-white/50 hover:bg-white'
+                                }`}
+                            >
+                                <div className="flex items-center justify-between mb-1">
+                                    <span className="text-sm font-extrabold text-indigo-900">
+                                        Vahid qiymət (bir ədəd)
+                                    </span>
+                                    <span className={`w-4 h-4 rounded-full border-2 ${
+                                        priceMode === 'unit' ? 'border-indigo-600 bg-indigo-600' : 'border-indigo-300'
+                                    }`} />
+                                </div>
+                                <p className="text-[11px] text-indigo-700/80">
+                                    Excel-də qiymət sütunları <b>bir ədədin qiymətidir</b>. Misal: Alış 14 → 1 ədəd 14 AZN.
+                                </p>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setPriceMode('total')}
+                                className={`p-3 rounded-lg border-2 text-left transition-all ${
+                                    priceMode === 'total'
+                                        ? 'border-indigo-500 bg-white shadow-sm'
+                                        : 'border-indigo-200 bg-white/50 hover:bg-white'
+                                }`}
+                            >
+                                <div className="flex items-center justify-between mb-1">
+                                    <span className="text-sm font-extrabold text-indigo-900">
+                                        Ümumi qiymət (miqdara böl)
+                                    </span>
+                                    <span className={`w-4 h-4 rounded-full border-2 ${
+                                        priceMode === 'total' ? 'border-indigo-600 bg-indigo-600' : 'border-indigo-300'
+                                    }`} />
+                                </div>
+                                <p className="text-[11px] text-indigo-700/80">
+                                    Excel-də qiymət sütunları <b>bütün miqdarın ümumi məbləğidir</b>. Misal: Miqdar 40, Satış 728 → vahid satış = 728 ÷ 40 = <b>18.20</b>.
+                                </p>
+                            </button>
+                        </div>
                     </div>
 
                     {/* Format Information */}

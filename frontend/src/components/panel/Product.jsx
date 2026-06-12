@@ -363,6 +363,7 @@ export default function Product() {
                 if (opts.profitPercent !== undefined && opts.profitPercent !== null && opts.profitPercent !== '') {
                     formData.append('profitPercent', String(opts.profitPercent));
                 }
+                if (opts.priceMode) formData.append('priceMode', opts.priceMode);
                 result = await ismayilliApi.importExcel(formData);
             } else {
                 result = await productApi.importFromExcel(file, branchId, opts);

@@ -149,24 +149,8 @@ export default function ProductStockHistoryModal({ isOpen, onClose, productId, p
 
     const filteredTransfers = useMemo(() => {
         if (!effectiveBranchId || effectiveBranchId === 'central') return transfers;
-        // Transfer aid olsun: ya bu filialdan gedib, ya da bu filiala gəlib
         return transfers.filter(t => t.fromBranchId === effectiveBranchId || t.toBranchId === effectiveBranchId);
     }, [transfers, effectiveBranchId]);
-
-    const allHistory = useMemo(() => {
-        const history = [
-            ...filteredMovements.map(m => ({ ...m, historyType: 'movement', date: m.createdAt })),
-            ...filteredSales.map(s => ({
-                ...s,
-                historyType: 'sale',
-                date: s.sale?.createdAt || s.createdAt,
-                sale: s.sale ? { ...s.sale, staff: s.sale.staff } : s.sale
-            })),
-            ...filteredReturns.map(r => ({ ...r, historyType: 'return', date: r.return?.createdAt || r.createdAt })),
-            ...filteredTransfers.map(t => ({ ...t, historyType: 'transfer', date: t.createdAt }))
-        ];
-        return history.sort((a, b) => new Date(b.date) - new Date(a.date));
-    }, [filteredMovements, filteredSales, filteredReturns, filteredTransfers]);
 
     const calculateTotalStock = () => {
         if (!product) return 0;
@@ -177,6 +161,81 @@ export default function ProductStockHistoryModal({ isOpen, onClose, productId, p
         const opened = product.openedBoxQuantity || 0;
         return (fullBoxes * product.piecesPerBox) + opened;
     };
+
+    const allHistory = useMemo(() => {
+        // Hide stock movements that are auto-generated from sales to prevent duplicates
+        const movementsWithoutSales = filteredMovements.filter(m => !(m.note && m.note.startsWith('Satış #')));
+        
+        let history = [
+            ...movementsWithoutSales.map(m => ({ ...m, historyType: 'movement', date: m.createdAt })),
+            ...filteredSales.map(s => ({
+                ...s,
+                historyType: 'sale',
+                date: s.sale?.createdAt || s.createdAt,
+                sale: s.sale ? { ...s.sale, staff: s.sale.staff } : s.sale
+            })),
+            ...filteredReturns.map(r => ({ ...r, historyType: 'return', date: r.return?.createdAt || r.createdAt })),
+            ...filteredTransfers.map(t => ({ ...t, historyType: 'transfer', date: t.createdAt }))
+        ];
+
+        // Sort descending (newest first)
+        history.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        // Calculate running balance backwards
+        let currentRunningStock = calculateTotalStock();
+
+        const enrichedHistory = history.map(item => {
+            const newStock = currentRunningStock;
+            let previousStock = newStock;
+            let qty = Math.abs(item.quantity || 0);
+
+            if (item.historyType === 'sale' || (item.historyType === 'movement' && item.type === 'OUT')) {
+                previousStock = newStock + qty;
+            } else if (item.historyType === 'return' || (item.historyType === 'movement' && item.type === 'IN')) {
+                previousStock = newStock - qty;
+            } else if (item.historyType === 'transfer') {
+                if (item.fromBranchId === effectiveBranchId) {
+                    previousStock = newStock + qty; // Transferred OUT
+                } else if (item.toBranchId === effectiveBranchId) {
+                    previousStock = newStock - qty; // Transferred IN
+                }
+            } else if (item.historyType === 'movement' && item.type === 'ADJUSTMENT') {
+                if (item.previousStock !== undefined && item.newStock !== undefined) {
+                    previousStock = item.previousStock;
+                }
+            }
+
+            const enrichedItem = {
+                ...item,
+                calculatedPreviousStock: previousStock,
+                calculatedNewStock: newStock
+            };
+
+            currentRunningStock = previousStock;
+            return enrichedItem;
+        });
+
+        // Add an artificial "Creation" event if we still have stock at the beginning
+        if (currentRunningStock > 0 && enrichedHistory.length > 0) {
+            enrichedHistory.push({
+                historyType: 'movement',
+                type: 'IN',
+                quantity: currentRunningStock,
+                calculatedPreviousStock: 0,
+                calculatedNewStock: currentRunningStock,
+                note: 'İlkin yaradılma (Avtomatik hesablanıb)',
+                date: product?.createdAt || new Date(0),
+                staff: { name: 'Sistem' }
+            });
+        }
+
+        return enrichedHistory;
+    }, [filteredMovements, filteredSales, filteredReturns, filteredTransfers, product, effectiveBranchId]);
+
+    // Derive display lists from the fully enriched allHistory
+    const displayMovements = useMemo(() => allHistory.filter(h => h.historyType === 'movement'), [allHistory]);
+    const displaySales = useMemo(() => allHistory.filter(h => h.historyType === 'sale'), [allHistory]);
+    const displayReturns = useMemo(() => allHistory.filter(h => h.historyType === 'return'), [allHistory]);
 
     const formatStockDisplay = () => {
         if (!product) return '0 ədəd';
@@ -440,6 +499,13 @@ export default function ProductStockHistoryModal({ isOpen, onClose, productId, p
                                                         </td>
                                                         <td className="px-6 py-4 text-sm font-bold text-gray-900">
                                                             {formatQuantity(Math.abs(item.quantity || 0), product?.unitType || 'PIECE', product?.piecesPerBox)}
+                                                            {(item.calculatedPreviousStock !== undefined && item.calculatedPreviousStock !== null && item.calculatedNewStock !== undefined && item.calculatedNewStock !== null) && (
+                                                                <div className="mt-1 text-xs font-normal text-gray-500">
+                                                                    <span>{item.calculatedPreviousStock}</span>
+                                                                    <span className="mx-1">➔</span>
+                                                                    <span className="text-blue-600 font-semibold">{item.calculatedNewStock}</span>
+                                                                </div>
+                                                            )}
                                                         </td>
                                                         <td className="px-6 py-4 text-sm text-gray-500">
                                                             <div className="font-semibold text-gray-700">
@@ -461,7 +527,7 @@ export default function ProductStockHistoryModal({ isOpen, onClose, productId, p
                         {/* Movements Tab */}
                         {activeTab === 'movements' && (
                             <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
-                                {filteredMovements.length === 0 ? (
+                                {displayMovements.length === 0 ? (
                                     <div className="text-center py-20 text-gray-400">
                                         <Package className="w-12 h-12 mx-auto mb-4 opacity-20" />
                                         <p className="font-medium">Hərəkət tapılmadı</p>
@@ -479,8 +545,8 @@ export default function ProductStockHistoryModal({ isOpen, onClose, productId, p
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-gray-100">
-                                                {filteredMovements.map((movement) => (
-                                                    <tr key={movement.id} className="hover:bg-gray-50 transition-colors">
+                                                {displayMovements.map((movement) => (
+                                                    <tr key={movement.id || Math.random()} className="hover:bg-gray-50 transition-colors">
                                                         <td className="px-6 py-4 text-sm font-medium text-gray-900">{formatDate(movement.createdAt)}</td>
                                                         <td className="px-6 py-4">
                                                             <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${movement.type === 'IN' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
@@ -489,9 +555,15 @@ export default function ProductStockHistoryModal({ isOpen, onClose, productId, p
                                                         </td>
                                                         <td className="px-6 py-4 text-sm font-bold text-gray-900">{formatQuantity(Math.abs(movement.quantity), product?.unitType, product?.piecesPerBox)}</td>
                                                         <td className="px-6 py-4 text-sm text-gray-500">
-                                                            <span className="font-medium text-gray-400">{movement.previousStock}</span>
-                                                            <span className="mx-2 text-gray-300">➔</span>
-                                                            <span className="font-bold text-blue-600">{movement.newStock}</span>
+                                                            {movement.calculatedPreviousStock != null && movement.calculatedNewStock != null ? (
+                                                                <>
+                                                                    <span className="font-medium text-gray-400">{movement.calculatedPreviousStock}</span>
+                                                                    <span className="mx-2 text-gray-300">➔</span>
+                                                                    <span className="font-bold text-blue-600">{movement.calculatedNewStock}</span>
+                                                                </>
+                                                            ) : (
+                                                                <span className="text-gray-400">-</span>
+                                                            )}
                                                         </td>
                                                         <td className="px-6 py-4 text-sm text-gray-500">
                                                             <div className="font-semibold text-gray-700">{movement.staff?.name || '-'}</div>
@@ -509,7 +581,7 @@ export default function ProductStockHistoryModal({ isOpen, onClose, productId, p
                         {/* Sales Tab */}
                         {activeTab === 'sales' && (
                             <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
-                                {filteredSales.length === 0 ? (
+                                {displaySales.length === 0 ? (
                                     <div className="text-center py-20 text-gray-400">
                                         <ShoppingCart className="w-12 h-12 mx-auto mb-4 opacity-20" />
                                         <p className="font-medium">Satış tapılmadı</p>
@@ -523,16 +595,28 @@ export default function ProductStockHistoryModal({ isOpen, onClose, productId, p
                                                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Satış #</th>
                                                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Miqdar</th>
                                                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Məbləğ</th>
+                                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Stok Dəyişimi</th>
                                                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Müştəri / Satıcı</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-gray-100">
-                                                {filteredSales.map((sale) => (
-                                                    <tr key={sale.id} className="hover:bg-gray-50 transition-colors">
-                                                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{formatDate(sale.sale?.createdAt)}</td>
+                                                {displaySales.map((sale) => (
+                                                    <tr key={sale.id || Math.random()} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{formatDate(sale.date || sale.sale?.createdAt)}</td>
                                                         <td className="px-6 py-4 text-sm font-mono text-blue-600">#{sale.sale?.id?.substring(0, 8)}</td>
                                                         <td className="px-6 py-4 text-sm font-bold text-gray-900">{formatQuantity(sale.quantity, product?.unitType, product?.piecesPerBox)}</td>
                                                         <td className="px-6 py-4 text-sm font-bold text-emerald-600">{parseFloat(sale.totalPrice || 0).toFixed(2)} ₼</td>
+                                                        <td className="px-6 py-4 text-sm text-gray-500">
+                                                            {sale.calculatedPreviousStock != null && sale.calculatedNewStock != null ? (
+                                                                <>
+                                                                    <span className="font-medium text-gray-400">{sale.calculatedPreviousStock}</span>
+                                                                    <span className="mx-2 text-gray-300">➔</span>
+                                                                    <span className="font-bold text-blue-600">{sale.calculatedNewStock}</span>
+                                                                </>
+                                                            ) : (
+                                                                <span className="text-gray-400">-</span>
+                                                            )}
+                                                        </td>
                                                         <td className="px-6 py-4 text-sm text-gray-500">
                                                             <div className="font-semibold text-gray-700">{sale.sale?.customerName || 'Müştəri Adsız'}</div>
                                                             <div className="text-xs mt-0.5">{sale.sale?.staff?.name || '-'}</div>
@@ -549,7 +633,7 @@ export default function ProductStockHistoryModal({ isOpen, onClose, productId, p
                         {/* Returns Tab */}
                         {activeTab === 'returns' && (
                             <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
-                                {filteredReturns.length === 0 ? (
+                                {displayReturns.length === 0 ? (
                                     <div className="text-center py-20 text-gray-400">
                                         <Undo className="w-12 h-12 mx-auto mb-4 opacity-20" />
                                         <p className="font-medium">Qaytarma tapılmadı</p>
@@ -561,15 +645,27 @@ export default function ProductStockHistoryModal({ isOpen, onClose, productId, p
                                                 <tr className="bg-gray-50 border-b border-gray-200">
                                                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Tarix</th>
                                                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Miqdar</th>
+                                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Stok Dəyişimi</th>
                                                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Məbləğ</th>
                                                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Səbəb</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-gray-100">
-                                                {filteredReturns.map((item) => (
-                                                    <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                                                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{formatDate(item.return?.createdAt)}</td>
+                                                {displayReturns.map((item) => (
+                                                    <tr key={item.id || Math.random()} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{formatDate(item.date || item.return?.createdAt)}</td>
                                                         <td className="px-6 py-4 text-sm font-bold text-gray-900">{formatQuantity(item.quantity, product?.unitType, product?.piecesPerBox)}</td>
+                                                        <td className="px-6 py-4 text-sm text-gray-500">
+                                                            {item.calculatedPreviousStock != null && item.calculatedNewStock != null ? (
+                                                                <>
+                                                                    <span className="font-medium text-gray-400">{item.calculatedPreviousStock}</span>
+                                                                    <span className="mx-2 text-gray-300">➔</span>
+                                                                    <span className="font-bold text-blue-600">{item.calculatedNewStock}</span>
+                                                                </>
+                                                            ) : (
+                                                                <span className="text-gray-400">-</span>
+                                                            )}
+                                                        </td>
                                                         <td className="px-6 py-4 text-sm font-bold text-orange-600">{parseFloat(item.totalPrice || item.returnedAmount || 0).toFixed(2)} ₼</td>
                                                         <td className="px-6 py-4 text-sm text-gray-600 italic">{item.return?.reason || '-'}</td>
                                                     </tr>

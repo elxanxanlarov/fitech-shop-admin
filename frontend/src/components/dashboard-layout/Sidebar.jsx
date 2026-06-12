@@ -1,5 +1,5 @@
 import { FiHome, FiLogOut, FiChevronsLeft, FiChevronsRight } from "react-icons/fi"
-import { MdShoppingCart, MdBarChart, MdPeople, MdQrCode, MdReceipt, MdAttachMoney, MdHistory } from "react-icons/md"
+import { MdShoppingCart, MdBarChart, MdPeople, MdQrCode, MdReceipt, MdAttachMoney, MdHistory, MdBusiness } from "react-icons/md"
 import { Link, NavLink } from "react-router-dom"
 import { useClickOutside } from "../../hooks"
 import { useTranslation } from "react-i18next"
@@ -51,6 +51,12 @@ const Sidebar = ({ sidebarData, onItemClick, collapsed, onToggleCollapse, isMobi
       label: 'Son Əməliyyatlar',
       path: '/admin/ismayilli-activities',
       icon: <MdHistory />,
+    },
+    {
+      title: 'ismayilli_firmas',
+      label: 'Firmalar (İsmayıllı)',
+      path: '/admin/ismayilli-firmas',
+      icon: <MdBusiness />,
     },
     {
       title: 'ismayilli_expenses',

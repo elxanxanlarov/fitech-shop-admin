@@ -10,6 +10,7 @@ import { hasContainer, containerLabel, unitSingular, formatStockShort } from '..
 import { useAuth } from '../../context/AuthContext';
 import { isFilialAdmin } from '../../utils/accessHelpers';
 import TransferPrintModal from '../modals/TransferPrintModal';
+import TransferHistoryPrintModal from '../modals/TransferHistoryPrintModal';
 
 export default function ProductBranchTransfer() {
     const { t } = useTranslation('branch');
@@ -19,6 +20,7 @@ export default function ProductBranchTransfer() {
 
     const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
     const [selectedTransferToPrint, setSelectedTransferToPrint] = useState(null);
+    const [isHistoryPrintOpen, setIsHistoryPrintOpen] = useState(false);
 
     const filialLocked = isFilialAdmin(user);
     const canPickSource = !filialLocked;
@@ -930,14 +932,25 @@ export default function ProductBranchTransfer() {
                                     <Info className="w-5 h-5 text-teal-500" />
                                     {t('transfer_history')}
                                 </h3>
-                                <button 
-                                    onClick={loadHistory}
-                                    className="p-2 text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
-                                >
-                                    <svg className={`w-5 h-5 ${loadingHistory ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                    </svg>
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => setIsHistoryPrintOpen(true)}
+                                        disabled={historyTransfers.length === 0 || loadingHistory}
+                                        className="flex items-center gap-2 px-3 py-2 bg-teal-600 text-white text-xs font-bold rounded-lg hover:bg-teal-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                                        title={t('print_full_history') || 'Hamısını Çap Et'}
+                                    >
+                                        <Printer className="w-4 h-4" />
+                                        {t('print_all') || 'Hamısını Çap Et'}
+                                    </button>
+                                    <button
+                                        onClick={loadHistory}
+                                        className="p-2 text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
+                                    >
+                                        <svg className={`w-5 h-5 ${loadingHistory ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                        </svg>
+                                    </button>
+                                </div>
                             </div>
 
                             {loadingHistory ? (
@@ -1046,6 +1059,12 @@ export default function ProductBranchTransfer() {
                     setSelectedTransferToPrint(null);
                 }}
                 transfer={selectedTransferToPrint}
+            />
+            <TransferHistoryPrintModal
+                isOpen={isHistoryPrintOpen}
+                onClose={() => setIsHistoryPrintOpen(false)}
+                transfers={historyTransfers}
+                currentBranchId={user?.branchId || fromBranchId}
             />
         </div>
     );

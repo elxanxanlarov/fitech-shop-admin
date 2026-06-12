@@ -87,7 +87,7 @@ export const getAllProducts = async (req, res) => {
     }
     const products = await prisma.ismayilliMagazaProduct.findMany({
       where,
-      include: { category: true },
+      include: { category: true, firma: { select: { id: true, name: true } } },
       // Kateqoriya yaradılma sırası (Excel kateqoriya sırası),
       // sonra Excel-dəki sıra nömrəsi (excelId), sonra ad
       orderBy: [{ category: { createdAt: "asc" } }, { excelId: "asc" }, { name: "asc" }]
@@ -424,6 +424,10 @@ export const importExcel = async (req, res) => {
       return res.status(400).json({ success: false, message: "Excel faylı yüklənməyib" });
     }
 
+    // priceMode: 'unit' (default) — Excel-də qiymət bir ədədin qiymətidir
+    //            'total' — Excel-də qiymət bütün miqdarın ümumi məbləğidir; vahid qiymət üçün miqdara bölünür
+    const priceMode = String(req.body?.priceMode || '').toLowerCase() === 'total' ? 'total' : 'unit';
+
     const workbook = xlsx.read(req.file.buffer, { type: "buffer" });
     let importedCount = 0;
     let categoryMap = new Map(); // name -> id cache to avoid redundant database calls
@@ -522,6 +526,25 @@ export const importExcel = async (req, res) => {
         const matchedKey = keys.find(k => k.toLowerCase().replace(/\s+/g, '').replace(/"/g, '') === key.toLowerCase().replace(/\s+/g, ''));
         if (matchedKey && row[matchedKey] !== undefined && row[matchedKey] !== null) {
           return row[matchedKey];
+        }
+      }
+
+      // Fallback 3: Total qiymət sütunlarını ('görə', 'cəmi', 'toplam', 'total') qəbul et.
+      // Bu sütunlar miqdara vurulmuş ümumi məbləğdir — istifadəçi priceMode='total' seçəndə
+      // backend onu miqdara bölərək vahid qiymət əldə edir.
+      // Misal: 'Anbar - "Alış" qiymətinə görə', 'Anbar - "Satış" qiymətinə görə'
+      for (const k of keys) {
+        const normalized = k.toLowerCase().replace(/\s+/g, '').replace(/"/g, '');
+        if (type === 'purchase') {
+          if ((normalized.includes('alış') || normalized.includes('alis') || normalized.includes('maya')) &&
+            (normalized.includes('görə') || normalized.includes('gore') || normalized.includes('cəmi') || normalized.includes('cemi') || normalized.includes('toplam') || normalized.includes('total'))) {
+            return row[k];
+          }
+        } else {
+          if ((normalized.includes('satış') || normalized.includes('satis')) &&
+            (normalized.includes('görə') || normalized.includes('gore') || normalized.includes('cəmi') || normalized.includes('cemi') || normalized.includes('toplam') || normalized.includes('total'))) {
+            return row[k];
+          }
         }
       }
 
@@ -797,8 +820,15 @@ export const importExcel = async (req, res) => {
           }
         }
         const qty = cleanNumber(qtyVal);
-        const purchasePrice = cleanNumber(pPriceVal);
-        const salePrice = cleanNumber(sPriceVal);
+        let purchasePrice = cleanNumber(pPriceVal);
+        let salePrice = cleanNumber(sPriceVal);
+
+        // priceMode === 'total' — Excel-də qiymət bütün miqdarın ümumi məbləğidir.
+        // Vahid qiymət üçün miqdara bölürük (məs. miqdar=40, satış 728 → vahid 18.20).
+        if (priceMode === 'total' && qty > 0) {
+          if (Number.isFinite(purchasePrice)) purchasePrice = Math.round((purchasePrice / qty) * 10000) / 10000;
+          if (Number.isFinite(salePrice)) salePrice = Math.round((salePrice / qty) * 10000) / 10000;
+        }
 
         // 3. Determine category
         const catName = catColumnVal ? String(catColumnVal).trim() : currentCategoryName;

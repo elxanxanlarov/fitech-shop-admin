@@ -596,6 +596,8 @@ model ismayilliMagazaProduct {
   excelId            Int?
   categoryId         String
   category           ismayilliShopCategory     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  firmaId            String?
+  firma              ismayilliFirma?           @relation(fields: [firmaId], references: [id], onDelete: SetNull)
   deleteType         String                    @default("NONE") // NONE, SOFT
   createdAt          DateTime                  @default(now())
   updatedAt          DateTime                  @updatedAt
@@ -603,6 +605,7 @@ model ismayilliMagazaProduct {
   saleItems          ismayilliSaleItem[]
   returnItems        ismayilliSaleReturnItem[]
 
+  @@index([firmaId])
   @@map("ismayilli_magaza_product")
 }
 
@@ -679,5 +682,37 @@ model ismayilliSaleReturnItem {
   loss          Float                  @default(0)
 
   @@map("ismayilli_sale_return_item")
+}
+
+// İsmayıllı — Borc verdiyimiz firmalar (B2B partnyorlar)
+// totalDebt / paidDebt sahələri transaksiya tarixçəsi ilə sinxron saxlanılır.
+model ismayilliFirma {
+  id           String                       @id @default(uuid())
+  name         String                       @unique
+  phone        String?
+  note         String?
+  totalDebt    Float                        @default(0) // ümumi yığılmış borc
+  paidDebt     Float                        @default(0) // edilmiş ödənişlərin cəmi
+  deleteType   String                       @default("NONE") // NONE | SOFT
+  createdAt    DateTime                     @default(now())
+  updatedAt    DateTime                     @updatedAt
+  transactions ismayilliFirmaTransaction[]
+  products     ismayilliMagazaProduct[]
+
+  @@map("ismayilli_firma")
+}
+
+// Firma üzrə əməliyyat tarixçəsi: 'DEBT' (borc artırma) və ya 'PAYMENT' (ödəniş).
+model ismayilliFirmaTransaction {
+  id        String         @id @default(uuid())
+  firmaId   String
+  firma     ismayilliFirma @relation(fields: [firmaId], references: [id], onDelete: Cascade)
+  type      String         // 'DEBT' | 'PAYMENT'
+  amount    Float
+  note      String?
+  createdAt DateTime       @default(now())
+
+  @@index([firmaId])
+  @@map("ismayilli_firma_transaction")
 }
 

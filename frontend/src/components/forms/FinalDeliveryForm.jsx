@@ -1,9 +1,10 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import Alert from '../ui/Alert';
 import Input from '../ui/Input';
-import { Calendar, Edit, Trash2, Plus, X } from 'lucide-react';
+import { Calendar, Edit, Trash2, Plus, X, FileSpreadsheet, Printer, ChevronDown, ChevronUp } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { finalDeliveryApi, productApi, authApi, branchApi } from '../../api';
 import SearchDropdown from '../ui/SearchDropdown';
 import { useBranch } from '../../hooks';
@@ -32,6 +33,7 @@ export default function FinalDeliveryForm() {
         startDate: '',
         endDate: '',
         note: '',
+        // Navbardakı filialdan başla; create modu üçün ilkin dəyər
         branchId: (selectedBranchId && selectedBranchId !== 'central') ? selectedBranchId : '',
     });
 
@@ -69,8 +71,21 @@ export default function FinalDeliveryForm() {
     // Table pagination state
     const [tablePagination, setTablePagination] = useState({
         page: 1,
-        limit: 10
+        limit: 20
     });
+
+    // Stock filter state: 'all' | 'inStock' | 'lowStock' | 'outOfStock'
+    const [stockFilter, setStockFilter] = useState('all');
+
+    // Purchase value breakdown modal
+    const [showPurchaseModal, setShowPurchaseModal] = useState(false);
+    const [purchaseModalSort, setPurchaseModalSort] = useState({ key: 'total', dir: 'desc' });
+    const printRef = useRef(null);
+    
+    // Stock modal
+    const [showStockModal, setShowStockModal] = useState(false);
+    const [stockModalSort, setStockModalSort] = useState({ key: 'stock', dir: 'desc' });
+    const printStockRef = useRef(null);
 
     // Fetch current user to check role
     useEffect(() => {
@@ -112,6 +127,12 @@ export default function FinalDeliveryForm() {
         if (!pin) return;
         setFormData((p) => (p.branchId === pin ? p : { ...p, branchId: pin }));
     }, [isEditMode, canPickAnyBranch, currentUser, selectedBranchId]);
+
+    useEffect(() => {
+        if (isEditMode || !canPickAnyBranch) return;
+        if (!selectedBranchId || selectedBranchId === 'central') return;
+        setFormData((p) => (p.branchId === selectedBranchId ? p : { ...p, branchId: selectedBranchId }));
+    }, [isEditMode, canPickAnyBranch, selectedBranchId]);
 
     // Edit (detail) rejimində mövcud yekun təslimat məlumatlarını yüklə
     useEffect(() => {
@@ -299,10 +320,10 @@ export default function FinalDeliveryForm() {
         fetchPreview();
     }, [formData.startDate, formData.endDate, isEditMode, formData.branchId]);
 
-    // Reset table page when preview/detail changes
+    // Reset table page when preview/detail or filter changes
     useEffect(() => {
         setTablePagination(prev => ({ ...prev, page: 1 }));
-    }, [previewData, detailDelivery]);
+    }, [previewData, detailDelivery, stockFilter]);
 
     const handleTablePageChange = (newPage) => {
         setTablePagination(prev => ({ ...prev, page: newPage }));
@@ -404,16 +425,50 @@ export default function FinalDeliveryForm() {
         ? (detailDelivery.items || [])
         : previewData;
 
-    const paginatedItems = tableItems.slice(
+    // Statistics computed from ALL tableItems (before filter)
+    const totalProducts = tableItems.length;
+    const totalStock = tableItems.reduce(
+        (sum, item) => sum + (item.remainingStock ?? item.stock ?? 0),
+        0
+    );
+    const totalPurchaseValue = tableItems.reduce((sum, item) => {
+        const stock = item.remainingStock ?? item.stock ?? 0;
+        const rawPrice = item.product?.purchasePrice ?? item.product?.costPrice ?? item.product?.unitPrice ?? 0;
+        const purchasePrice = parseFloat(rawPrice) || 0;
+        return sum + stock * purchasePrice;
+    }, 0);
+    const inStockCount = tableItems.filter(item => (item.remainingStock ?? item.stock ?? 0) > 10).length;
+    const lowStockCount = tableItems.filter(item => { const s = item.remainingStock ?? item.stock ?? 0; return s > 0 && s <= 10; }).length;
+    const outOfStockCount = tableItems.filter(item => (item.remainingStock ?? item.stock ?? 0) === 0).length;
+
+    // Apply stock filter
+    const filteredTableItems = useMemo(() => {
+        if (stockFilter === 'inStock') return tableItems.filter(item => (item.remainingStock ?? item.stock ?? 0) > 10);
+        if (stockFilter === 'lowStock') return tableItems.filter(item => { const s = item.remainingStock ?? item.stock ?? 0; return s > 0 && s <= 10; });
+        if (stockFilter === 'outOfStock') return tableItems.filter(item => (item.remainingStock ?? item.stock ?? 0) === 0);
+        return tableItems;
+    }, [tableItems, stockFilter]);
+
+    const paginatedItems = filteredTableItems.slice(
         (tablePagination.page - 1) * tablePagination.limit,
         tablePagination.page * tablePagination.limit
     );
 
-    const totalProducts = tableItems.length;
-    const totalStock = tableItems.reduce(
-        (sum, item) => sum + (item.remainingStock || item.stock || 0),
-        0
-    );
+    const totalFilteredPages = Math.ceil(filteredTableItems.length / tablePagination.limit);
+
+    // Smart pagination page numbers with ellipsis
+    const getPaginationPages = (current, total) => {
+        if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+        const pages = [];
+        if (current <= 4) {
+            pages.push(1, 2, 3, 4, 5, '...', total);
+        } else if (current >= total - 3) {
+            pages.push(1, '...', total - 4, total - 3, total - 2, total - 1, total);
+        } else {
+            pages.push(1, '...', current - 1, current, current + 1, '...', total);
+        }
+        return pages;
+    };
 
     // Detail üçün tarix aralığı başlığı (table üzərində)
     const dateRangeLabel = isEditMode && detailDelivery
@@ -805,30 +860,127 @@ export default function FinalDeliveryForm() {
                 {/* Preview / Detail Table - Məhsullar */}
                 {(isEditMode ? !!detailDelivery : !!(formData.startDate && formData.endDate)) && (
                     <div className="bg-white rounded-lg border border-gray-200 shadow-sm print:border-none print:shadow-none w-full">
-                        {/* Başlıq və ümumi məlumatlar yalnız ekranda görünür */}
+
+                        {/* ─── Ümumi Statistika Kartları ─── */}
+                        {totalProducts > 0 && (
+                            <div className="px-6 pt-5 pb-4 print:hidden">
+                                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                                    Ümumi Statistika
+                                </h3>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                                    {/* Ümumi Məhsul */}
+                                    <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-xl p-3 flex flex-col gap-1">
+                                        <span className="text-xs font-medium text-blue-600 uppercase tracking-wide">Ümumi Məhsul</span>
+                                        <span className="text-2xl font-bold text-blue-700">{totalProducts}</span>
+                                        <span className="text-xs text-blue-500">məhsul növü</span>
+                                    </div>
+                                    {/* Ümumi Stok — clickable */}
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowStockModal(true)}
+                                        className="bg-gradient-to-br from-indigo-50 to-indigo-100 border border-indigo-200 rounded-xl p-3 flex flex-col gap-1 text-left hover:shadow-md hover:border-indigo-400 transition-all cursor-pointer group"
+                                        title="Ətraflı bax"
+                                    >
+                                        <span className="text-xs font-medium text-indigo-600 uppercase tracking-wide flex items-center gap-1">
+                                            Ümumi Stok
+                                            <FileSpreadsheet className="w-3 h-3 opacity-60 group-hover:opacity-100" />
+                                        </span>
+                                        <span className="text-2xl font-bold text-indigo-700">{totalStock.toLocaleString()}</span>
+                                        <span className="text-xs text-indigo-500 flex items-center justify-between w-full">
+                                            <span>ədəd</span>
+                                            <span className="underline underline-offset-2">ətraflı bax →</span>
+                                        </span>
+                                    </button>
+                                    {/* Alış Qiyməti × Stok — clickable */}
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPurchaseModal(true)}
+                                        className="bg-gradient-to-br from-emerald-50 to-emerald-100 border border-emerald-200 rounded-xl p-3 flex flex-col gap-1 text-left hover:shadow-md hover:border-emerald-400 transition-all cursor-pointer group"
+                                        title="Ətraflı bax"
+                                    >
+                                        <span className="text-xs font-medium text-emerald-600 uppercase tracking-wide flex items-center gap-1">
+                                            Alış Dəyəri
+                                            <FileSpreadsheet className="w-3 h-3 opacity-60 group-hover:opacity-100" />
+                                        </span>
+                                        <span className="text-xl font-bold text-emerald-700 truncate">
+                                            {totalPurchaseValue > 0
+                                                ? `${totalPurchaseValue.toLocaleString('az-AZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₼`
+                                                : '—'}
+                                        </span>
+                                        <span className="text-xs text-emerald-500 underline underline-offset-2">ətraflı bax →</span>
+                                    </button>
+                                    {/* Stokda var */}
+                                    <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-xl p-3 flex flex-col gap-1">
+                                        <span className="text-xs font-medium text-green-600 uppercase tracking-wide">Stokda Var</span>
+                                        <span className="text-2xl font-bold text-green-700">{inStockCount}</span>
+                                        <span className="text-xs text-green-500">&gt; 10 ədəd</span>
+                                    </div>
+                                    {/* Az stok + Stokda yox */}
+                                    <div className="bg-gradient-to-br from-red-50 to-orange-50 border border-red-200 rounded-xl p-3 flex flex-col gap-1">
+                                        <span className="text-xs font-medium text-red-500 uppercase tracking-wide">Az / Yox</span>
+                                        <span className="text-2xl font-bold text-red-600">{lowStockCount + outOfStockCount}</span>
+                                        <span className="text-xs text-red-400">{lowStockCount} az • {outOfStockCount} yox</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Başlıq + Filter Toolbar */}
                         <div className="px-6 py-4 border-b border-gray-200 print:hidden">
-                            <div className="flex items-center justify-between">
-                                <div>
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                <div className="flex items-center gap-3">
                                     <h3 className="text-lg font-semibold text-gray-900">
                                         {t('products_preview') || 'Məhsullar (Önizləmə)'}
                                     </h3>
-                                    {totalProducts > 0 && (
-                                        <p className="text-sm text-gray-600 mt-1">
-                                            {t('total_products') || 'Ümumi Məhsul Sayı'}: {totalProducts} •{' '}
-                                            {t('total_stock') || 'Ümumi Stok'}: {totalStock}
-                                        </p>
+                                    {stockFilter !== 'all' && (
+                                        <span className="text-xs font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-full px-2.5 py-0.5">
+                                            {filteredTableItems.length} nəticə
+                                        </span>
                                     )}
                                 </div>
-                                {isEditMode && (
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    {/* Stock status filter buttons */}
+                                    {[
+                                        { key: 'all', label: 'Hamısı', count: totalProducts },
+                                        { key: 'inStock', label: '✓ Stokda Var', count: inStockCount },
+                                        { key: 'lowStock', label: '⚠ Az Stok', count: lowStockCount },
+                                        { key: 'outOfStock', label: '✕ Yoxdur', count: outOfStockCount },
+                                    ].map(({ key, label, count }) => (
+                                        <button
+                                            key={key}
+                                            type="button"
+                                            onClick={() => setStockFilter(key)}
+                                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all whitespace-nowrap ${
+                                                stockFilter === key
+                                                    ? key === 'inStock' ? 'bg-green-600 text-white border-green-600 shadow-sm'
+                                                    : key === 'lowStock' ? 'bg-orange-500 text-white border-orange-500 shadow-sm'
+                                                    : key === 'outOfStock' ? 'bg-red-600 text-white border-red-600 shadow-sm'
+                                                    : 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                                                    : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                                            }`}
+                                        >
+                                            {label} <span className="opacity-75 ml-1">({count})</span>
+                                        </button>
+                                    ))}
+                                    {isEditMode && (
+                                        <button
+                                            type="button"
+                                            onClick={handleOpenAddModal}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs font-semibold ml-2"
+                                        >
+                                            <Plus className="w-3.5 h-3.5" />
+                                            {t('add_product') || 'Məhsul əlavə et'}
+                                        </button>
+                                    )}
                                     <button
                                         type="button"
-                                        onClick={handleOpenAddModal}
-                                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                                        onClick={() => setShowStockModal(true)}
+                                        className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-lg hover:from-indigo-700 hover:to-blue-700 shadow-md transition-all text-sm font-bold ml-2 animate-pulse-once"
                                     >
-                                        <Plus className="w-4 h-4" />
-                                        {t('add_product') || 'Məhsul əlavə et'}
+                                        <FileSpreadsheet className="w-4 h-4" />
+                                        Cari Qalıq Hesabatı (Çap)
                                     </button>
-                                )}
+                                </div>
                             </div>
                         </div>
                         <div className="w-full">
@@ -878,31 +1030,47 @@ export default function FinalDeliveryForm() {
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-200">
-                                        {paginatedItems.map((item) => (
-                                            <tr key={item.productId || item.id} className="hover:bg-gray-50">
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                        {paginatedItems.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={isEditMode ? 8 : 7} className="px-6 py-12 text-center text-gray-400 text-sm">
+                                                    Bu filterdə məhsul tapılmadı
+                                                </td>
+                                            </tr>
+                                        ) : paginatedItems.map((item) => {
+                                            const remainingStock = item.remainingStock ?? item.stock ?? 0;
+                                            const stockBadge = remainingStock === 0
+                                                ? <span className="inline-block text-xs font-semibold text-red-600 bg-red-50 border border-red-200 rounded-full px-2 py-0.5">Yoxdur</span>
+                                                : remainingStock <= 10
+                                                ? <span className="inline-block text-xs font-semibold text-orange-600 bg-orange-50 border border-orange-200 rounded-full px-2 py-0.5">Az</span>
+                                                : <span className="inline-block text-xs font-semibold text-green-600 bg-green-50 border border-green-200 rounded-full px-2 py-0.5">Var</span>;
+                                            return (
+                                            <tr key={item.productId || item.id} className="hover:bg-gray-50 transition-colors">
+                                                <td className="px-6 py-3 text-sm font-medium text-gray-900">
                                                     {item.product?.name || '-'}
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                <td className="px-6 py-3 text-sm text-gray-500">
                                                     {item.product?.category?.name || '-'}
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                <td className="px-6 py-3 text-sm text-gray-500">
                                                     {item.product?.subCategory?.name || '-'}
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                <td className="px-6 py-3 text-sm text-gray-500">
                                                     {unitTypeLabelAz(item.product?.unitType)}
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                                                <td className="px-6 py-3 text-sm text-gray-900 text-right">
                                                     {item.fullBoxes || 0}
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                                                <td className="px-6 py-3 text-sm text-gray-900 text-right">
                                                     {item.openedBoxQuantity || 0}
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 text-right">
-                                                    {item.remainingStock || 0}
+                                                <td className="px-6 py-3 text-sm text-right">
+                                                    <div className="flex items-center justify-end gap-2">
+                                                        <span className="font-semibold text-gray-900">{remainingStock}</span>
+                                                        {stockBadge}
+                                                    </div>
                                                 </td>
                                                 {isEditMode && (
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center print:hidden">
+                                                    <td className="px-6 py-3 text-sm text-center print:hidden">
                                                         <div className="flex items-center justify-center gap-2">
                                                             <button
                                                                 type="button"
@@ -915,7 +1083,6 @@ export default function FinalDeliveryForm() {
                                                             {(() => {
                                                                 const roleName = currentUser?.role?.name?.toLowerCase() || '';
                                                                 const isSuperAdmin = roleName === 'superadmin';
-                                                                // Yalnız superadmin silə bilər, admin və digər rollar silə bilməz
                                                                 return isSuperAdmin ? (
                                                                     <button
                                                                         type="button"
@@ -931,78 +1098,64 @@ export default function FinalDeliveryForm() {
                                                     </td>
                                                 )}
                                             </tr>
-                                        ))}
+                                            );
+                                        })}
                                     </tbody>
                                 </table>
                             )}
 
-                            {/* Pagination */}
-                            {tableItems.length > tablePagination.limit && (
-                                <div className="px-6 py-4 flex items-center justify-between border-t border-gray-200 print:hidden">
-                                    <div className="flex-1 flex justify-between sm:hidden">
+                            {/* ─── Smart Pagination ─── */}
+                            {totalFilteredPages > 1 && (
+                                <div className="px-4 sm:px-6 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-gray-200 print:hidden">
+                                    {/* Info text */}
+                                    <p className="text-sm text-gray-600 order-2 sm:order-1">
+                                        <span className="font-semibold text-gray-800">
+                                            {(tablePagination.page - 1) * tablePagination.limit + 1}–{Math.min(tablePagination.page * tablePagination.limit, filteredTableItems.length)}
+                                        </span>
+                                        {' '}/ {filteredTableItems.length} nəticə
+                                        {stockFilter !== 'all' && (
+                                            <span className="ml-1 text-blue-600">(filterlənib)</span>
+                                        )}
+                                    </p>
+                                    {/* Page buttons */}
+                                    <div className="flex items-center gap-1 order-1 sm:order-2">
+                                        {/* Prev */}
                                         <button
                                             type="button"
-                                            onClick={() => handleTablePageChange(Math.max(1, tablePagination.page - 1))}
+                                            onClick={() => handleTablePageChange(tablePagination.page - 1)}
                                             disabled={tablePagination.page === 1}
-                                            className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                                            className="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-gray-300 bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-sm"
                                         >
-                                            {t('previous') || 'Əvvəlki'}
+                                            ‹
                                         </button>
+                                        {/* Page numbers with ellipsis */}
+                                        {getPaginationPages(tablePagination.page, totalFilteredPages).map((page, idx) =>
+                                            page === '...' ? (
+                                                <span key={`ellipsis-${idx}`} className="inline-flex items-center justify-center w-8 h-8 text-gray-400 text-sm">…</span>
+                                            ) : (
+                                                <button
+                                                    key={page}
+                                                    type="button"
+                                                    onClick={() => handleTablePageChange(page)}
+                                                    className={`inline-flex items-center justify-center w-8 h-8 rounded-lg text-sm font-medium border transition-colors ${
+                                                        tablePagination.page === page
+                                                            ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                                                            : 'bg-white text-gray-600 border-gray-300 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600'
+                                                    }`}
+                                                >
+                                                    {page}
+                                                </button>
+                                            )
+                                        )}
+                                        {/* Next */}
                                         <button
                                             type="button"
-                                            onClick={() => handleTablePageChange(Math.min(Math.ceil(tableItems.length / tablePagination.limit), tablePagination.page + 1))}
-                                            disabled={tablePagination.page === Math.ceil(tableItems.length / tablePagination.limit)}
-                                            className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                                            onClick={() => handleTablePageChange(tablePagination.page + 1)}
+                                            disabled={tablePagination.page === totalFilteredPages}
+                                            className="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-gray-300 bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-sm"
                                         >
-                                            {t('next') || 'Növbəti'}
+                                            ›
                                         </button>
-                                    </div>
-                                    <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                                        <div>
-                                            <p className="text-sm text-gray-700">
-                                                {t('showing') || 'Göstərilir'}{' '}
-                                                <span className="font-medium">{(tablePagination.page - 1) * tablePagination.limit + 1}</span>{' '}
-                                                {t('to') || 'ilə'}{' '}
-                                                <span className="font-medium">{Math.min(tablePagination.page * tablePagination.limit, tableItems.length)}</span>{' '}
-                                                {t('of') || 'arasında'}{' '}
-                                                <span className="font-medium">{tableItems.length}</span>{' '}
-                                                {t('results') || 'nəticə'}
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleTablePageChange(Math.max(1, tablePagination.page - 1))}
-                                                    disabled={tablePagination.page === 1}
-                                                    className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-                                                >
-                                                    <Calendar className="w-4 h-4 rotate-90" />
-                                                </button>
-                                                {[...Array(Math.ceil(tableItems.length / tablePagination.limit))].map((_, i) => (
-                                                    <button
-                                                        key={i + 1}
-                                                        type="button"
-                                                        onClick={() => handleTablePageChange(i + 1)}
-                                                        className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-                                                            tablePagination.page === i + 1
-                                                                ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
-                                                                : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
-                                                        }`}
-                                                    >
-                                                        {i + 1}
-                                                    </button>
-                                                ))}
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleTablePageChange(Math.min(Math.ceil(tableItems.length / tablePagination.limit), tablePagination.page + 1))}
-                                                    disabled={tablePagination.page === Math.ceil(tableItems.length / tablePagination.limit)}
-                                                    className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-                                                >
-                                                    <Calendar className="w-4 h-4 -rotate-90" />
-                                                </button>
-                                            </nav>
-                                        </div>
                                     </div>
                                 </div>
                             )}
@@ -1182,6 +1335,530 @@ export default function FinalDeliveryForm() {
                     </div>
                 </div>
             )}
+
+            {/* ─── Alış Dəyəri Breakdown Modal ─── */}
+            {showPurchaseModal && (() => {
+                // Build row data for ALL tableItems (no stock filter)
+                const rows = tableItems.map(item => {
+                    const stock = item.remainingStock ?? item.stock ?? 0;
+                    const rawPrice = item.product?.purchasePrice ?? item.product?.costPrice ?? item.product?.unitPrice ?? 0;
+                    const price = parseFloat(rawPrice) || 0;
+                    return {
+                        name: item.product?.name || '—',
+                        category: item.product?.category?.name || '—',
+                        subCategory: item.product?.subCategory?.name || '—',
+                        unitType: unitTypeLabelAz(item.product?.unitType),
+                        stock,
+                        price,
+                        total: stock * price,
+                    };
+                });
+
+                // Sort
+                const sorted = [...rows].sort((a, b) => {
+                    const av = a[purchaseModalSort.key];
+                    const bv = b[purchaseModalSort.key];
+                    if (typeof av === 'string') return purchaseModalSort.dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+                    return purchaseModalSort.dir === 'asc' ? av - bv : bv - av;
+                });
+
+                const grandTotal = rows.reduce((s, r) => s + r.total, 0);
+                const hasPrice = rows.some(r => r.price > 0);
+
+                const handleSort = (key) => {
+                    setPurchaseModalSort(prev => ({
+                        key,
+                        dir: prev.key === key && prev.dir === 'desc' ? 'asc' : 'desc'
+                    }));
+                };
+
+                const SortIcon = ({ col }) => {
+                    if (purchaseModalSort.key !== col) return <ChevronDown className="w-3 h-3 opacity-30" />;
+                    return purchaseModalSort.dir === 'asc'
+                        ? <ChevronUp className="w-3 h-3 text-emerald-600" />
+                        : <ChevronDown className="w-3 h-3 text-emerald-600" />;
+                };
+
+                const exportExcel = () => {
+                    const wsData = [
+                        ['Məhsul Adı', 'Kateqoriya', 'Alt Kateqoriya', 'Ölçü', 'Stok Miqdarı', 'Alış Qiyməti (₼)', 'Cəmi Dəyər (₼)'],
+                        ...sorted.map(r => [r.name, r.category, r.subCategory, r.unitType, r.stock, r.price, r.total]),
+                        [],
+                        ['', '', '', '', '', 'ÜMUMİ CƏM:', grandTotal],
+                    ];
+                    const ws = XLSX.utils.aoa_to_sheet(wsData);
+                    // Column widths
+                    ws['!cols'] = [{ wch: 30 }, { wch: 18 }, { wch: 18 }, { wch: 10 }, { wch: 12 }, { wch: 18 }, { wch: 18 }];
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, 'Alış Dəyəri');
+                    const dateStr = new Date().toLocaleDateString('az-AZ').replace(/\./g, '-');
+                    XLSX.writeFile(wb, `alis-deyeri-${dateStr}.xlsx`);
+                };
+
+                const handlePrint = () => {
+                    const printContent = printRef.current?.innerHTML;
+                    if (!printContent) return;
+                    const win = window.open('', '_blank', 'width=900,height=700');
+                    win.document.write(`
+                        <html><head><title>Alış Dəyəri Hesabatı</title>
+                        <style>
+                            body { font-family: Arial, sans-serif; padding: 24px; font-size: 12px; }
+                            h2 { font-size: 16px; font-weight: bold; margin-bottom: 4px; }
+                            p.sub { color: #555; margin-bottom: 16px; font-size: 11px; }
+                            table { width: 100%; border-collapse: collapse; }
+                            th { background: #f0fdf4; padding: 8px; text-align: left; font-size: 10px; text-transform: uppercase; border: 1px solid #d1fae5; }
+                            td { padding: 7px 8px; border: 1px solid #e5e7eb; }
+                            tr:nth-child(even) td { background: #f9fafb; }
+                            .text-right { text-align: right; }
+                            .total-row td { font-weight: bold; background: #f0fdf4; border-top: 2px solid #059669; }
+                            .warn { color: #dc2626; font-style: italic; font-size: 10px; margin-top: 12px; }
+                        </style></head><body>${printContent}</body></html>
+                    `);
+                    win.document.close();
+                    win.focus();
+                    setTimeout(() => { win.print(); win.close(); }, 400);
+                };
+
+                return (
+                    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+
+                            {/* Header */}
+                            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+                                <div>
+                                    <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                                        <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                                        Alış Dəyəri — Ətraflı Hesabat
+                                    </h2>
+                                    <p className="text-sm text-gray-500 mt-0.5">
+                                        {rows.length} məhsul • Ümumi:{' '}
+                                        <span className="font-semibold text-emerald-700">
+                                            {grandTotal.toLocaleString('az-AZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₼
+                                        </span>
+                                        {!hasPrice && (
+                                            <span className="ml-2 text-red-500 text-xs">(bəzi məhsulların alış qiyməti daxil edilməyib)</span>
+                                        )}
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={exportExcel}
+                                        className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium"
+                                    >
+                                        <FileSpreadsheet className="w-4 h-4" />
+                                        Excel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handlePrint}
+                                        className="flex items-center gap-1.5 px-3 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"
+                                    >
+                                        <Printer className="w-4 h-4" />
+                                        Çap et
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPurchaseModal(false)}
+                                        className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                                    >
+                                        <X className="w-5 h-5" />
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Print content */}
+                            <div ref={printRef} className="hidden">
+                                <h2>Alış Dəyəri Hesabatı</h2>
+                                <p className="sub">
+                                    {isEditMode && detailDelivery ? detailDelivery.title : `${formData.startDate} – ${formData.endDate}`}
+                                    {' '} | {rows.length} məhsul | Ümumi: {grandTotal.toLocaleString('az-AZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₼
+                                </p>
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Məhsul Adı</th>
+                                            <th>Kateqoriya</th>
+                                            <th>Alt Kateqoriya</th>
+                                            <th>Ölçü</th>
+                                            <th className="text-right">Stok</th>
+                                            <th className="text-right">Alış Qiyməti</th>
+                                            <th className="text-right">Cəmi Dəyər</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {sorted.map((r, i) => (
+                                            <tr key={i}>
+                                                <td>{i + 1}</td>
+                                                <td>{r.name}</td>
+                                                <td>{r.category}</td>
+                                                <td>{r.subCategory}</td>
+                                                <td>{r.unitType}</td>
+                                                <td className="text-right">{r.stock}</td>
+                                                <td className="text-right">{r.price > 0 ? `${r.price.toFixed(2)} ₼` : '—'}</td>
+                                                <td className="text-right">{r.total > 0 ? `${r.total.toFixed(2)} ₼` : '—'}</td>
+                                            </tr>
+                                        ))}
+                                        <tr className="total-row">
+                                            <td colSpan={7} className="text-right">ÜMUMİ CƏM:</td>
+                                            <td className="text-right">{grandTotal.toLocaleString('az-AZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₼</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                                {!hasPrice && (
+                                    <p className="warn">* Alış qiyməti daxil edilməmiş məhsullar hesablamaya təsir etmir.</p>
+                                )}
+                            </div>
+
+                            {/* Scrollable table */}
+                            <div className="flex-1 overflow-auto">
+                                <table className="w-full text-sm">
+                                    <thead className="bg-emerald-50 sticky top-0 z-10">
+                                        <tr>
+                                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-8">#</th>
+                                            {[
+                                                { key: 'name', label: 'Məhsul Adı' },
+                                                { key: 'category', label: 'Kateqoriya' },
+                                                { key: 'unitType', label: 'Ölçü' },
+                                            ].map(({ key, label }) => (
+                                                <th key={key}
+                                                    className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-emerald-700 select-none"
+                                                    onClick={() => handleSort(key)}
+                                                >
+                                                    <div className="flex items-center gap-1">{label}<SortIcon col={key} /></div>
+                                                </th>
+                                            ))}
+                                            {[
+                                                { key: 'stock', label: 'Stok' },
+                                                { key: 'price', label: 'Alış Qiyməti' },
+                                                { key: 'total', label: 'Cəmi Dəyər' },
+                                            ].map(({ key, label }) => (
+                                                <th key={key}
+                                                    className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-emerald-700 select-none"
+                                                    onClick={() => handleSort(key)}
+                                                >
+                                                    <div className="flex items-center justify-end gap-1">{label}<SortIcon col={key} /></div>
+                                                </th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {sorted.map((r, i) => (
+                                            <tr key={i} className={`hover:bg-emerald-50/40 transition-colors ${r.price === 0 ? 'opacity-60' : ''}`}>
+                                                <td className="px-4 py-2.5 text-xs text-gray-400">{i + 1}</td>
+                                                <td className="px-4 py-2.5 font-medium text-gray-900">{r.name}</td>
+                                                <td className="px-4 py-2.5 text-gray-500 text-xs">{r.category}</td>
+                                                <td className="px-4 py-2.5 text-gray-400 text-xs">{r.unitType}</td>
+                                                <td className="px-4 py-2.5 text-right font-semibold text-gray-800">{r.stock.toLocaleString()}</td>
+                                                <td className="px-4 py-2.5 text-right text-gray-600">
+                                                    {r.price > 0 ? (
+                                                        <span className="font-medium">{r.price.toFixed(2)} ₼</span>
+                                                    ) : (
+                                                        <span className="text-red-400 text-xs italic">qiymət yox</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-2.5 text-right">
+                                                    {r.total > 0 ? (
+                                                        <span className="font-bold text-emerald-700">
+                                                            {r.total.toLocaleString('az-AZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₼
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-gray-300">—</span>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    <tfoot className="bg-emerald-50 border-t-2 border-emerald-200 sticky bottom-0">
+                                        <tr>
+                                            <td colSpan={6} className="px-4 py-3 text-right text-sm font-bold text-emerald-800 uppercase tracking-wide">
+                                                ÜMUMİ CƏM:
+                                            </td>
+                                            <td className="px-4 py-3 text-right text-lg font-black text-emerald-700">
+                                                {grandTotal.toLocaleString('az-AZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₼
+                                            </td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+
+                                {!hasPrice && (
+                                    <div className="px-6 py-3 bg-red-50 border-t border-red-100">
+                                        <p className="text-xs text-red-500 italic">
+                                            ⚠ Bəzi məhsulların alış qiyməti sistemə daxil edilməyib. Bu məhsullar cəm hesablamaya daxil edilmir.
+                                            Düzgün hesab üçün həmin məhsullara alış qiyməti əlavə edin.
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
+
+            {/* ─── Ümumi Stok Breakdown Modal ─── */}
+            {showStockModal && (() => {
+                const rows = tableItems.map(item => {
+                    const stock = item.remainingStock ?? item.stock ?? 0;
+                    const rawPurchasePrice = item.product?.purchasePrice ?? item.product?.costPrice ?? item.product?.unitPrice ?? 0;
+                    const purchasePrice = parseFloat(rawPurchasePrice) || 0;
+                    const rawSalePrice = item.product?.salePrice ?? 0;
+                    const salePrice = parseFloat(rawSalePrice) || 0;
+                    return {
+                        name: item.product?.name || '—',
+                        category: item.product?.category?.name || '—',
+                        subCategory: item.product?.subCategory?.name || '—',
+                        unitType: unitTypeLabelAz(item.product?.unitType),
+                        stock,
+                        purchasePrice,
+                        salePrice,
+                        totalPurchase: stock * purchasePrice,
+                        totalSale: stock * salePrice
+                    };
+                }).filter(r => r.stock > 0);
+
+                const sorted = [...rows].sort((a, b) => {
+                    const av = a[stockModalSort.key];
+                    const bv = b[stockModalSort.key];
+                    if (typeof av === 'string') return stockModalSort.dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+                    return stockModalSort.dir === 'asc' ? av - bv : bv - av;
+                });
+
+                const grandTotalStock = rows.reduce((s, r) => s + r.stock, 0);
+                const grandTotalPurchase = rows.reduce((s, r) => s + r.totalPurchase, 0);
+                const grandTotalSale = rows.reduce((s, r) => s + r.totalSale, 0);
+
+                const handleSort = (key) => {
+                    setStockModalSort(prev => ({
+                        key,
+                        dir: prev.key === key && prev.dir === 'desc' ? 'asc' : 'desc'
+                    }));
+                };
+
+                const SortIcon = ({ col }) => {
+                    if (stockModalSort.key !== col) return <ChevronDown className="w-3 h-3 opacity-30" />;
+                    return stockModalSort.dir === 'asc'
+                        ? <ChevronUp className="w-3 h-3 text-indigo-600" />
+                        : <ChevronDown className="w-3 h-3 text-indigo-600" />;
+                };
+
+                const exportExcel = () => {
+                    const wsData = [
+                        ['Məhsul Adı', 'Kateqoriya', 'Alt Kateqoriya', 'Ölçü', 'Stok Miqdarı', 'Alış Qiyməti (₼)', 'Satış Qiyməti (₼)', 'Alış Dəyəri (₼)', 'Satış Dəyəri (₼)'],
+                        ...sorted.map(r => [r.name, r.category, r.subCategory, r.unitType, r.stock, r.purchasePrice, r.salePrice, r.totalPurchase, r.totalSale]),
+                        [],
+                        ['', '', '', 'ÜMUMİ CƏM:', grandTotalStock, '', '', grandTotalPurchase, grandTotalSale],
+                    ];
+                    const ws = XLSX.utils.aoa_to_sheet(wsData);
+                    ws['!cols'] = [{ wch: 30 }, { wch: 18 }, { wch: 18 }, { wch: 10 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }];
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, 'Ümumi Stok');
+                    const dateStr = new Date().toLocaleDateString('az-AZ').replace(/\./g, '-');
+                    XLSX.writeFile(wb, `umumi-stok-${dateStr}.xlsx`);
+                };
+
+                const handlePrint = () => {
+                    const printContent = printStockRef.current?.innerHTML;
+                    if (!printContent) return;
+                    const win = window.open('', '_blank', 'width=900,height=700');
+                    win.document.write(`
+                        <html><head><title>Ümumi Stok Hesabatı</title>
+                        <style>
+                            body { font-family: Arial, sans-serif; padding: 24px; font-size: 12px; }
+                            h2 { font-size: 16px; font-weight: bold; margin-bottom: 4px; }
+                            p.sub { color: #555; margin-bottom: 16px; font-size: 11px; }
+                            table { width: 100%; border-collapse: collapse; }
+                            th { background: #e0e7ff; padding: 8px; text-align: left; font-size: 10px; text-transform: uppercase; border: 1px solid #c7d2fe; }
+                            td { padding: 7px 8px; border: 1px solid #e5e7eb; }
+                            tr:nth-child(even) td { background: #f9fafb; }
+                            .text-right { text-align: right; }
+                            .total-row td { font-weight: bold; background: #e0e7ff; border-top: 2px solid #4f46e5; }
+                        </style></head><body>${printContent}</body></html>
+                    `);
+                    win.document.close();
+                    win.focus();
+                    setTimeout(() => { win.print(); win.close(); }, 400);
+                };
+
+                return (
+                    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+                            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+                                <div>
+                                    <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                                        <FileSpreadsheet className="w-5 h-5 text-indigo-600" />
+                                        Ümumi Stok — Ətraflı Hesabat
+                                    </h2>
+                                    <p className="text-sm text-gray-500 mt-0.5">
+                                        {rows.length} məhsul • Ümumi:{' '}
+                                        <span className="font-semibold text-indigo-700">
+                                            {grandTotalStock.toLocaleString('az-AZ')} ədəd
+                                        </span>
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={exportExcel}
+                                        className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
+                                    >
+                                        <FileSpreadsheet className="w-4 h-4" />
+                                        Excel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handlePrint}
+                                        className="flex items-center gap-1.5 px-3 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"
+                                    >
+                                        <Printer className="w-4 h-4" />
+                                        Çap et
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowStockModal(false)}
+                                        className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                                    >
+                                        <X className="w-5 h-5" />
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div ref={printStockRef} className="hidden">
+                                <h2>Ümumi Stok Hesabatı</h2>
+                                <p className="sub">
+                                    {isEditMode && detailDelivery ? detailDelivery.title : `${formData.startDate} – ${formData.endDate}`}
+                                    {' '} | {rows.length} məhsul | Ümumi: {grandTotalStock.toLocaleString('az-AZ')} ədəd
+                                </p>
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Məhsul Adı</th>
+                                            <th>Kateqoriya</th>
+                                            <th>Alt Kateqoriya</th>
+                                            <th>Ölçü</th>
+                                            <th className="text-right">Stok</th>
+                                            <th className="text-right">Alış Qiyməti</th>
+                                            <th className="text-right">Satış Qiyməti</th>
+                                            <th className="text-right">Alış Dəyəri</th>
+                                            <th className="text-right">Satış Dəyəri</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {sorted.map((r, i) => (
+                                            <tr key={i}>
+                                                <td>{i + 1}</td>
+                                                <td>{r.name}</td>
+                                                <td>{r.category}</td>
+                                                <td>{r.subCategory}</td>
+                                                <td>{r.unitType}</td>
+                                                <td className="text-right">{r.stock}</td>
+                                                <td className="text-right">{r.purchasePrice.toFixed(2)} ₼</td>
+                                                <td className="text-right">{r.salePrice.toFixed(2)} ₼</td>
+                                                <td className="text-right">{r.totalPurchase.toFixed(2)} ₼</td>
+                                                <td className="text-right">{r.totalSale.toFixed(2)} ₼</td>
+                                            </tr>
+                                        ))}
+                                        <tr className="total-row">
+                                            <td colSpan={5} className="text-right">ÜMUMİ CƏM:</td>
+                                            <td className="text-right">{grandTotalStock.toLocaleString('az-AZ')}</td>
+                                            <td className="text-right"></td>
+                                            <td className="text-right"></td>
+                                            <td className="text-right">{grandTotalPurchase.toLocaleString('az-AZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₼</td>
+                                            <td className="text-right">{grandTotalSale.toLocaleString('az-AZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₼</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div className="flex-1 overflow-auto">
+                                <table className="w-full text-sm">
+                                    <thead className="bg-indigo-50 sticky top-0 z-10">
+                                        <tr>
+                                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-8">#</th>
+                                            {[
+                                                { key: 'name', label: 'Məhsul Adı' },
+                                                { key: 'category', label: 'Kateqoriya' },
+                                                { key: 'unitType', label: 'Ölçü' },
+                                            ].map(({ key, label }) => (
+                                                <th key={key}
+                                                    className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-indigo-700 select-none"
+                                                    onClick={() => handleSort(key)}
+                                                >
+                                                    <div className="flex items-center gap-1">{label}<SortIcon col={key} /></div>
+                                                </th>
+                                            ))}
+                                            {[
+                                                { key: 'stock', label: 'Stok' },
+                                                { key: 'purchasePrice', label: 'Alış Q.' },
+                                                { key: 'salePrice', label: 'Satış Q.' },
+                                                { key: 'totalPurchase', label: 'Alış Dəyəri' },
+                                                { key: 'totalSale', label: 'Satış Dəyəri' },
+                                            ].map(({ key, label }) => (
+                                                <th key={key}
+                                                    className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-indigo-700 select-none"
+                                                    onClick={() => handleSort(key)}
+                                                >
+                                                    <div className="flex items-center justify-end gap-1">{label}<SortIcon col={key} /></div>
+                                                </th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {sorted.map((r, i) => (
+                                            <tr key={i} className="hover:bg-indigo-50/40 transition-colors">
+                                                <td className="px-4 py-2.5 text-xs text-gray-400">{i + 1}</td>
+                                                <td className="px-4 py-2.5 font-medium text-gray-900">{r.name}</td>
+                                                <td className="px-4 py-2.5 text-gray-500 text-xs">{r.category}</td>
+                                                <td className="px-4 py-2.5 text-gray-400 text-xs">{r.unitType}</td>
+                                                <td className="px-4 py-2.5 text-right font-semibold text-gray-800">{r.stock.toLocaleString()}</td>
+                                                <td className="px-4 py-2.5 text-right text-gray-600">
+                                                    {r.purchasePrice > 0 ? (
+                                                        <span className="font-medium">{r.purchasePrice.toFixed(2)} ₼</span>
+                                                    ) : (
+                                                        <span className="text-red-400 text-xs italic">yox</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-2.5 text-right text-gray-600">
+                                                    {r.salePrice > 0 ? (
+                                                        <span className="font-medium">{r.salePrice.toFixed(2)} ₼</span>
+                                                    ) : (
+                                                        <span className="text-red-400 text-xs italic">yox</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-2.5 text-right text-indigo-700 font-semibold">
+                                                    {r.totalPurchase > 0 ? `${r.totalPurchase.toLocaleString('az-AZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₼` : '—'}
+                                                </td>
+                                                <td className="px-4 py-2.5 text-right text-indigo-700 font-semibold">
+                                                    {r.totalSale > 0 ? `${r.totalSale.toLocaleString('az-AZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₼` : '—'}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    <tfoot className="bg-indigo-50 border-t-2 border-indigo-200 sticky bottom-0">
+                                        <tr>
+                                            <td colSpan={4} className="px-4 py-3 text-right text-sm font-bold text-indigo-800 uppercase tracking-wide">
+                                                ÜMUMİ CƏM:
+                                            </td>
+                                            <td className="px-4 py-3 text-right text-lg font-black text-indigo-700">
+                                                {grandTotalStock.toLocaleString('az-AZ')}
+                                            </td>
+                                            <td className="px-4 py-3 text-right"></td>
+                                            <td className="px-4 py-3 text-right"></td>
+                                            <td className="px-4 py-3 text-right text-base font-black text-indigo-700">
+                                                {grandTotalPurchase.toLocaleString('az-AZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₼
+                                            </td>
+                                            <td className="px-4 py-3 text-right text-base font-black text-indigo-700">
+                                                {grandTotalSale.toLocaleString('az-AZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₼
+                                            </td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
         </div>
     );
 }

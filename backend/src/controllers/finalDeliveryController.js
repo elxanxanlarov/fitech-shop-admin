@@ -140,7 +140,12 @@ export const getFinalDeliveryById = async (req, res) => {
                 items: {
                     include: {
                         product: {
-                            include: {
+                            select: {
+                                id: true,
+                                name: true,
+                                unitType: true,
+                                piecesPerBox: true,
+                                purchasePrice: true,
                                 category: {
                                     select: {
                                         id: true,
@@ -232,6 +237,7 @@ export const previewFinalDelivery = async (req, res) => {
                     name: product.name,
                     unitType: product.unitType,
                     piecesPerBox: product.piecesPerBox,
+                    purchasePrice: product.purchasePrice,
                     category: product.category,
                     subCategory: product.subCategory
                 },

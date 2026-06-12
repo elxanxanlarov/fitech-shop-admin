@@ -12,12 +12,15 @@ import {
     MdInventory2,
     MdCheckCircle,
     MdStorefront,
+    MdUpload,
 } from 'react-icons/md';
 import { productApi, saleApi, ismayilliApi } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import { useBranch } from '../../context/BranchContext';
 import { playPosBeep } from '../../hooks/useBarcodeScanner';
 import Alert from '../ui/Alert';
+import SalesExcelImportModal from '../modals/SalesExcelImportModal';
+import FirmaProductsImportModal from '../modals/FirmaProductsImportModal';
 
 const formatPrice = (n) => `${parseFloat(n || 0).toFixed(2)} ₼`;
 
@@ -64,6 +67,8 @@ export default function SellerPOS() {
     const [submitting, setSubmitting] = useState(false);
     const [customer, setCustomer] = useState({ name: '', phone: '' });
     const [paymentType, setPaymentType] = useState('cash');
+    const [excelImportOpen, setExcelImportOpen] = useState(false);
+    const [firmaImportOpen, setFirmaImportOpen] = useState(false);
 
     const branchId = user?.branchId || null;
     const isIsmayilli = selectedStore === 'ISMAYILLI';
@@ -412,17 +417,41 @@ export default function SellerPOS() {
 
             <div className="max-w-5xl w-full mx-auto flex flex-col flex-1 min-h-0">
                 {/* Store mode indicator chip (read-only here, toggle is in header) */}
-                <div className="mb-2 flex items-center justify-between">
-                    <div
-                        className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-extrabold border ${
-                            isIsmayilli
-                                ? 'bg-amber-50 text-amber-800 border-amber-200'
-                                : 'bg-blue-50 text-blue-800 border-blue-200'
-                        }`}
-                    >
-                        <MdStorefront className="w-4 h-4" />
-                        Aktiv mağaza:{' '}
-                        <span className="uppercase">{isIsmayilli ? 'İsmayıllı' : 'Fitech'}</span>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <div
+                            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-extrabold border ${
+                                isIsmayilli
+                                    ? 'bg-amber-50 text-amber-800 border-amber-200'
+                                    : 'bg-blue-50 text-blue-800 border-blue-200'
+                            }`}
+                        >
+                            <MdStorefront className="w-4 h-4" />
+                            Aktiv mağaza:{' '}
+                            <span className="uppercase">{isIsmayilli ? 'İsmayıllı' : 'Fitech'}</span>
+                        </div>
+                        {isIsmayilli && (
+                            <>
+                                <button
+                                    type="button"
+                                    onClick={() => setExcelImportOpen(true)}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-extrabold bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm transition-all"
+                                    title="Excel ilə kütləvi satış əlavə et"
+                                >
+                                    <MdUpload className="w-4 h-4" />
+                                    Excel ilə Satış
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setFirmaImportOpen(true)}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-extrabold bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition-all"
+                                    title="Excel-dən firma → məhsul bağlantısı"
+                                >
+                                    <MdUpload className="w-4 h-4" />
+                                    Firma → Məhsul
+                                </button>
+                            </>
+                        )}
                     </div>
                     {cart.length > 0 && cart[0].store !== selectedStore && (
                         <div className="text-xs text-orange-600 font-bold">
@@ -430,6 +459,17 @@ export default function SellerPOS() {
                         </div>
                     )}
                 </div>
+
+                <SalesExcelImportModal
+                    isOpen={excelImportOpen}
+                    onClose={() => setExcelImportOpen(false)}
+                    onSuccess={() => fetchProducts()}
+                />
+
+                <FirmaProductsImportModal
+                    isOpen={firmaImportOpen}
+                    onClose={() => setFirmaImportOpen(false)}
+                />
 
                 {/* Search bar */}
                 <div className="relative mb-3">

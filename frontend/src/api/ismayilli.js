@@ -108,6 +108,63 @@ export const ismayilliApi = {
     return response.data;
   },
 
+  bulkDeleteSales: async (ids) => {
+    const response = await api.post('/ismayilli/sale/bulk-delete', { ids });
+    return response.data;
+  },
+
+  // ===== Firma idarəetməsi (İsmayıllı) =====
+  getAllFirmas: async () => {
+    const response = await api.get('/ismayilli/firma');
+    return response.data;
+  },
+  getFirmaById: async (id) => {
+    const response = await api.get(`/ismayilli/firma/${id}`);
+    return response.data;
+  },
+  createFirma: async (data) => {
+    const response = await api.post('/ismayilli/firma', data);
+    return response.data;
+  },
+  updateFirma: async (id, data) => {
+    const response = await api.put(`/ismayilli/firma/${id}`, data);
+    return response.data;
+  },
+  deleteFirma: async (id, { hard = false } = {}) => {
+    const response = await api.delete(`/ismayilli/firma/${id}${hard ? '?hard=true' : ''}`);
+    return response.data;
+  },
+  addFirmaTransaction: async (firmaId, data) => {
+    // data: { type: 'DEBT' | 'PAYMENT', amount, note? }
+    const response = await api.post(`/ismayilli/firma/${firmaId}/transaction`, data);
+    return response.data;
+  },
+  deleteFirmaTransaction: async (firmaId, transactionId) => {
+    const response = await api.delete(`/ismayilli/firma/${firmaId}/transaction/${transactionId}`);
+    return response.data;
+  },
+  importFirmaProductsExcel: async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post('/ismayilli/firma/import-products-excel', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
+  importSalesExcel: async (file, opts = {}) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (opts.updateStock !== undefined) {
+      formData.append('updateStock', opts.updateStock ? 'true' : 'false');
+    }
+    if (opts.priceSource) formData.append('priceSource', opts.priceSource);
+    const response = await api.post('/ismayilli/sale/import-excel', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
   // Returns
   getAllReturns: async () => {
     const response = await api.get('/ismayilli/return');

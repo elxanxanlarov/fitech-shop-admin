@@ -23,5 +23,9 @@ export const saleApi = {
     });
     return response.data;
   },
+  bulkDelete: async (ids, deleteType = 'SOFT') => {
+    const response = await api.post('/sale/bulk-delete', { ids, deleteType });
+    return response.data;
+  },
 };
 

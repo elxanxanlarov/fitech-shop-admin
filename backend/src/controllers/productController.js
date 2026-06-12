@@ -552,6 +552,31 @@ export const createProduct = async (req, res) => {
             }
         }
 
+        // İlkin stok hərəkəti (əgər > 0)
+        if (calculatedStock > 0) {
+            try {
+                await prisma.stockmovement.create({
+                    data: {
+                        productId: newProduct.id,
+                        type: 'IN',
+                        quantity: calculatedStock,
+                        previousStock: 0,
+                        newStock: calculatedStock,
+                        previousFullBoxes: 0,
+                        newFullBoxes: calculatedFullBoxes,
+                        previousOpenedBoxQuantity: 0,
+                        newOpenedBoxQuantity: calculatedOpenedBoxQuantity,
+                        note: 'İlkin stok',
+                        staffId: req.staffId || null,
+                        branchId: branchId && branchId !== 'central' ? branchId : null,
+                        store: store || 'FITECH'
+                    }
+                });
+            } catch (movementError) {
+                console.error("İlkin stok hərəkəti yaradılarkən xəta:", movementError);
+            }
+        }
+
         // Activity log yarat
         try {
             await createActivityLog({
@@ -687,6 +712,31 @@ export const bulkCreateProducts = async (req, res) => {
                             openedBoxQuantity: 0
                         }
                     });
+                }
+
+                // İlkin stok hərəkəti (əgər > 0)
+                if (calculatedStock > 0) {
+                    try {
+                        await prisma.stockmovement.create({
+                            data: {
+                                productId: newProduct.id,
+                                type: 'IN',
+                                quantity: calculatedStock,
+                                previousStock: 0,
+                                newStock: calculatedStock,
+                                previousFullBoxes: 0,
+                                newFullBoxes: 0,
+                                previousOpenedBoxQuantity: 0,
+                                newOpenedBoxQuantity: 0,
+                                note: 'İlkin stok (Toplu əlavə)',
+                                staffId: req.staffId || null,
+                                branchId: branchId && branchId !== 'central' ? branchId : null,
+                                store: storeValue
+                            }
+                        });
+                    } catch (movementError) {
+                        console.error("Toplu ilkin stok hərəkəti xətası:", movementError);
+                    }
                 }
 
                 // Activity log
@@ -1296,10 +1346,13 @@ export const deleteProduct = async (req, res) => {
 
 export const importProductsFromExcel = async (req, res) => {
     try {
-        const { branchId, categoryName: requestedCategoryName, profitPercent: profitPercentRaw } = req.body;
+        const { branchId, categoryName: requestedCategoryName, profitPercent: profitPercentRaw, priceMode: priceModeRaw } = req.body;
         const profitPercent = profitPercentRaw !== undefined && profitPercentRaw !== null && String(profitPercentRaw).trim() !== ''
             ? parseFloat(String(profitPercentRaw).replace(',', '.'))
             : null;
+        // priceMode: 'unit' (default) — Excel-də qiymət bir ədədin qiymətidir
+        //            'total' — Excel-də qiymət bütün miqdarın ümumi məbləğidir; vahid qiymət üçün miqdara bölünür
+        const priceMode = String(priceModeRaw || '').toLowerCase() === 'total' ? 'total' : 'unit';
         if (!req.file) {
             return res.status(400).json({
                 success: false,
@@ -1474,7 +1527,7 @@ export const importProductsFromExcel = async (req, res) => {
                 }
 
                 // Parse values
-                const purchasePrice = parseFloat(purchasePriceStr.replace(',', '.'));
+                let purchasePrice = parseFloat(purchasePriceStr.replace(',', '.'));
                 let salePrice;
                 if (salePriceStr) {
                     salePrice = parseFloat(salePriceStr.replace(',', '.'));
@@ -1488,7 +1541,19 @@ export const importProductsFromExcel = async (req, res) => {
                     errorCount++;
                     continue;
                 }
-                const stock = parseInt(stockStr);
+                // Stock float oxunur, sonra Prisma üçün integer-ə çevrilir (40.000 → 40).
+                const stockFloat = parseFloat(stockStr.replace(',', '.'));
+                const stock = Number.isFinite(stockFloat) ? Math.round(stockFloat) : 0;
+
+                // priceMode === 'total' — Excel-də göstərilən qiymət bütün miqdara aiddir.
+                // Vahid qiymət üçün miqdara bölünməlidir. salePrice yalnız Excel-dən gəlirsə bölünür;
+                // profit% ilə hesablanmış salePrice artıq vahid qiymət olduğu üçün toxunulmur.
+                if (priceMode === 'total' && stockFloat > 0) {
+                    if (Number.isFinite(purchasePrice)) purchasePrice = purchasePrice / stockFloat;
+                    if (salePriceStr && Number.isFinite(salePrice)) salePrice = salePrice / stockFloat;
+                    purchasePrice = Math.round(purchasePrice * 10000) / 10000;
+                    salePrice = Math.round(salePrice * 10000) / 10000;
+                }
                 const barcode = row.barcode ? String(row.barcode).trim() : null;
                 const description = row.description ? String(row.description).trim() : null;
 

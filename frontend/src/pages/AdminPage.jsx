@@ -40,6 +40,7 @@ import ProductBranchTransfer from "../components/panel/ProductBranchTransfer.jsx
 import BranchDeletedProducts from "../components/panel/BranchDeletedProducts.jsx"
 import SalesLedger from "../components/panel/SalesLedger.jsx"
 import CentralBarcodeGenerator from "../components/panel/CentralBarcodeGenerator.jsx"
+import ExcelToPdf from "../components/panel/ExcelToPdf.jsx"
 import IsmayilliProducts from "../components/ismayilli/IsmayilliProducts.jsx"
 import IsmayilliSales from "../components/ismayilli/IsmayilliSales.jsx"
 import IsmayilliStatistics from "../components/ismayilli/IsmayilliStatistics.jsx"
@@ -47,6 +48,7 @@ import IsmayilliStaff from "../components/ismayilli/IsmayilliStaff.jsx"
 import IsmayilliBarcodeGenerator from "../components/ismayilli/IsmayilliBarcodeGenerator.jsx"
 import IsmayilliCheck from "../components/ismayilli/IsmayilliCheck.jsx"
 import IsmayilliRecentActivities from "../components/ismayilli/IsmayilliRecentActivities.jsx"
+import IsmayilliFirmas from "../components/ismayilli/IsmayilliFirmas.jsx"
 
 
 export default function AdminPanel() {
@@ -124,6 +126,10 @@ export default function AdminPanel() {
             {slug === "branch-deleted-products" && <BranchDeletedProducts />}
             {slug === "sales-ledger" && <SalesLedger />}
             {slug === "central-barcode-generator" && <CentralBarcodeGenerator />}
+            {slug === "excel-to-pdf" && (user?.role?.name?.toUpperCase() === 'SUPERADMIN'
+                ? <ExcelToPdf />
+                : <Navigate to="/admin/settings" replace />
+            )}
             
             {/* Ismayilli Panels */}
             {slug === "ismayilli-products" && <IsmayilliProducts />}
@@ -133,6 +139,7 @@ export default function AdminPanel() {
             {slug === "ismayilli-barcode-generator" && <IsmayilliBarcodeGenerator />}
             {slug === "ismayilli-check" && <IsmayilliCheck />}
             {slug === "ismayilli-activities" && <IsmayilliRecentActivities />}
+            {slug === "ismayilli-firmas" && <IsmayilliFirmas />}
         </div>
     )
 }

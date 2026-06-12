@@ -307,6 +307,25 @@ export const createSale = async (req, res) => {
                             openedBoxQuantity: newStockData.openedBoxQuantity
                         }
                     });
+
+                    // Sale stock movement log
+                    await prisma.stockmovement.create({
+                        data: {
+                            productId: item.productId,
+                            type: 'OUT',
+                            quantity: item.quantity,
+                            previousStock: branchStockWithMeta.stock || 0,
+                            newStock: newStockData.stock,
+                            previousFullBoxes: branchStockWithMeta.fullBoxes || 0,
+                            newFullBoxes: newStockData.fullBoxes,
+                            previousOpenedBoxQuantity: branchStockWithMeta.openedBoxQuantity || 0,
+                            newOpenedBoxQuantity: newStockData.openedBoxQuantity,
+                            note: `Satış #${sale.id.substring(0, 8)}`,
+                            staffId: req.staffId || null,
+                            branchId: branchId,
+                            store: store || 'FITECH'
+                        }
+                    });
                 } else {
                     // Mərkəz anbar stokunu azalt
                     const newStockData = decreaseProductStock(product, item.quantity);
@@ -317,6 +336,25 @@ export const createSale = async (req, res) => {
                             stock: newStockData.stock,
                             fullBoxes: newStockData.fullBoxes,
                             openedBoxQuantity: newStockData.openedBoxQuantity
+                        }
+                    });
+
+                    // Sale stock movement log
+                    await prisma.stockmovement.create({
+                        data: {
+                            productId: item.productId,
+                            type: 'OUT',
+                            quantity: item.quantity,
+                            previousStock: product.stock || 0,
+                            newStock: newStockData.stock,
+                            previousFullBoxes: product.fullBoxes || 0,
+                            newFullBoxes: newStockData.fullBoxes,
+                            previousOpenedBoxQuantity: product.openedBoxQuantity || 0,
+                            newOpenedBoxQuantity: newStockData.openedBoxQuantity,
+                            note: `Satış #${sale.id.substring(0, 8)}`,
+                            staffId: req.staffId || null,
+                            branchId: null,
+                            store: store || 'FITECH'
                         }
                     });
                 }
@@ -595,5 +633,140 @@ export const deleteSale = async (req, res) => {
     } catch (error) {
         console.error("deleteSale error", error);
         return res.status(500).json({ success: false, message: "Satış silinərkən xəta baş verdi", error: error.message });
+    }
+};
+
+/**
+ * POST /sale/bulk-delete
+ * body: { ids: [string, ...], deleteType?: 'SOFT' | 'HARD' }
+ */
+export const bulkDeleteSales = async (req, res) => {
+    try {
+        const { ids, deleteType = 'SOFT' } = req.body;
+        if (!Array.isArray(ids) || ids.length === 0) {
+            return res.status(400).json({ success: false, message: "Silinəcək satış ID-ləri tələb olunur" });
+        }
+        const validDeleteType = String(deleteType).toUpperCase() === 'HARD' ? 'HARD' : 'SOFT';
+
+        let processed = 0;
+        const errors = [];
+
+        if (validDeleteType === 'SOFT') {
+            // Tək sorğu ilə bütün seçilmişləri soft delete et
+            const result = await prisma.sale.updateMany({
+                where: { id: { in: ids } },
+                data: { deleteType: 'SOFT' },
+            });
+            processed = result.count;
+            try {
+                await createActivityLog({
+                    staffId: req.staffId || null,
+                    entityType: "Sale",
+                    entityId: ids.join(","),
+                    action: "BULK_SOFT_DELETE",
+                    description: `${processed} satış soft delete edildi`,
+                    changes: { deleteType: 'SOFT', count: processed },
+                });
+            } catch (_) {}
+        } else {
+            // HARD delete — hər birinə görə fərdi transaction
+            for (const id of ids) {
+                try {
+                    const existingSale = await prisma.sale.findUnique({
+                        where: { id },
+                        include: {
+                            items: { include: { product: true } },
+                            returns: { include: { items: true } },
+                        },
+                    });
+                    if (!existingSale) continue;
+
+                    await prisma.$transaction(async (tx) => {
+                        const returnedQuantities = new Map();
+                        existingSale.returns.forEach((sr) => {
+                            sr.items.forEach((ri) => {
+                                const cur = returnedQuantities.get(ri.saleItemId) || 0;
+                                returnedQuantities.set(ri.saleItemId, cur + (ri.quantity || 0));
+                            });
+                        });
+
+                        const saleItemIds = existingSale.items.map((i) => i.id);
+                        const returnIds = existingSale.returns.map((r) => r.id);
+
+                        if (saleItemIds.length > 0) {
+                            await tx.salereturnitem.deleteMany({ where: { saleItemId: { in: saleItemIds } } });
+                        }
+                        if (returnIds.length > 0) {
+                            await tx.salereturnitem.deleteMany({ where: { returnId: { in: returnIds } } });
+                            await tx.salereturn.deleteMany({ where: { id: { in: returnIds } } });
+                        }
+
+                        for (const item of existingSale.items) {
+                            const returnedQty = returnedQuantities.get(item.id) || 0;
+                            const remainingQty = item.quantity - returnedQty;
+                            if (remainingQty > 0 && item.product) {
+                                if (existingSale.branchId) {
+                                    const bStock = await tx.branchstock.findFirst({
+                                        where: { branchId: existingSale.branchId, productId: item.productId },
+                                    });
+                                    if (bStock) {
+                                        const meta = { ...item.product, ...bStock };
+                                        const newData = increaseProductStock(meta, remainingQty);
+                                        await tx.branchstock.update({
+                                            where: { id: bStock.id },
+                                            data: {
+                                                stock: newData.stock,
+                                                fullBoxes: newData.fullBoxes,
+                                                openedBoxQuantity: newData.openedBoxQuantity,
+                                            },
+                                        });
+                                    }
+                                } else {
+                                    const newData = increaseProductStock(item.product, remainingQty);
+                                    await tx.product.update({
+                                        where: { id: item.productId },
+                                        data: {
+                                            stock: newData.stock,
+                                            fullBoxes: newData.fullBoxes,
+                                            openedBoxQuantity: newData.openedBoxQuantity,
+                                        },
+                                    });
+                                }
+                            }
+                        }
+
+                        if (saleItemIds.length > 0) {
+                            await tx.saleitem.deleteMany({ where: { id: { in: saleItemIds } } });
+                        }
+                        await tx.receipt.deleteMany({ where: { saleId: id } });
+                        await tx.sale.delete({ where: { id } });
+                    });
+
+                    processed++;
+                } catch (innerErr) {
+                    console.error(`bulkDelete inner err id=${id}`, innerErr);
+                    errors.push({ id, message: innerErr.message });
+                }
+            }
+            try {
+                await createActivityLog({
+                    staffId: req.staffId || null,
+                    entityType: "Sale",
+                    entityId: ids.join(","),
+                    action: "BULK_HARD_DELETE",
+                    description: `${processed} satış tamamilə silindi`,
+                    changes: { deleteType: 'HARD', count: processed },
+                });
+            } catch (_) {}
+        }
+
+        return res.json({
+            success: true,
+            message: `${processed} satış silindi`,
+            data: { deletedCount: processed, errors },
+        });
+    } catch (error) {
+        console.error("bulkDeleteSales error", error);
+        return res.status(500).json({ success: false, message: "Satışlar silinərkən xəta baş verdi", error: error.message });
     }
 };

@@ -11,6 +11,7 @@ import { BranchProvider } from './context/BranchContext'
 import SyncCenter from './pages/SyncCenter'
 import SellerLayout from './components/seller-layout/SellerLayout'
 import SellerPage from './pages/SellerPage'
+import ExcelToFirmaProduct from './pages/testExcel/ExcelToFirmaProduct'
 
 export default function App() {
   return (
@@ -70,7 +71,7 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-
+          <Route path="/test-excel" element={<ExcelToFirmaProduct />} />
           <Route path="/" element={<Navigate to="/dashboard/login" replace />} />
         </Routes>
       </BranchProvider>

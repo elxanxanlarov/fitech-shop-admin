@@ -21,5 +21,6 @@
   "sync_center": "Sync Center",
   "sales_ledger": "Sales Ledger",
   "central_barcode_generator": "Central Barcode Generator",
+  "excel_to_pdf": "Excel → PDF",
   "settings": "Settings"
 }

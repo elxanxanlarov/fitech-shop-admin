@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { ismayilliApi } from '../../api';
 import Alert from '../ui/Alert';
-import { Plus, Edit, Trash2, Tag, ShoppingCart, Barcode, DollarSign, Layers, Upload, FileSpreadsheet, QrCode, History, Package, Search, X } from 'lucide-react';
+import { Plus, Edit, Trash2, Tag, ShoppingCart, Barcode, DollarSign, Layers, Upload, FileSpreadsheet, QrCode, History, Package, Search, X, Building2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import IsmayilliStockHistoryModal from './IsmayilliStockHistoryModal';
 import ExcelTableModal from '../modals/ExcelTableModal';
@@ -30,9 +30,11 @@ export default function IsmayilliProducts() {
   const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [firmas, setFirmas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [firmaFilter, setFirmaFilter] = useState(''); // '', firmaId, or '__NONE__'
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -82,6 +84,8 @@ export default function IsmayilliProducts() {
 
   // Excel upload states
   const [excelFile, setExcelFile] = useState(null);
+  // Qiymət hesablama rejimi: 'unit' (default) vs 'total' (miqdara böl)
+  const [excelPriceMode, setExcelPriceMode] = useState('unit');
   const [uploading, setUploading] = useState(false);
 
   // Bulk selection states
@@ -105,10 +109,14 @@ export default function IsmayilliProducts() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const prodRes = await ismayilliApi.getAllProducts();
-      const catRes = await ismayilliApi.getAllCategories();
+      const [prodRes, catRes, firmaRes] = await Promise.all([
+        ismayilliApi.getAllProducts(),
+        ismayilliApi.getAllCategories(),
+        ismayilliApi.getAllFirmas().catch(() => ({ success: false, data: [] })),
+      ]);
       if (prodRes.success) setProducts(prodRes.data);
       if (catRes.success) setCategories(catRes.data);
+      if (firmaRes.success) setFirmas(firmaRes.data || []);
     } catch (error) {
       console.error('Fetch data error:', error);
       Alert.error('Xəta', 'Məlumatlar yüklənərkən xəta baş verdi');
@@ -230,6 +238,7 @@ export default function IsmayilliProducts() {
 
     const formData = new FormData();
     formData.append('file', excelFile);
+    if (excelPriceMode === 'total') formData.append('priceMode', 'total');
 
     setUploading(true);
     try {
@@ -312,17 +321,23 @@ export default function IsmayilliProducts() {
     const query = search.toLowerCase().trim();
     return products.filter(p => {
       if (categoryFilter && p.categoryId !== categoryFilter) return false;
+      if (firmaFilter === '__NONE__') {
+        if (p.firmaId) return false;
+      } else if (firmaFilter && p.firmaId !== firmaFilter) {
+        return false;
+      }
       if (!query) return true;
       return (
         p.name.toLowerCase().includes(query) ||
-        (p.barcode && p.barcode.toLowerCase().includes(query))
+        (p.barcode && p.barcode.toLowerCase().includes(query)) ||
+        (p.firma?.name && p.firma.name.toLowerCase().includes(query))
       );
     });
-  }, [products, search, categoryFilter]);
+  }, [products, search, categoryFilter, firmaFilter]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, categoryFilter]);
+  }, [search, categoryFilter, firmaFilter]);
 
   const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
 
@@ -507,6 +522,35 @@ export default function IsmayilliProducts() {
               </button>
             )}
           </div>
+
+          {/* Firma Filter */}
+          <div className="relative w-full md:w-56">
+            <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-indigo-500 w-4 h-4 pointer-events-none" />
+            <select
+              value={firmaFilter}
+              onChange={(e) => setFirmaFilter(e.target.value)}
+              className={`w-full pl-10 pr-8 py-2 rounded-xl border bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-all appearance-none cursor-pointer text-sm ${
+                firmaFilter
+                  ? 'border-indigo-300 font-bold text-indigo-700'
+                  : 'border-slate-200 text-slate-600'
+              }`}
+            >
+              <option value="">Bütün firmalar</option>
+              <option value="__NONE__">Firmasız məhsullar</option>
+              {firmas.map(f => (
+                <option key={f.id} value={f.id}>{f.name}</option>
+              ))}
+            </select>
+            {firmaFilter && (
+              <button
+                onClick={() => setFirmaFilter('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-indigo-400 hover:text-indigo-600 transition-colors"
+                type="button"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
         {selectedProductIds.length > 0 && (
           <button
@@ -540,6 +584,7 @@ export default function IsmayilliProducts() {
                   <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Məhsul</th>
                   <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Barkod</th>
                   <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Kateqoriya</th>
+                  <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Firma</th>
                   <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Stok Miqdarı</th>
                   <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Alış Qiyməti</th>
                   <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Satış Qiyməti</th>
@@ -582,6 +627,15 @@ export default function IsmayilliProducts() {
                       <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-700">
                         {p.category?.name || '-'}
                       </span>
+                    </td>
+                    <td className="p-4 text-sm">
+                      {p.firma?.name ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
+                          <Building2 className="w-3 h-3" /> {p.firma.name}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 text-xs">-</span>
+                      )}
                     </td>
                     <td className="p-4 text-sm font-bold text-slate-800">{formatNumber(p.quantity)}</td>
                     <td className="p-4 text-sm font-medium text-emerald-600">{formatNumber(p.unitPricePurchase)} AZN</td>
@@ -916,11 +970,55 @@ export default function IsmayilliProducts() {
                 )}
               </div>
 
+              {/* Qiymət Hesablama Rejimi */}
+              <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3">
+                <label className="text-[11px] font-extrabold text-indigo-800 uppercase block mb-2">
+                  Qiymət Hesablama Rejimi
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setExcelPriceMode('unit')}
+                    className={`p-2.5 rounded-lg border-2 text-left transition-all ${
+                      excelPriceMode === 'unit'
+                        ? 'border-indigo-500 bg-white shadow-sm'
+                        : 'border-indigo-200 bg-white/60 hover:bg-white'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-extrabold text-indigo-900">Vahid qiymət</span>
+                      <span className={`w-3.5 h-3.5 rounded-full border-2 ${
+                        excelPriceMode === 'unit' ? 'border-indigo-600 bg-indigo-600' : 'border-indigo-300'
+                      }`} />
+                    </div>
+                    <p className="text-[10px] text-indigo-700/80">Excel-də 1 ədədin qiyməti</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExcelPriceMode('total')}
+                    className={`p-2.5 rounded-lg border-2 text-left transition-all ${
+                      excelPriceMode === 'total'
+                        ? 'border-indigo-500 bg-white shadow-sm'
+                        : 'border-indigo-200 bg-white/60 hover:bg-white'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-extrabold text-indigo-900">Ümumi qiymət</span>
+                      <span className={`w-3.5 h-3.5 rounded-full border-2 ${
+                        excelPriceMode === 'total' ? 'border-indigo-600 bg-indigo-600' : 'border-indigo-300'
+                      }`} />
+                    </div>
+                    <p className="text-[10px] text-indigo-700/80">Miqdara böl (728÷40=18.20)</p>
+                  </button>
+                </div>
+              </div>
+
               <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 text-xs text-amber-800 space-y-1">
                 <p className="font-bold">⚠️ Vacib qeyd:</p>
                 <p>• Excel faylındakı sütun başlıqları avtomatik tanınır.</p>
                 <p>• Kateqoriya adları (məsələn, <b>Geyim, Ətir, Xırdavat</b>) qalın başlıqlı sətirlərdən və ya Kateqoriya sütunundan oxunaraq avtomatik yaradılacaqdır.</p>
                 <p>• Eyni ştrihkoda malik məhsullar təkrar yükləndikdə qiymət və stok miqdarı yenilənəcəkdir.</p>
+                <p>• <b>"Görə"</b> sütunlarınız varsa (cəm məbləğ) — <b>"Ümumi qiymət"</b> rejimini seçin.</p>
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">

@@ -1,4 +1,4 @@
-import { MdPeople, MdBarChart, MdAccessTime, MdSettings, MdShoppingCart, MdPointOfSale, MdAttachMoney, MdAccountBalanceWallet, MdDescription, MdLocalShipping, MdBusiness, MdSync, MdTransform, MdDeleteForever, MdSwapHoriz, MdWarehouse, MdDeleteSweep, MdCalculate, MdQrCode } from 'react-icons/md'
+import { MdPeople, MdBarChart, MdAccessTime, MdSettings, MdShoppingCart, MdPointOfSale, MdAttachMoney, MdAccountBalanceWallet, MdDescription, MdLocalShipping, MdBusiness, MdSync, MdTransform, MdDeleteForever, MdSwapHoriz, MdWarehouse, MdDeleteSweep, MdCalculate, MdQrCode, MdPictureAsPdf } from 'react-icons/md'
 export const AdminSidebarData = [
   {
     title: 'staff_management',
@@ -89,6 +89,12 @@ export const AdminSidebarData = [
     title: 'sales_ledger',
     path: '/admin/sales-ledger',
     icon: <MdCalculate />,
+    requiredRole: 'SUPERADMIN',
+  },
+  {
+    title: 'excel_to_pdf',
+    path: '/admin/excel-to-pdf',
+    icon: <MdPictureAsPdf />,
     requiredRole: 'SUPERADMIN',
   },
   {

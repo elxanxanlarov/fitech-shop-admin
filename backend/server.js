@@ -29,9 +29,11 @@ import ismayilliProductRoutes from "./src/routes/ismayilliProductRoutes.js";
 import ismayilliSaleRoutes from "./src/routes/ismayilliSaleRoutes.js";
 import ismayilliReturnRoutes from "./src/routes/ismayilliReturnRoutes.js";
 import ismayilliStatisticsRoutes from "./src/routes/ismayilliStatisticsRoutes.js";
+import ismayilliFirmaRoutes from "./src/routes/ismayilliFirmaRoutes.js";
 import { seedData } from "./src/seed/seedData.js";
 import { checkCreditPaymentDue } from "./src/controllers/notificationController.js";
 import { generateDailySummaryForDate } from "./src/controllers/dailySummaryController.js";
+import testExcelRoutes from "./src/routes/testExcelRoutes.js";
 import path from "path";
 import { fileURLToPath } from "url";
 dotenv.config();
@@ -91,11 +93,14 @@ app.use("/api/branch", branchRoutes);
 app.use("/api/stock-transfer", stockTransferRoutes);
 app.use("/api/convert", convertRoutes);
 
+app.use('/api', testExcelRoutes);
+
 // Ismayilli Shop Routes
 app.use("/api/ismayilli/product", ismayilliProductRoutes);
 app.use("/api/ismayilli/sale", ismayilliSaleRoutes);
 app.use("/api/ismayilli/return", ismayilliReturnRoutes);
 app.use("/api/ismayilli/statistics", ismayilliStatisticsRoutes);
+app.use("/api/ismayilli/firma", ismayilliFirmaRoutes);
 
 app.get("/api/health", (req, res) => {
   res.json({

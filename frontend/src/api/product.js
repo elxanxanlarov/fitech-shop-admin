@@ -58,6 +58,7 @@ export const productApi = {
     if (opts.profitPercent !== undefined && opts.profitPercent !== null && opts.profitPercent !== '') {
       formData.append('profitPercent', String(opts.profitPercent));
     }
+    if (opts.priceMode) formData.append('priceMode', opts.priceMode);
 
     const response = await api.post('/product/import', formData, {
       headers: {
