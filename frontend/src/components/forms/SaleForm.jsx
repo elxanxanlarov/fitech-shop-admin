@@ -41,9 +41,11 @@ export default function SaleForm() {
         initialPaymentAmount: '' // Kredit üçün ilk ödəniş məbləği
     });
 
-    const [selectedProducts, setSelectedProducts] = useState([
-        { productId: '', quantity: '', salePrice: '', discountAmount: '', boxes: '', pieces: '' }
-    ]);
+    const emptyProductRow = () => ({
+        productId: '', quantity: '', salePrice: '', discountAmount: '', boxes: '', pieces: '', priceType: 'sale'
+    });
+
+    const [selectedProducts, setSelectedProducts] = useState([emptyProductRow()]);
 
     const [products, setProducts] = useState([]);
     const [saleItems, setSaleItems] = useState([]); // Edit modunda satış məhsulları
@@ -159,9 +161,7 @@ export default function SaleForm() {
 
     useEffect(() => {
         if (isEditMode) return;
-        setSelectedProducts([
-            { productId: '', quantity: '', salePrice: '', discountAmount: '', boxes: '', pieces: '' }
-        ]);
+        setSelectedProducts([emptyProductRow()]);
     }, [localBranchId, isEditMode]);
 
     // Fetch credit terms
@@ -223,12 +223,19 @@ export default function SaleForm() {
                         }
                         // Sale items-ı selectedProducts-a çevir
                         if (sale.items && sale.items.length > 0) {
-                            setSelectedProducts(sale.items.map(item => ({
-                                productId: item.productId,
-                                quantity: item.quantity,
-                                salePrice: item.pricePerItem ? parseFloat(item.pricePerItem).toFixed(2) : '',
-                                discountAmount: ''
-                            })));
+                            setSelectedProducts(sale.items.map(item => {
+                                const product = item.product;
+                                const pricePerItem = item.pricePerItem ? parseFloat(item.pricePerItem) : null;
+                                const isPurchasePrice = product && pricePerItem !== null
+                                    && Math.abs(pricePerItem - parseFloat(product.purchasePrice)) < 0.01;
+                                return {
+                                    productId: item.productId,
+                                    quantity: item.quantity,
+                                    salePrice: pricePerItem !== null ? pricePerItem.toFixed(2) : '',
+                                    discountAmount: '',
+                                    priceType: isPurchasePrice ? 'purchase' : 'sale'
+                                };
+                            }));
                             // Sale items-ı saxla (qaytarma üçün)
                             setSaleItems(sale.items);
                         }
@@ -327,27 +334,34 @@ export default function SaleForm() {
         }
     };
 
+    const applyPriceForProduct = (product, priceType) => {
+        if (priceType === 'purchase') {
+            return {
+                salePrice: parseFloat(product.purchasePrice).toFixed(2),
+                discountAmount: ''
+            };
+        }
+        const defaultSalePrice = parseFloat(product.salePrice);
+        const result = { salePrice: defaultSalePrice.toFixed(2), discountAmount: '' };
+        if (product.hasDiscount && product.discountPrice) {
+            const discountPrice = parseFloat(product.discountPrice);
+            result.discountAmount = (defaultSalePrice - discountPrice).toFixed(2);
+        }
+        return result;
+    };
+
     const handleProductChange = (index, productId) => {
         const newProducts = [...selectedProducts];
         newProducts[index].productId = productId;
 
-        // Məhsul seçildikdə standart satış qiymətini təyin et
         if (productId) {
             const product = products.find(p => p.id === productId);
             if (product) {
-                // Həmişə məhsulun salePrice-ını default olaraq təyin et
-                const defaultSalePrice = parseFloat(product.salePrice);
-                newProducts[index].salePrice = defaultSalePrice.toFixed(2);
-                // Endirim varsa, endirim məbləğini default olaraq yaz
-                if (product.hasDiscount && product.discountPrice) {
-                    const discountPrice = parseFloat(product.discountPrice);
-                    const discountAmount = defaultSalePrice - discountPrice;
-                    newProducts[index].discountAmount = discountAmount.toFixed(2);
-                } else {
-                    newProducts[index].discountAmount = '';
-                }
+                const priceType = newProducts[index].priceType || 'sale';
+                const { salePrice, discountAmount } = applyPriceForProduct(product, priceType);
+                newProducts[index].salePrice = salePrice;
+                newProducts[index].discountAmount = discountAmount;
 
-                // Qutu/ədəd input-larını sıfırla
                 newProducts[index].boxes = '';
                 newProducts[index].pieces = '';
                 newProducts[index].quantity = '';
@@ -362,7 +376,6 @@ export default function SaleForm() {
 
         setSelectedProducts(newProducts);
 
-        // Error-u sil
         if (errors[`product_${index}`]) {
             setErrors(prev => {
                 const newErrors = { ...prev };
@@ -370,6 +383,20 @@ export default function SaleForm() {
                 return newErrors;
             });
         }
+    };
+
+    const handlePriceTypeChange = (index, priceType) => {
+        const newProducts = [...selectedProducts];
+        newProducts[index].priceType = priceType;
+
+        const product = products.find(p => p.id === newProducts[index].productId);
+        if (product) {
+            const { salePrice, discountAmount } = applyPriceForProduct(product, priceType);
+            newProducts[index].salePrice = salePrice;
+            newProducts[index].discountAmount = discountAmount;
+        }
+
+        setSelectedProducts(newProducts);
     };
 
     const handleQuantityChange = (index, quantity) => {
@@ -652,7 +679,7 @@ export default function SaleForm() {
         const newProducts = [...selectedProducts];
         const product = products.find(p => p.id === newProducts[index].productId);
 
-        if (!product) {
+        if (!product || (newProducts[index].priceType || 'sale') === 'purchase') {
             return;
         }
 
@@ -730,7 +757,7 @@ export default function SaleForm() {
     };
 
     const addProductRow = () => {
-        setSelectedProducts([...selectedProducts, { productId: '', quantity: '', salePrice: '', discountAmount: '', boxes: '', pieces: '' }]);
+        setSelectedProducts([...selectedProducts, emptyProductRow()]);
     };
 
     const removeProductRow = (index) => {
@@ -767,56 +794,51 @@ export default function SaleForm() {
         return product.stock || 0;
     };
 
-    // Helper: Məhsulun qiymətini hesabla (qutu/ədəd məntiqinə uyğun) - Backend-dəki calculateProductPrice ilə uyğundur
-    const calculateProductPrice = (product, quantity, customSalePrice) => {
+    const calculateProductPrice = (product, quantity, customSalePrice, priceType = 'sale') => {
         if (!product || !quantity) return 0;
 
         const unitType = product.unitType || 'PIECE';
         const piecesPerBox = product.piecesPerBox || 1;
 
-        // Qiymət təyin et
         let finalSalePrice;
         if (customSalePrice && customSalePrice !== '' && !isNaN(parseFloat(customSalePrice))) {
             finalSalePrice = parseFloat(customSalePrice);
+        } else if (priceType === 'purchase') {
+            finalSalePrice = parseFloat(product.purchasePrice || 0);
         } else {
             finalSalePrice = product.hasDiscount && product.discountPrice
                 ? parseFloat(product.discountPrice)
                 : parseFloat(product.salePrice);
         }
 
-        // Ədəd tipindədirsə, sadəcə ədəd qiyməti
         if (unitType === 'PIECE') {
             return finalSalePrice * quantity;
         }
 
-        const boxPrice = product.boxPrice ? parseFloat(product.boxPrice) : null;
+        let boxPrice = product.boxPrice ? parseFloat(product.boxPrice) : null;
+        if (priceType === 'purchase' && piecesPerBox) {
+            boxPrice = finalSalePrice * piecesPerBox;
+        }
 
-        // Qutu/Litr/Metr/Kiloqram üçün
-        // Əgər boxPrice varsa və quantity tam qutudursa, boxPrice istifadə et
         if (boxPrice && piecesPerBox && quantity >= piecesPerBox && quantity % piecesPerBox === 0) {
             const boxes = quantity / piecesPerBox;
             return boxPrice * boxes;
         }
 
-        // Qarışıq: tam qutular + açıq ədədlər
         if (piecesPerBox && boxPrice) {
             const boxes = Math.floor(quantity / piecesPerBox);
             const pieces = quantity % piecesPerBox;
             return (boxPrice * boxes) + (finalSalePrice * pieces);
         }
 
-        // Default: ədəd qiyməti
         return finalSalePrice * quantity;
     };
 
-    const getProductPrice = (productId, customSalePrice) => {
-        // Əgər custom sale price varsa, onu istifadə et
-        if (customSalePrice && customSalePrice !== '' && !isNaN(parseFloat(customSalePrice))) {
-            return parseFloat(customSalePrice);
-        }
-        // Əks halda məhsulun salePrice-ını istifadə et (həmişə salePrice)
-        const product = products.find(p => p.id === productId);
+    const getProductPrice = (product, priceType = 'sale') => {
         if (!product) return 0;
+        if (priceType === 'purchase') {
+            return parseFloat(product.purchasePrice);
+        }
         return parseFloat(product.salePrice);
     };
 
@@ -828,7 +850,7 @@ export default function SaleForm() {
 
                 const qty = parseInt(item.quantity) || 0;
                 // Qutu/ədəd məntiqinə uyğun qiymət hesabla
-                const price = calculateProductPrice(product, qty, item.salePrice);
+                const price = calculateProductPrice(product, qty, item.salePrice, item.priceType || 'sale');
                 return total + price;
             }
             return total;
@@ -1309,7 +1331,7 @@ export default function SaleForm() {
                                     value={localBranchId}
                                     onChange={(val) => {
                                         setLocalBranchId(val);
-                                        setSelectedProducts([{ productId: '', quantity: '', salePrice: '', discountAmount: '', boxes: '', pieces: '' }]);
+                                        setSelectedProducts([emptyProductRow()]);
                                     }}
                                     getOptionLabel={(b) => b.name}
                                     getOptionValue={(b) => b.id}
@@ -1552,8 +1574,9 @@ export default function SaleForm() {
                         {selectedProducts.map((item, index) => {
                             const selectedProduct = products.find(p => p.id === item.productId);
                             const qty = item.quantity && item.quantity !== '' ? parseInt(item.quantity) : 0;
-                            const itemTotal = selectedProduct ? calculateProductPrice(selectedProduct, qty, item.salePrice) : 0;
-                            const defaultPrice = selectedProduct ? getProductPrice(selectedProduct.id) : 0;
+                            const priceType = item.priceType || 'sale';
+                            const itemTotal = selectedProduct ? calculateProductPrice(selectedProduct, qty, item.salePrice, priceType) : 0;
+                            const defaultPrice = selectedProduct ? getProductPrice(selectedProduct, priceType) : 0;
                             const availableStock = selectedProduct ? calculateProductStock(selectedProduct) : 0;
 
                             return (
@@ -1805,17 +1828,45 @@ export default function SaleForm() {
                                             )}
 
                                             <div>
+                                                {!isEditMode && selectedProduct && (
+                                                    <div className="mb-3">
+                                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                            {t('price_type') || 'Qiymət Növü'}
+                                                        </label>
+                                                        <select
+                                                            value={priceType}
+                                                            onChange={(e) => handlePriceTypeChange(index, e.target.value)}
+                                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                                            disabled={isLoading || !item.productId}
+                                                        >
+                                                            <option value="sale">{t('price_type_sale') || 'Satış qiymətinə'}</option>
+                                                            <option value="purchase">{t('price_type_purchase') || 'Alış qiymətinə'}</option>
+                                                        </select>
+                                                    </div>
+                                                )}
+                                                {isEditMode && selectedProduct && (
+                                                    <p className="mb-2 text-xs text-gray-500">
+                                                        {priceType === 'purchase'
+                                                            ? (t('price_type_purchase') || 'Alış qiymətinə')
+                                                            : (t('price_type_sale') || 'Satış qiymətinə')}
+                                                    </p>
+                                                )}
                                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    {t('sale_price') || 'Satış Qiyməti'} (₼)
+                                                    {priceType === 'purchase'
+                                                        ? (t('purchase_price') || 'Alış Qiyməti')
+                                                        : (t('sale_price') || 'Satış Qiyməti')} (₼)
                                                 </label>
                                                 <input
                                                     type="text"
                                                     value={(() => {
                                                         if (!selectedProduct) return '';
-                                                        // Əgər qutu/paket tipindədirsə və boxPrice varsa, qutu qiymətini göstər
-                                                        if (selectedProduct.unitType !== 'PIECE' && selectedProduct.boxPrice && selectedProduct.piecesPerBox) {
-                                                            const boxPrice = parseFloat(selectedProduct.boxPrice);
-                                                            const piecePrice = parseFloat(selectedProduct.salePrice);
+                                                        const piecePrice = priceType === 'purchase'
+                                                            ? parseFloat(selectedProduct.purchasePrice)
+                                                            : parseFloat(selectedProduct.salePrice);
+                                                        if (selectedProduct.unitType !== 'PIECE' && selectedProduct.piecesPerBox) {
+                                                            const boxPrice = priceType === 'purchase'
+                                                                ? piecePrice * selectedProduct.piecesPerBox
+                                                                : (selectedProduct.boxPrice ? parseFloat(selectedProduct.boxPrice) : piecePrice * selectedProduct.piecesPerBox);
                                                             return `${piecePrice.toFixed(2)} (${boxPrice.toFixed(2)} qutu)`;
                                                         }
                                                         return item.salePrice || defaultPrice.toFixed(2);
@@ -1838,17 +1889,20 @@ export default function SaleForm() {
                                                                         selectedProduct.unitType === 'LITER' ? 'litr' :
                                                                             selectedProduct.unitType === 'KILOGRAM' ? 'kq' :
                                                                                 'ədəd';
-                                                            const priceInfo = selectedProduct.unitType !== 'PIECE' && selectedProduct.boxPrice && selectedProduct.piecesPerBox
-                                                                ? `${defaultPrice.toFixed(2)} ₼/${unitLabel} (${parseFloat(selectedProduct.boxPrice).toFixed(2)} ₼/${selectedProduct.piecesPerBox} ${unitLabel})`
-                                                                : `${defaultPrice.toFixed(2)} ₼/${unitLabel}`;
+                                                            const piecePrice = priceType === 'purchase'
+                                                                ? parseFloat(selectedProduct.purchasePrice)
+                                                                : defaultPrice;
+                                                            const priceInfo = selectedProduct.unitType !== 'PIECE' && selectedProduct.piecesPerBox
+                                                                ? `${piecePrice.toFixed(2)} ₼/${unitLabel} (${(piecePrice * selectedProduct.piecesPerBox).toFixed(2)} ₼/${selectedProduct.piecesPerBox} ${unitLabel})`
+                                                                : `${piecePrice.toFixed(2)} ₼/${unitLabel}`;
                                                             return `${t('default_price') || 'Standart'}: ${priceInfo}`;
                                                         })()}
                                                     </p>
                                                 )}
                                             </div>
 
-                                            {/* Endirim inputu yalnız məhsulun endirimi olduqda görünsün */}
-                                            {selectedProduct && selectedProduct.hasDiscount && selectedProduct.discountPrice && (
+                                            {/* Endirim yalnız satış qiymətində və məhsulun endirimi olduqda */}
+                                            {selectedProduct && priceType === 'sale' && selectedProduct.hasDiscount && selectedProduct.discountPrice && (
                                                 <div>
                                                     <label className="block text-sm font-medium text-gray-700 mb-2">
                                                         {t('discount_amount') || 'Endirim Məbləği'} (₼)
